@@ -1,13 +1,3 @@
-###
-  TODO:
-  Instead of "propTypes", do this...
-    props:
-        employeeIds:
-            type: J.$arrayOf(J.$string).isRequired
-            doc: 'Employee IDs, usually Social Security numbers'
-            default: ['681-62-9681', '631-10-8120']
-###
-
 J.components = {}
 
 # J.c et al store a reference to every mounted
@@ -279,7 +269,7 @@ J._defineComponent = (componentName, componentSpec) ->
             unless c.stopped
                 @_renderComp.stop()
                 @_renderComp = null
-                Tracker.afterFlush => @forceUpdate()
+                Tracker.afterFlush => if @isMounted() then @forceUpdate()
 
         origClassName = renderedComponent.props.className
         renderedComponent.props.className = "#{componentName} #{@_componentId}"
