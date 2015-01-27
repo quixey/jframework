@@ -133,22 +133,21 @@ J._defineComponent = (componentName, componentSpec) ->
         J._componentsByName[componentName][@_componentId] = @
 
         # Check for invalid prop names in @props
-        validPropNamesSet = J.util.makeDictSet _.keys (componentSpec.props ? {})
-        validPropNamesSet.className = true
-        validPropNamesSet.children = true
+        propSpecs = _.clone componentSpec.props ? {}
+        propSpecs.className ?=
+            type: React.PropTypes.string
+        propSpecs.children ?=
+            type: React.PropTypes.oneOfType [
+                React.PropTypes.element
+                React.PropTypes.arrayOf(React.PropTypes.element)
+            ]
         for propName, value of @props
-            unless propName of validPropNamesSet
+            unless propName of propSpecs
                 throw "#{componentName} has no prop #{JSON.stringify propName}.
-                    Only has #{JSON.stringify _.keys validPropNamesSet}."
-
+                    Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
         @_props = {} # ReactiveVars for the props
         @prop = {} # Reactive getters for the props
-        propSpecs = _.clone componentSpec.props ? {}
-        propSpecs.className =
-            type: React.PropTypes.string
-        propSpecs.children =
-            type: React.PropTypes.arrayOf React.PropTypes.element
         for propName, propSpec of propSpecs
             @_props[propName] = new ReactiveVar @props[propName],
                 propSpec.same ? J.util.equals
@@ -204,11 +203,15 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         for propName, newValue of nextProps
-            propSpec =
-                if propName in ['className', 'children']
-                    {}
-                else
-                    componentSpec.props[propName]
+            propSpec = componentSpec.props?[propName]
+            unless propSpec?
+                if propName is 'className'
+                    propSpec = type: React.PropTypes.string
+                else if propName is 'children'
+                    propSpec = type: React.PropTypes.oneOfType [
+                        React.PropTypes.element
+                        React.PropTypes.arrayOf(React.PropTypes.element)
+                    ]
 
             equalsFunc = propSpec.same ? J.util.equals
             oldValue = Tracker.nonreactive => @_props[propName].get()
@@ -228,10 +231,12 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
-        # We're counting on reactivity in the Meteor framework to
-        # trigger forceUpdate().
-        # Components can also manually call forceUpdate().
-        false
+        if @_renderComp.invalidated
+            @_renderComp.stop()
+            @_renderComp = null
+            true
+        else
+            false
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
@@ -277,17 +282,56 @@ J._defineComponent = (componentName, componentSpec) ->
             # aren't supposed to have side effects, but whatever.
             @[reactiveName]()
 
+        ###
+            There are three times at which a component may be re-rendered:
+
+            1. Synchronously by React's rendering algorithm
+                This happens in the React lifecycle between the time a parent
+                component's render function has returned and the time
+                componentDidUpdate gets called on that parent. It's important
+                for child components to render synchronously during this
+                window because:
+                a. It's presumably more efficient to run React's DOM diff algorithm
+                   once on parent + children together, rather than once for the parent
+                   followed by once per child.
+                b. If the parent is setting the current component's @prop.children,
+                   the parent expects its @refs to be set up synchronously when its
+                   componentDidUpdate gets called (a.k.a. the time when any callbacks
+                   it passed to @set get called).
+
+            2. Asynchronously by Meteor's invalidated-computation flush
+                This is the only way a component can re-render in reaction to
+                something other than a change in props during a parent's re-render.
+
+            3. The application calls @forceUpdate()
+
+            @_renderComp's whole purpose is to invalidate, which means "let's
+            rerender at the earliest time (1) or (2)".
+        ###
         renderedComponent = null
         if @_renderComp?
-            # Application layer must have called @forceUpdate()
+            # We must be at time (3), a forceUpdate call.
+            J.assert not @_renderComp.invalidated
             @_renderComp.stop()
+
         @_renderComp = Tracker.autorun =>
             renderedComponent = componentSpec.render.apply @
+
         @_renderComp.onInvalidate (c) =>
             unless c.stopped
                 @_renderComp.stop()
-                @_renderComp = null
-                Tracker.afterFlush => if @isMounted() then @forceUpdate()
+
+                Tracker.afterFlush =>
+                    # The component may have unmounted
+                    return unless @isMounted()
+
+                    # Between c's invalidation time and now, the component may
+                    # have been re-rendered at time (1) - see comment above - in
+                    # which case there would be a new @_renderComp
+                    return unless c is @_renderComp
+
+                    @_renderComp = null
+                    @forceUpdate()
 
         origClassName = renderedComponent.props.className
         renderedComponent.props.className = "#{componentName} #{@_componentId}"

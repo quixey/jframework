@@ -50,14 +50,22 @@ J.util =
 
     equals: (a, b) ->
         return true if a is b
+
         if (
             a instanceof J.Model and b instanceof J.Model and
             a.modelClass is b.modelClass and
             a._id? and b._id?
         )
             a._id is b._id
+
         else if _.isArray(a) and _.isArray(b)
             a.length is b.length and _.all (J.util.equals a[i], b[i] for i in [0...a.length])
+
+        else if J.util.isPlainObject(a) and J.util.isPlainObject(b)
+            J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
+                J.util.equals(a[k], b[k]) for k of a
+            )
+
         else
             false
 
