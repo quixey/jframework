@@ -1,0 +1,3 @@
+[submodule "packages/react"]
+	path = packages/react
+	url = https://github.com/quixey/react-meteor
