@@ -25,11 +25,15 @@ class ReactiveDef
 J.Reactive = (params) -> new ReactiveDef params
 
 J._defineComponent = (componentName, componentSpec) ->
-#    for memberName in [
-#        'getDefaultProps', 'getInitialState', 'shouldComponentUpdate', 'componentWillUpdate'
-#    ]
-#        if memberName of componentSpec
-#            throw "Unnecessary to define #{memberName} for J Framework components."
+    for memberName in [
+        'getDefaultProps'
+        'getInitialState'
+        'componentWillReceiveProps'
+        'shouldComponentUpdate'
+        'componentWillUpdate'
+    ]
+        if memberName of componentSpec
+            throw "Unnecessary to define #{memberName} for J Framework components."
 
 
     reactSpec = _.clone componentSpec
@@ -146,7 +150,8 @@ J._defineComponent = (componentName, componentSpec) ->
         propSpecs.children =
             type: React.PropTypes.arrayOf React.PropTypes.element
         for propName, propSpec of propSpecs
-            @_props[propName] = new ReactiveVar @props[propName], J.util.equals
+            @_props[propName] = new ReactiveVar @props[propName],
+                propSpec.same ? J.util.equals
             @prop[propName] = do (propName) => =>
                 @_props[propName].get()
 
@@ -176,7 +181,8 @@ J._defineComponent = (componentName, componentSpec) ->
                     stateFieldSpec.default.apply @
                 else
                     stateFieldSpec.default
-            initialState[stateFieldName] = new ReactiveVar initialValue, J.util.equals
+            initialState[stateFieldName] = new ReactiveVar initialValue,
+                stateFieldSpec.same ? J.util.equals
 
         initialState
 
@@ -198,7 +204,19 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         for propName, newValue of nextProps
+            propSpec =
+                if propName in ['className', 'children']
+                    {}
+                else
+                    componentSpec.props[propName]
+
+            equalsFunc = propSpec.same ? J.util.equals
+            oldValue = Tracker.nonreactive => @_props[propName].get()
+
             @_props[propName].set newValue
+
+            unless equalsFunc oldValue, newValue
+                propSpec.onChange?.call @, oldValue, newValue
 
 
     reactSpec.componentDidMount = ->
