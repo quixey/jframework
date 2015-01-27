@@ -10,7 +10,7 @@ Npm.depends({
 Package.onUse(function(api) {
     api.use("underscore");
     api.use("coffeescript");
-    api.use("react");
+    api.use("quixey:react");
 
     // Sets up window.ReactRouter
     api.add_files(
@@ -30,7 +30,7 @@ Package.onUse(function(api) {
         "routing.coffee"
     ]);
 
-    api.export('React');
+    api.imply('quixey:react');
     api.export('J');
     api.export('$$');
 });
