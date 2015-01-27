@@ -30,6 +30,7 @@ Package.onUse(function(api) {
         "routing.coffee"
     ]);
 
+    api.export('React');
     api.export('J');
     api.export('$$');
 });
