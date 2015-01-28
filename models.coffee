@@ -31,7 +31,19 @@ _.extend J.Model,
 
 _.extend J.Model.prototype,
     clone: ->
-        @modelClass.fromJSONValue @toDoc()
+        doc = @toDoc()
+
+        # FIXME: This is a temporary hack because the existence
+        # of an _id is currently the only thing that tips off the
+        # application layer whether an entity is new/existing,
+        # but at the same time entities whose fieldSpec says
+        # _id: J.PropTypes.key have their ids auto-generated
+        # from their other fields.
+        # We need a more serious framework for saved/unsaved
+        # and bound/unbound model instances ASAP.
+        if doc._id? and not @_id? then delete doc._id
+
+        @modelClass.fromJSONValue doc
 
     fields: (fields) ->
         if fields?

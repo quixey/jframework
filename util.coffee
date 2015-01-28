@@ -131,6 +131,9 @@ J.util =
             "http://test.com/ghi?x=3&y=2&key1=value1"
         ###
 
+        unless _.isString url
+            throw "URL must be a string: #{url}"
+
         uri = URI url
         uri.setQuery extraParams
         uri.href()
