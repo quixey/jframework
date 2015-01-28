@@ -89,7 +89,12 @@ _.extend J.Model.prototype,
                 value
 
         doc = toPrimitiveEjsonObj @_fields
-        doc._id = @_id if @_id?
+
+        if @_id?
+            doc._id = @_id
+        else if @modelClass.fieldSpecs._id is J.PropTypes.key
+            doc._id = @key()
+
         doc
 
     toJSONValue: ->
@@ -100,6 +105,7 @@ _.extend J.Model.prototype,
             aren't returned as JSON.
         ###
         @toDoc()
+
 
     toString: ->
         EJSON.stringify @
@@ -220,6 +226,8 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 unless instance instanceof modelClass
                     throw new Meteor.Error "#{@name}.insert requires #{@name} instance."
 
+                doc = instance.toJSONValue()
+
                 if @fieldSpecs._id is J.PropTypes.key
                     # If the fieldSpec contains this magic "key"
                     # declaration, then propagate the field values
@@ -228,9 +236,7 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                     if instance._id?
                         throw new Meteor.Error "#{@name} can't have an _id (#{JSON.stringify instance._id}) at insert time"
 
-                    instance._id = instance.key()
-
-                doc = instance.toJSONValue()
+                    instance._id = doc._id
 
                 unless J.util.isPlainObject doc
                     throw new Meteor.Error 'Bad argument to #{modelName}.insert: #{doc}'
