@@ -31,17 +31,14 @@ class J.Model
 
 
     clone: ->
-        ###
-            If this instance is attached,
-        ###
-
         # TODO: Become more sure
         J.assert not Tracker.active, "Not sure it ever makes sense to clone in a reactive computation."
 
         doc = @toDoc(false)
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
-        # Note that clones are always detached (and alive).
+
+        # Note that clones are always detached (and alive)
         instance
 
 
@@ -50,23 +47,18 @@ class J.Model
             throw "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
         if arguments.length is 0
-            # Getter
-            # FIXME
-            throw "Reactive fields getter not implemented yet"
+            @_fields.getObj()
         else
-            # Setter
-            for fieldName, value of fields
-                if fieldName is '_id'
-                    throw new Meteor.Error "Can't set #{@modelClass.name}._id as a field,
-                        but you can do it at constructor-time."
-
-                else if fieldName of @modelClass.fieldSpecs
-                    # FIXME make reactive
-                    @_fields[fieldName] = value
-
-                else
-                    throw new Meteor.Error "J.Models.#{@modelClass.name} has no field named #{JSON.stringify fieldName}"
+            if @attached
+                throw "Can't set #{@modelClass.name} ##{@_id} because it is attached
+                    to collection #{J.util.toString @collection._name}"
+            @_fields.set fields
             null
+
+
+    get: (fieldName) ->
+        @_fields.get fieldName
+
 
     insert: (collection = @collection, callback) ->
         if _.isFunction(collection) and arguments.length is 1
@@ -76,13 +68,13 @@ class J.Model
             collection = @collection
 
         unless collection instanceof Mongo.Collection
-            throw "Invalid collection to #{modelClass.name}.insert"
+            throw "Invalid collection to #{@modelClass.name}.insert"
 
         if @attached and @collection is collection
-            throw "Can't insert #{modelClass.name} instance into its own attached collection"
+            throw "Can't insert #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw "Can't insert dead #{modelClass.name} instance"
+            throw "Can't insert dead #{@modelClass.name} instance"
 
         doc = @toDoc(true)
         J.assert J.util.isPlainObject doc
@@ -111,7 +103,7 @@ class J.Model
             throw "Can't save #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw "Can't save dead #{modelClass.name} instance"
+            throw "Can't save dead #{@modelClass.name} instance"
 
         doc = @toDoc(true)
         J.assert J.util.isPlainObject doc
@@ -139,7 +131,7 @@ class J.Model
         # types in the form of J.Model instances.)
 
         unless @alive
-            throw "Can't call toDoc on dead #{modelClass.name} instance"
+            throw "Can't call toDoc on dead #{@modelClass.name} instance"
 
         toPrimitiveEjsonObj = (value) ->
             if value instanceof J.Model
@@ -154,7 +146,7 @@ class J.Model
             else
                 value
 
-        doc = toPrimitiveEjsonObj @_fields
+        doc = toPrimitiveEjsonObj @fields()
 
         if denormalize and @modelClass.fieldSpecs._id is J.PropTypes.key
             key = @key()
@@ -190,7 +182,13 @@ class J.Model
         unless @attached
             throw "Can't call update on detached #{@modelClass.name} instance"
         unless @alive
-            throw "Can't call update on dead #{modelClass.name} instance"
+            throw "Can't call update on dead #{@modelClass.name} instance"
+
+        unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
+            # Calling something like .update(foo: bar) would replace the entire
+            # Mongo doc, which is basically always a mistake. We almost always
+            # want to call something like .update($set: foo: bar) instead.
+            throw new Meteor.Error "Must use a $ operation for #{@modelClass.name}.update"
 
         @collection.update.bind(@collection, @_id).apply null, args
 
@@ -216,7 +214,6 @@ J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, mem
 J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
     modelConstructor = (initFields = {}) ->
         @_id = initFields._id ? null
-        @_fields = new J.Dict()
 
         # The collection that was queried to obtain
         # this instance or the original attached
@@ -237,9 +234,12 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
         # Detached instances are always alive.
         @alive = true
 
-        fields = _.clone initFields
-        delete fields._id
-        @fields fields
+        nonIdInitFields = _.clone initFields
+        delete nonIdInitFields._id
+        nonIdFieldSpecs = _.clone fieldSpecs
+        delete nonIdFieldSpecs._id
+        @_fields = new J.Dict nonIdInitFields
+        @_fields.replaceKeys _.keys nonIdFieldSpecs
 
         if @_id? and @modelClass.fieldSpecs._id is J.PropTypes.key
             unless @_id is @key()
@@ -274,14 +274,14 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
     for fieldName, fieldSpec of fieldSpecs
         continue if fieldName is '_id'
 
-        modelClass.prototype[fieldName] = do (fieldName) -> ->
-            # FIXME reactivity and attachedness
+        modelClass.prototype[fieldName] ?= do (fieldName) -> (value) ->
             if arguments.length is 0
                 # Getter
-                @_fields[fieldName]
+                @get fieldName
             else
-                @_fields[fieldName] = arguments[0]
-                null
+                setter = {}
+                setter[fieldName] = value
+                @fields setter
 
 
     # Wire up class methods for collection operations
@@ -305,7 +305,7 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
             changed: (id, fields) ->
                 instance = collection._attachedInstances[id]
-                instance.fields fields
+                instance._fields.set fields
 
             removed: (id) ->
                 collection._attachedInstances[id].alive = false

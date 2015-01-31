@@ -33,7 +33,7 @@ J._defineComponent = (componentName, componentSpec) ->
         'componentWillUpdate'
     ]
         if memberName of componentSpec
-            throw "Unnecessary to define #{memberName} for J Framework components."
+            throw new Meteor.Error "Unnecessary to define #{memberName} for J Framework components."
 
 
     reactSpec = _.clone componentSpec
@@ -49,12 +49,12 @@ J._defineComponent = (componentName, componentSpec) ->
     # Make getter/setter fields for @state, e.g. @a gets/sets @state.a
     for stateFieldName, stateFieldSpec of componentSpec.state ? {}
         if stateFieldName of reactSpec
-            throw "Name conflict between #{componentName}.#{stateFieldName} and
+            throw new Meteor.Error "Name conflict between #{componentName}.#{stateFieldName} and
                 #{componentName}.state.#{stateFieldName}"
 
         reactSpec[stateFieldName] = do (stateFieldName) -> (value) ->
             if arguments.length > 0 and value is undefined
-                throw "Can't pass undefined to #{componentName}.#{stateFieldName}"
+                throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
                 @state[stateFieldName].get()
@@ -68,14 +68,14 @@ J._defineComponent = (componentName, componentSpec) ->
     # Make reactive getters for @reactives, e.g. @a gets/sets @reactives.a
     for reactiveName, reactiveSpec of componentSpec.reactives ? {}
         if reactiveName of reactSpec
-            throw "Name conflict between #{componentName}.#{reactiveName} and
+            throw new Meteor.Error "Name conflict between #{componentName}.#{reactiveName} and
                 #{componentName}.reactives.#{reactiveName}"
         unless _.isFunction(reactiveSpec.val) or (
             # type is J.$instanceOf(J.AutoDict) and
             _.isFunction(reactiveSpec.keys) and
             _.isFunction(reactiveSpec.valForKey)
         )
-            throw "#{componentName}.reactives.#{reactiveName} must have a val function"
+            throw new Meteor.Error "#{componentName}.reactives.#{reactiveName} must have a val function"
 
         if reactiveSpec.valForKey? then reactSpec[reactiveName] =
             do (reactiveName, reactiveSpec) -> ->
@@ -93,7 +93,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 oldValue = Tracker.nonreactive => @reactives[reactiveName].get()
                 newValue = reactiveSpec.val.apply @
                 if newValue is undefined
-                    throw "Can't return undefined from #{@}.reactives.#{reactiveName}.val"
+                    throw new Meteor.Error "Can't return undefined from #{@}.reactives.#{reactiveName}.val"
 
                 @reactives[reactiveName].set newValue
 
@@ -143,7 +143,7 @@ J._defineComponent = (componentName, componentSpec) ->
             ]
         for propName, value of @props
             unless propName of propSpecs
-                throw "#{componentName} has no prop #{JSON.stringify propName}.
+                throw new Meteor.Error "#{componentName} has no prop #{JSON.stringify propName}.
                     Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
         @_props = {} # ReactiveVars for the props
@@ -193,7 +193,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
         for stateFieldName, value of stateFields
             unless stateFieldName of @state
-                throw "#{componentName}.state.#{stateFieldName} does not exist."
+                throw new Meteor.Error "#{componentName}.state.#{stateFieldName} does not exist."
             @state[stateFieldName].set value
 
         null
@@ -352,7 +352,7 @@ $$ = (elemType, props, children...) ->
     args = Array.prototype.slice.call arguments
 
     if typeof elemType[0] is 'string' and elemType[0].toUpperCase() is elemType[0]
-        throw "No component class #{elemType}." unless elemType of J.components
+        throw new Meteor.Error "No component class #{elemType}." unless elemType of J.components
         args[0] = J.components[elemType]
 
     React.createElement.apply React, args
