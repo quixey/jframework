@@ -3,21 +3,15 @@ class J.AutoDict extends J.Dict
         unless _.isFunction(keysFunc) and _.isFunction(@valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
-        super
-        @_fields = {} # key: AutoVar
-        @_hasKeyDeps = {} # realOrImaginedKey: Dependency
-        @_keysDep = new Deps.Dependency()
-
-        @active = true
+        super {}, @equalsFunc
 
         @_keysComp = null
-
         @keysFunc = null
         @replaceKeysFunc keysFunc
 
     _initField: (key) ->
         @_fields[key] = new J.AutoVar(
-            => @valueFunc.call key
+            => @valueFunc.call null, key
             (oldValue, newValue) => @onChange?.call null, key, oldValue, newValue
             @equalsFunc
         )

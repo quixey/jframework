@@ -139,6 +139,15 @@ J.util =
         uri.setQuery extraParams
         uri.href()
 
+    invalidateAtTime: (ms) ->
+        # TODO: ms can be a Date in the future too
+        dep = new Deps.Dependency()
+        dep.depend()
+        setTimeout(
+            => dep.changed()
+            ms
+        )
+
     isPlainObject: (obj) ->
         ### Based on $.isPlainObject ###
         return false unless obj?

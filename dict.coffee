@@ -78,20 +78,15 @@ class J.Dict
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
 
-        if key of @_fields
-            # Good thing we didn't say "if @hasKey key", because having @_fields[key]
-            # means we don't need @_hasKeyDeps[key].
+        # The @hasKey call is necessary to reactively invalidate
+        # the computation if and when this field gets added/deleted.
+        # It's not at all redundant with @_fields[key].get(), which
+        # invalidates the computation if and when this field gets
+        # changed.
+        if @hasKey key
             @_fields[key].get()
 
         else if arguments.length is 2
-            # @_fields[key] doesn't exist to make this reactive, so we'll
-            # borrow the reactivity from @hasKey.
-            # @hasKey obviously returns false; we just need it to invalidate
-            # the computation if and when the key ever does exist.
-            # Technically we don't need to invalidate until the key exists
-            # with a value other than defaultValue, but that's probably
-            # too fine-grained for us to track.
-            @hasKey key
             defaultValue
 
         else

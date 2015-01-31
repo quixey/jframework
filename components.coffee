@@ -33,8 +33,11 @@ J._defineComponent = (componentName, componentSpec) ->
         'componentWillUpdate'
     ]
         if memberName of componentSpec
-            throw new Meteor.Error "Unnecessary to define #{memberName} for J Framework components."
+            throw new Meteor.Error "Unnecessary to define #{memberName} for J Framework components
+                (in #{componentName})"
 
+    unless _.isFunction componentSpec.render
+        throw new Meteor.Error "Missing #{componentName}.render method"
 
     reactSpec = _.clone componentSpec
     delete reactSpec.props
@@ -262,6 +265,7 @@ J._defineComponent = (componentName, componentSpec) ->
         for reactiveName of @reactives
             if reactiveName of @_reactiveComps
                 # It's a ReactiveVar
+                J.Dict._deepStop Tracker.nonreactive => @reactives[reactiveName].get()
                 @_reactiveComps[reactiveName].stop()
             else
                 # It's an AutoDict
