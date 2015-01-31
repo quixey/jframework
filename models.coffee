@@ -168,15 +168,12 @@ class J.Model
 
     toJSONValue: ->
         ###
-            Used by Meteor EJSON.
+            Used by Meteor EJSON, e.g. EJSON.stringify.
             Note that the name is misleading because
             EJSON's special primitives (Date and Binary)
             aren't returned as JSON.
         ###
 
-        # TODO
-        # I don't know where this is actually called right now --Liron
-        console.log 'Called toJSONValue'
         @toDoc false
 
 
@@ -219,7 +216,7 @@ J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, mem
 J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
     modelConstructor = (initFields = {}) ->
         @_id = initFields._id ? null
-        @_fields = {}
+        @_fields = new J.Dict()
 
         # The collection that was queried to obtain
         # this instance or the original attached
@@ -295,6 +292,8 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 J.assert doc._id of collection._attachedInstances
                 collection._attachedInstances[doc._id]
 
+        collection._attachedInstances = {} # _id: instance
+
         collection.find().observeChanges
             added: (id, fields) ->
                 doc = _.clone fields
@@ -311,10 +310,6 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
             removed: (id) ->
                 collection._attachedInstances[id].alive = false
                 delete collection._attachedInstances[id]
-
-
-
-        collection._attachedInstances = {} # _id: instance
 
         _.extend modelClass,
             collection: collection,

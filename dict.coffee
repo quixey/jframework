@@ -18,34 +18,39 @@ class J.Dict
 
         @active = true
 
-        @setOrAdd fields
+        @setOrAdd fields unless _.isEmpty fields
 
     _clear: ->
         @_delete key for key of @_fields
         null
 
     _delete: (key) ->
-        if key of @_fields
-            delete @[key]
-        ret = delete @_fields[key]
+        J.assert key of @_fields, "Missing key #{J.util.toString key}"
 
-        @constructor._deepStop Tracker.nonreactive => @get key
+        @_stopField key
+
+        delete @[key]
+        delete @_fields[key]
 
         @_keysDep.changed()
         if @_hasKeyDeps[key]?
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
 
-        ret
-
     _initField: (key, value) ->
-        @_fields[key] = new ReactiveVar value, @equalsFunc
+        # This question mark is because a child class may have
+        # already initted this.
+        @_fields[key] ?= new ReactiveVar value, @equalsFunc
 
+        # This question mark is to avoid overshadowing reserved
+        # members like "set".
         @[key] ?= (v) ->
             if arguments.length is 0
                 @get key
             else
-                @set key: v
+                setter = {}
+                setter[key] = v
+                @set setter
 
         @_keysDep.changed()
         if @_hasKeyDeps[key]?
@@ -58,18 +63,16 @@ class J.Dict
         @_initField key, undefined for key in keysDiff.added
         keysDiff
 
-    _set: (fields) ->
-        for key, value of fields
-            unless key of @_fields
-                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set value
-            null
+    _stopField: (key) ->
+        @constructor._deepStop Tracker.nonreactive => @_fields[key].get()
 
     clear: ->
         @_clear()
 
     delete: (key) ->
-        @_delete key
+        if key of @_fields
+            @_delete key
+        null
 
     get: (key, defaultValue) ->
         unless @active
@@ -117,23 +120,30 @@ class J.Dict
         @_replaceKeys newKeys
 
     toString: ->
-        JSON.stringify @getObj()
+        J.util.toString @getObj()
 
     set: (fields) ->
-        @_set fields
+        unless @active
+            throw new Meteor.Error "#{@constructor.name} is stopped"
+
+        for key, value of fields
+            if key not of @_fields
+                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+            @_fields[key].set value
+        null
 
     setOrAdd: (fields) ->
+        setters = {}
         for key, value of fields
             if key of @_fields
-                @_set key: value
+                setters[key] = value
             else
                 @_initField key, value
-        null
+        @set setters
 
     stop: ->
         if @active
-            for key, reactiveVar of @_fields
-                @constructor._deepStop Tracker.nonreactive => reactiveVar.get()
+            @_stopField key for key of @_fields
             @active = false
         null
 

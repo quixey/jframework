@@ -22,6 +22,7 @@ Package.onUse(function(api) {
         "lib/URI.js",
         "j.coffee",
         "util.coffee",
+        "autovar.coffee",
         "dict.coffee",
         "autodict.coffee",
         "proptypes.coffee",

@@ -3,6 +3,7 @@ class J.AutoDict extends J.Dict
         unless _.isFunction(keysFunc) and _.isFunction(@valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
+        super
         @_fields = {} # key: AutoVar
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
         @_keysDep = new Deps.Dependency()
@@ -20,6 +21,10 @@ class J.AutoDict extends J.Dict
             (oldValue, newValue) => @onChange?.call null, key, oldValue, newValue
             @equalsFunc
         )
+        super
+
+    _stopField: (key) ->
+        @_fields[key].stop()
 
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
@@ -56,11 +61,9 @@ class J.AutoDict extends J.Dict
         throw new Meteor.Error "There is no AutoDict.set; use AutoDict.valueFunc"
 
     setOrAdd: ->
-        throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keyFunc and AutoDict.valueFunc"
+        throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"
 
     stop: ->
         if @active
             @_keysComp.stop()
-            autoVar.stop() for key, autoVar in @_fields
-            @active = false
-        null
+        super

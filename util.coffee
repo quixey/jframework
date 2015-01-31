@@ -55,25 +55,16 @@ J.util =
     containsId: (objOrIdArr, objOrId) ->
         J.util.flattenId(objOrId) in J.util.flattenIds objOrIdArr
 
-    equals: (a, b) ->
-        return true if a is b
-
-        if (
-            J.Model? and a instanceof J.Model and b instanceof J.Model and
-            a.modelClass is b.modelClass and
-            a._id? and b._id?
-        )
-            a._id is b._id
+    equals: (a, b, _objDepth = 0) ->
+        if a is b
+            true
 
         else if _.isArray(a) and _.isArray(b)
-            a.length is b.length and _.all (J.util.equals a[i], b[i] for i in [0...a.length])
+            a.length is b.length and _.all (J.util.equals a[i], b[i], _objDepth for i in [0...a.length])
 
-        else if J.util.isPlainObject(a) and J.util.isPlainObject(b)
+        else if J.util.isPlainObject(a) and J.util.isPlainObject(b) and _objDepth >= 1
             J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
-                # J.util.equals(a[k], b[k]) for k of a
-                # Fixme: it's actually more efficient not to bother with
-                # a deep comparison, for now.
-                a[k] is b[k] for k of a
+                J.util.equals(a[k], b[k], _objDepth - 1) for k of a
             )
 
         else
@@ -238,10 +229,27 @@ J.util =
         else
             throw "No default sort-key semantics for: #{x}"
 
-
     sortByKeyReverse: (arr, keySpec = J.util.sortByKeyFunc) ->
         J.util.sortByKey arr, keySpec
         arr.reverse()
+
+    toString: (obj) ->
+        getJsonable = (x) ->
+            if J.util.isPlainObject x
+                jsonable = {}
+                for key, value of x
+                    if value is undefined
+                        jsonable[key] = '<undefined>'
+                    else
+                        jsonable[key] = value
+                jsonable
+            else if _.isArray x
+                (getJsonable(y) for y in x)
+            else
+                x
+
+        JSON.stringify getJsonable obj
+
 
 
 
