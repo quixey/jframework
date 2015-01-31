@@ -8,6 +8,13 @@ _.extend J,
 
 J.util =
     compare: (a, b) ->
+        ###
+            All this function does is:
+            1. undefined < null < anything else
+            2. compare arrays using lexicographic ordering
+            3. reject weird cases like comparing plain objects
+        ###
+
         if arguments.length isnt 2
             throw 'Compare needs 2 arguments'
 
@@ -20,9 +27,6 @@ J.util =
             if a is null and b is null then 0
             else if a is null then -1
             else 1
-
-        else if J.util.isPlainObject(a) or J.util.isPlainObject(b)
-            throw 'Can\'t compare objects'
 
         else if _.isArray(a) or _.isArray(b)
             unless _.isArray(a) and _.isArray(b)
@@ -38,9 +42,12 @@ J.util =
 
             lastResult
 
-        else if a < b then -1
-        else if a > b then 1
-        else 0
+        else
+            aKey = J.util.sortKeyFunc(a)
+            bKey = J.util.sortKeyFunc(b)
+            if aKey < bKey then -1
+            else if aKey > bKey then 1
+            else 0
 
     concatArrays: (arrays...) ->
         _.reduce arrays, (memo, arr) -> memo.concat arr
@@ -52,7 +59,7 @@ J.util =
         return true if a is b
 
         if (
-            a instanceof J.Model and b instanceof J.Model and
+            J.Model? and a instanceof J.Model and b instanceof J.Model and
             a.modelClass is b.modelClass and
             a._id? and b._id?
         )
@@ -116,7 +123,7 @@ J.util =
             if questionMark and not value?
                 return
 
-            if value instanceof J.Model
+            if J.Model? and value instanceof J.Model
                 unless _.isFunction value[nextKey]
                     throw "Invalid fieldSpec part #{value.modelName}.#{nextKey} (from #{fieldSpec})"
                 value = value[nextKey]()
@@ -207,7 +214,7 @@ J.util =
 
         obj[fieldSpecParts[fieldSpecParts.length - 1]] = value
 
-    sortByKey: (arr, keySpec = 'key') ->
+    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
         keyFunc =
             if _.isString keySpec
                 (x) -> J.util.getField x, keySpec
@@ -218,13 +225,44 @@ J.util =
 
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
-    sortByKeyReverse: (arr, keySpec = 'key') ->
+    sortKeyFunc: (x) ->
+        if _.isString(x)
+            x.toUpperCase()
+        else if _.isNumber(x)
+            x
+        else if _.isBoolean(x)
+            if x then 1 else 0
+        else if typeof x is 'object' and 'key' of x
+            J.util.getField x, 'key'
+        else
+            throw "No default sort-key semantics for: #{x}"
+
+
+    sortByKeyReverse: (arr, keySpec = J.util.sortByKeyFunc) ->
         J.util.sortByKey arr, keySpec
         arr.reverse()
 
 
 
 J.utilTests =
+    sorting: ->
+        throw 'fail' unless J.util.compare(
+            [false, -2]
+            [1, -5, 6]
+        ) is -1
+        throw 'fail' unless J.util.compare(
+            [1, 2, 3, 'test', 5]
+            [1, 2.0, 3, 'TeSt', 5.0]
+        ) is 0
+        throw 'fail' unless J.util.compare(
+            {key: 6}
+            5
+        ) is 1
+        throw 'fail' unless J.util.equals(
+            ['G', 'f'].sort(J.util.compare)
+            ['f', 'G']
+        )
+
     matchesUrlPattern: ->
         throw 'fail' unless J.util.matchesUrlPattern(
             "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time=",
@@ -248,7 +286,4 @@ J.utilTests =
         )
 
 for funcName, testFunc of J.utilTests
-    try
-        testFunc()
-    catch
-        console.error "#{funcName} test failed."
+    testFunc()
