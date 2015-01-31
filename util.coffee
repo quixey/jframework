@@ -125,7 +125,7 @@ J.util =
 
             if J.Model? and value instanceof J.Model
                 unless _.isFunction value[nextKey]
-                    throw "Invalid fieldSpec part #{value.modelName}.#{nextKey} (from #{fieldSpec})"
+                    throw "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
                 value = value[nextKey]()
             else
                 value = value[nextKey]
@@ -155,6 +155,7 @@ J.util =
         return false if obj is obj.window
         return false if obj.nodeType
         return false if obj.constructor and not ({}).hasOwnProperty.call(obj.constructor.prototype, 'isPrototypeOf')
+        return false if obj._isReactElement
         true
 
     makeDictSet: (arr) ->

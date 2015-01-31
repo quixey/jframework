@@ -1,116 +1,31 @@
 class J.AutoDict extends J.Dict
-    constructor: (keysFunc, valueFunc, @onChange = null, @equalsFunc = J.util.equals) ->
-        unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
+    constructor: (keysFunc, @valueFunc, @onChange = null, @equalsFunc = J.util.equals) ->
+        unless _.isFunction(keysFunc) and _.isFunction(@valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
-        @_fields = {} # key: ReactiveVar
+        @_fields = {} # key: AutoVar
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
-
-        @keysFunc = null
-        @valueFunc = valueFunc
+        @_keysDep = new Deps.Dependency()
 
         @active = true
-        @_keysComp = null
-        @_valueComps = {} # key: valueComp
 
+        @_keysComp = null
+
+        @keysFunc = null
         @replaceKeysFunc keysFunc
 
     _initField: (key) ->
-        @_fields[key] = new ReactiveVar undefined, @equalsFunc
-        @_setupValueComp key
-
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
-
-    _recompute: (key) ->
-        oldValue = Tracker.nonreactive => @_fields[key].get()
-        newValue = @valueFunc.call null, key
-        if newValue is undefined
-            throw new Meteor.Error "AutoDict.valueFunc must not return undefined"
-
-        @_fields[key].set newValue
-
-        unless @equalsFunc oldValue, newValue
-            @onChange?.call null, key, oldValue, newValue
-
-    _clear: ->
-        for key of @_fields
-            @_delete key
-
-    _delete: (key) ->
-        if key of @_fields
-            @_valueComps[key].stop()
-            delete @_valueComps[key]
-        @constructor._deepStop @_fields[key]
-        delete @_fields[key]
-
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
-
-    _replaceKeys: (newKeys) ->
-        keysDiff = J.Dict.diff @keys(), newKeys
-        @_delete key for key in keysDiff.deleted
-        @_initField key for key in keysDiff.added
-        keysDiff
-
-    _setupValueComp: (key) ->
-        if @_valueComps[key]?
-            @_valueComps[key].stop()
-
-        @_valueComps[key] = Tracker.nonreactive => Tracker.autorun (c) =>
-            @_recompute key
+        @_fields[key] = new J.AutoVar(
+            => @valueFunc.call key
+            (oldValue, newValue) => @onChange?.call null, key, oldValue, newValue
+            @equalsFunc
+        )
 
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
 
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
-
-    get: (key, defaultValue) ->
-        unless @active
-            throw new Meteor.Error "AutoDict is stopped"
-
-        unless @hasKey(key)
-            if arguments.length >= 2
-                return defaultValue
-            else
-                throw new Meteor.Error "AutoDict missing key #{JSON.stringify key}"
-
-        if @_valueComps[key].invalidated
-            # Accessing an invalidated key before Meteor's flush has had a
-            # chance to recompute it. We'll effectively move it to the front
-            # of the flush queue so it never returns an invalidated value.
-            @_setupValueComp key
-
-        @_fields[key].get()
-
-    hasKey: (key) ->
-        return key of @_fields unless Tracker.active
-
-        @_hasKeyDeps[key] ?= new Deps.Dependency()
-        @_hasKeyDeps[key].depend()
-
-        key of @_fields
-
-    set: ->
-        throw new Meteor.Error "There is no AutoDict.set; use AutoDict.valueFunc"
-
-    setOrAdd: ->
-        throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keyFunc and AutoDict.valueFunc"
-
-    stop: ->
-        if @active
-            for key of @_fields
-                @_valueComps[key].stop()
-            @_keysComp.stop()
-            @active = false
-
-        Tracker.nonreactive =>
-            @constructor._deepStop reactiveVar.get() for key, reactiveVar of @_fields
-
-        null
 
     replaceKeys: ->
         throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
@@ -131,15 +46,21 @@ class J.AutoDict extends J.Dict
             else
                 throw new Meteor.Error "AutoDict.keysFunc must return an array or null. Got #{newKeys}"
 
-    replaceValueFunc: (valueFunc) ->
-        @valueFunc = valueFunc
-        for key, valueComp of @_valueComps
-            valueComp.invalidate()
+    replaceValueFunc: (@valueFunc) ->
+        # autoVar.replaceValueFunc would be overkill because the individual
+        # AutoVars' valueFuncs are closures that will automatically
+        # reference this updated @valueFunc.
+        autoVar._valueComp.invalidate() for key, autoVar of @_fields
 
-    @_deepStop = (x) ->
-        if x instanceof J.AutoDict
-            x.stop()
-        else if _.isArray x
-            @_deepStop(v) for v in x
-        else if J.util.isPlainObject x
-            @_deepStop(v) for k, v of x
+    set: ->
+        throw new Meteor.Error "There is no AutoDict.set; use AutoDict.valueFunc"
+
+    setOrAdd: ->
+        throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keyFunc and AutoDict.valueFunc"
+
+    stop: ->
+        if @active
+            @_keysComp.stop()
+            autoVar.stop() for key, autoVar in @_fields
+            @active = false
+        null
