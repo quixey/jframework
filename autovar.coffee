@@ -11,7 +11,7 @@ class J.AutoVar
 
     _recompute: ->
         oldValue = Tracker.nonreactive => @_var.get()
-        newValue = @valueFunc.call null
+        newValue = J.Dict._deepReactify @valueFunc.call null
         if newValue is undefined
             throw new Meteor.Error "AutoVar.valueFunc must not return undefined"
 

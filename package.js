@@ -28,6 +28,7 @@ Package.onUse(function(api) {
         "util.coffee",
         "autovar.coffee",
         "dict.coffee",
+        "list.coffee",
         "autodict.coffee",
         "proptypes.coffee",
         "models.coffee",

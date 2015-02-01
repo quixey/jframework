@@ -17,6 +17,7 @@ class J.Dict
         @_keysDep = new Deps.Dependency()
 
         @active = true
+        @readOnly = false
 
         @setOrAdd fields unless _.isEmpty fields
 
@@ -46,7 +47,7 @@ class J.Dict
         # members like "set".
         @[key] ?= (v) ->
             if arguments.length is 0
-                @get key
+                @forceGet key
             else
                 setter = {}
                 setter[key] = v
@@ -74,7 +75,21 @@ class J.Dict
             @_delete key
         null
 
-    get: (key, defaultValue) ->
+    _forceSet: (fields) ->
+        for key, value of fields
+            if key not of @_fields
+                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+            @_fields[key].set @constructor._deepReactify value
+        null
+
+    forceGet: (key) ->
+        if @hasKey key
+            @_fields[key].get()
+        else
+            throw new Meteor.Error "#{@constructor.name} missing key #{JSON.stringify key}"
+
+    get: (key, defaultValue = undefined) ->
+        # Reactive
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
 
@@ -85,49 +100,48 @@ class J.Dict
         # changed.
         if @hasKey key
             @_fields[key].get()
-
-        else if arguments.length is 2
+        else
             defaultValue
 
-        else
-            throw new Meteor.Error "#{@constructor.name} missing key #{JSON.stringify key}"
-
-    getObj: (keys = @keys()) ->
-        obj = {}
+    getFields: (keys = @getKeys()) ->
+        # Reactive
+        fields = {}
         for key in keys
-            obj[key] = @get key
-        obj
+            fields[key] = @get key
+        fields
+
+    getKeys: ->
+        # Reactive
+        @_keysDep.depend()
+        _.keys @_fields
+
+    getValues: ->
+        # Reactive
+        _.values @getFields()
 
     hasKey: (key) ->
+        # Reactive
         if Tracker.active
             @_hasKeyDeps[key] ?= new Deps.Dependency()
             @_hasKeyDeps[key].depend()
 
         key of @_fields
 
-    keys: ->
-        if Tracker.active
-            @_keysDep.depend()
-
-        _.keys @_fields
-
     replaceKeys: (newKeys) ->
         @_replaceKeys newKeys
-
-    toString: ->
-        J.util.toString @getObj()
 
     set: (fields) ->
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
+        if @readOnly
+            throw new Meteor.Error "#{@constructor.name} is read-only"
 
-        for key, value of fields
-            if key not of @_fields
-                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set value
-        null
+        @_forceSet fields
 
     setOrAdd: (fields) ->
+        if @readOnly
+            throw new Meteor.Error "#{@constructor.name} instance is read-only"
+
         setters = {}
         for key, value of fields
             if key of @_fields
@@ -136,18 +150,48 @@ class J.Dict
                 @_initField key, value
         @set setters
 
+    setReadOnly: (@readOnly = true, deep = false) ->
+        if deep
+            @constructor._deepSetReadOnly Tracker.nonreactive => @getFields()
+
+    size: ->
+        # Reactive
+        @getKeys().length
+
     stop: ->
         if @active
             @_stopField key for key of @_fields
             @active = false
         null
 
-    values: ->
-        _.values @getObj()
+    toObj: ->
+        fields = @getFields()
 
+        obj = {}
+        for key, value of fields
+            if value instanceof J.Dict
+                obj[key] = value.toObj()
+            else if value instanceof J.List
+                obj[key] = value.toArr()
+            else
+                obj[key] = value
+        obj
+
+    toString: ->
+        # Reactive
+        J.util.toString @toObj()
+
+
+    @_deepSetReadOnly = (x, readOnly = true) ->
+        if (x instanceof J.Dict and x not instanceof J.AutoDict) or x instanceof J.List
+            x.setReadOnly readOnly, true
+        else if _.isArray x
+            @_deepSetReadOnly(v, readOnly) for v in x
+        else if J.util.isPlainObject x
+            @_deepSetReadOnly(v, readOnly) for k, v of x
 
     @_deepStop = (x) ->
-        if x instanceof J.Dict or x instanceof J.AutoVar
+        if x instanceof J.Dict or x instanceof J.List or x instanceof J.AutoVar
             x.stop()
         else if _.isArray x
             @_deepStop(v) for v in x
@@ -159,3 +203,26 @@ class J.Dict
         setB = J.util.makeDictSet arrB
         added: _.filter arrB, (x) -> x not of setA
         deleted: _.filter arrA, (x) -> x not of setB
+
+    @fromDeepObj: (obj) ->
+        unless J.util.isPlainObject obj
+            throw new Meteor.Error "Expected a plain object"
+
+        @fromDeepObjOrArr obj
+
+    @fromDeepObjOrArr: (x) ->
+        unless _.isArray(x) or J.util.isPlainObject(x)
+            throw new Meteor.Error "Expected an array or plain object"
+
+        @_deepReactify x
+
+    @_deepReactify: (x) ->
+        if _.isArray x
+            new J.List (@_deepReactify v for v in x)
+        else if J.util.isPlainObject x
+            fields = {}
+            for key, value of x
+                fields[key] = @_deepReactify value
+            new J.Dict fields
+        else
+            x

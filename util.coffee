@@ -55,16 +55,29 @@ J.util =
     containsId: (objOrIdArr, objOrId) ->
         J.util.flattenId(objOrId) in J.util.flattenIds objOrIdArr
 
-    equals: (a, b, _objDepth = 0) ->
+    equals: (a, b) ->
+        # Go one level deep into arrays because some reactive expressions
+        # seem to make good use of this.
+
+        if a is b
+            true
+        else if _.isArray(a) and _.isArray(b) and a.length is b.length
+            _.all (a[i] is b[i] for i in [0...a.length])
+        else
+            false
+
+    deepEquals: (a, b) ->
         if a is b
             true
 
         else if _.isArray(a) and _.isArray(b)
-            a.length is b.length and _.all (J.util.equals a[i], b[i], _objDepth for i in [0...a.length])
+            a.length is b.length and _.all (
+                J.util.deepEquals(a[i], b[i]) for i in [0...a.length]
+            )
 
-        else if J.util.isPlainObject(a) and J.util.isPlainObject(b) and _objDepth >= 1
+        else if J.util.isPlainObject(a) and J.util.isPlainObject(b) and
             J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
-                J.util.equals(a[k], b[k], _objDepth - 1) for k of a
+                J.util.equals(a[k], b[k]) for k of a
             )
 
         else
@@ -264,41 +277,41 @@ J.util =
 
 J.utilTests =
     sorting: ->
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             [false, -2]
             [1, -5, 6]
         ) is -1
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             [1, 2, 3, 'test', 5]
             [1, 2.0, 3, 'TeSt', 5.0]
         ) is 0
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             {key: 6}
             5
         ) is 1
-        throw 'fail' unless J.util.equals(
+        J.assert J.util.deepEquals(
             ['G', 'f'].sort(J.util.compare)
             ['f', 'G']
         )
 
     matchesUrlPattern: ->
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time=",
             "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time="
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?q=best+restaurants&loc={mountain+view,ca|}'
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?q=best+restaurants&loc={mountain\+view,ca|}'
         )
-        throw 'fail' if J.util.matchesUrlPattern(
+        J.assert not J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?cflt=pizza&q=best+restaurants&loc={mountain+view,ca|}'
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements=',
             'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements={a||b}'
         )
