@@ -58,7 +58,7 @@ class J.Dict
             delete @_hasKeyDeps[key]
 
     _replaceKeys: (newKeys) ->
-        keysDiff = @constructor.diff @keys(), newKeys
+        keysDiff = @constructor.diff _.keys(@_fields), newKeys
         @_delete key for key in keysDiff.deleted
         @_initField key, undefined for key in keysDiff.added
         keysDiff

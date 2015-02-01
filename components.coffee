@@ -315,7 +315,10 @@ J._defineComponent = (componentName, componentSpec) ->
         renderedComponent = null
         if @_renderComp?
             # We must be at time (3), a forceUpdate call.
-            J.assert not @_renderComp.invalidated
+            if @_renderComp.invalidated
+                # We must be at time (2) and (3) simultaneously.
+                console.warn "It looks like you're unnecessarily calling forceUpdate()
+                    in #{@toString()}.render"
             @_renderComp.stop()
 
         @_renderComp = Tracker.autorun =>
@@ -336,11 +339,6 @@ J._defineComponent = (componentName, componentSpec) ->
 
                     @_renderComp = null
                     @forceUpdate()
-
-        origClassName = renderedComponent.props.className
-        renderedComponent.props.className = "#{componentName} #{@_componentId}"
-        if origClassName?
-            renderedComponent.props.className += " #{renderedComponent.props.className}"
 
         renderedComponent
 

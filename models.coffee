@@ -31,10 +31,7 @@ class J.Model
 
 
     clone: ->
-        # TODO: Become more sure
-        J.assert not Tracker.active, "Not sure it ever makes sense to clone in a reactive computation."
-
-        doc = @toDoc(false)
+        doc = Tracker.nonreactive => @toDoc false
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
 
@@ -44,13 +41,13 @@ class J.Model
 
     fields: (fields) ->
         unless @alive
-            throw "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
         if arguments.length is 0
             @_fields.getObj()
         else
             if @attached
-                throw "Can't set #{@modelClass.name} ##{@_id} because it is attached
+                throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
                     to collection #{J.util.toString @collection._name}"
             @_fields.set fields
             null
@@ -68,16 +65,20 @@ class J.Model
             collection = @collection
 
         unless collection instanceof Mongo.Collection
-            throw "Invalid collection to #{@modelClass.name}.insert"
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
 
         if @attached and @collection is collection
-            throw "Can't insert #{@modelClass.name} instance into its own attached collection"
+            throw new Meteor.Error "Can't insert #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw "Can't insert dead #{@modelClass.name} instance"
+            throw new Meteor.Error "Can't insert dead #{@modelClass.name} instance"
 
-        doc = @toDoc(true)
+        doc = Tracker.nonreactive => @toDoc true
         J.assert J.util.isPlainObject doc
+        if not doc._id?
+            # The Mongo driver will give us an ID but we
+            # can't pass it a null ID.
+            delete doc._id
 
         # Returns @_id
         @_id = collection.insert doc, callback
@@ -85,9 +86,9 @@ class J.Model
 
     remove: (callback) ->
         unless @attached
-            throw "Can't remove detached #{@modelClass.name} instance."
+            throw new Meteor.Error "Can't remove detached #{@modelClass.name} instance."
         unless @alive
-            throw "Can't remove dead #{@modelClass.name} instance."
+            throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
 
         @collection.remove @_id, callback
 
@@ -99,28 +100,32 @@ class J.Model
             callback = collection
             collection = @collection
 
+        unless collection instanceof Mongo.Collection
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
+
         if @attached and @collection is collection
-            throw "Can't save #{@modelClass.name} instance into its own attached collection"
+            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw "Can't save dead #{@modelClass.name} instance"
+            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        doc = @toDoc(true)
+        doc = Tracker.nonreactive => @toDoc true
         J.assert J.util.isPlainObject doc
 
         if doc._id?
             @_id = doc._id
             fields = _.clone doc
             delete fields._id
-
             collection.upsert @_id,
                 $set: fields,
                 callback
-            null
-
         else
-            # Returns @_id
+            # The Mongo driver will give us an ID but we
+            # can't pass it a null ID
+            delete doc._id
             @_id = collection.insert doc, callback
+
+        @_id
 
 
     toDoc: (denormalize = false) ->
@@ -131,7 +136,7 @@ class J.Model
         # types in the form of J.Model instances.)
 
         unless @alive
-            throw "Can't call toDoc on dead #{@modelClass.name} instance"
+            throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
         toPrimitiveEjsonObj = (value) ->
             if value instanceof J.Model
@@ -180,9 +185,9 @@ class J.Model
 
     update: (args...) ->
         unless @attached
-            throw "Can't call update on detached #{@modelClass.name} instance"
+            throw new Meteor.Error "Can't call update on detached #{@modelClass.name} instance"
         unless @alive
-            throw "Can't call update on dead #{@modelClass.name} instance"
+            throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
 
         unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
             # Calling something like .update(foo: bar) would replace the entire
@@ -212,13 +217,13 @@ J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, mem
 
 
 J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
-    modelConstructor = (initFields = {}) ->
+    modelConstructor = (initFields = {}, @collection = @modelClass.collection) ->
         @_id = initFields._id ? null
 
-        # The collection that was queried to obtain
-        # this instance or the original attached
-        # clone-ancestor of this instance.
-        @collection = null
+        # @collection is the collection that was queried
+        # to obtain this instance, or the original attached
+        # clone-ancestor of this instance, or just the
+        # default place we're going to be inserting/saving to.
 
         # If true, this instance reactively receives
         # changes from its collection and is immutable

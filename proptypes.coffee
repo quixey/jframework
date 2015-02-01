@@ -7,7 +7,7 @@ J.PropTypes =
             # Okay, it's validator call time.
             modelClass = J.models[modelName]
             unless modelClass?
-                throw "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
+                throw new Meteor.Error "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
 
             React.PropTypes.instanceOf(modelClass).apply @, arguments
 
@@ -15,7 +15,7 @@ J.PropTypes =
             # Okay, it's validator call time.
             modelClass = J.models[modelName]
             unless modelClass?
-                throw "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
+                throw new Meteor.Error "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
 
             React.PropTypes.instanceOf(modelClass).isRequired.apply @, arguments
 

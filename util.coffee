@@ -2,9 +2,9 @@ _.extend J,
     assert: (boolValue, errorMessage) ->
         unless boolValue
             if errorMessage
-                throw "Assertion failed: #{errorMessage}"
+                throw new Meteor.Error "Assertion failed: #{errorMessage}"
             else
-                throw "Assertion failed."
+                throw new Meteor.Error "Assertion failed."
 
 J.util =
     compare: (a, b) ->
@@ -116,7 +116,7 @@ J.util =
 
             if J.Model? and value instanceof J.Model
                 unless _.isFunction value[nextKey]
-                    throw "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
+                    throw new Meteor.Error "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
                 value = value[nextKey]()
             else
                 value = value[nextKey]
@@ -133,7 +133,7 @@ J.util =
         ###
 
         unless _.isString url
-            throw "URL must be a string: #{url}"
+            throw new Meteor.Error "URL must be a string: #{url}"
 
         uri = URI url
         uri.setQuery extraParams
@@ -222,7 +222,7 @@ J.util =
             else if _.isFunction keySpec
                 keySpec
             else
-                throw "Invalid keySpec: #{keySpec}"
+                throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
@@ -236,7 +236,7 @@ J.util =
         else if typeof x is 'object' and 'key' of x
             J.util.getField x, 'key'
         else
-            throw "No default sort-key semantics for: #{x}"
+            throw new Meteor.Error "No default sort-key semantics for: #{x}"
 
     sortByKeyReverse: (arr, keySpec = J.util.sortByKeyFunc) ->
         J.util.sortByKey arr, keySpec
