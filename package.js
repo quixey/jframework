@@ -31,6 +31,7 @@ Package.onUse(function(api) {
         "dict.coffee",
         "list.coffee",
         "autodict.coffee",
+        "autolist.coffee",
         "proptypes.coffee",
         "models.coffee",
         "components.coffee",

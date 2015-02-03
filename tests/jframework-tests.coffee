@@ -1,4 +1,10 @@
-Tinytest.add "J.dict basics", (test) ->
+Tinytest.add "_init", (test) ->
+    # This test is just here to soak up
+    # tinytest's init time so the other
+    # tests' times aren't artificially high
+    return
+
+Tinytest.add "Dict - basics", (test) ->
     d = J.Dict()
     d.setOrAdd x: 5
     test.equal d.get('x'), 5
@@ -13,7 +19,7 @@ Tinytest.add "J.dict basics", (test) ->
     test.equal d.size(), 0
 
 
-Tinytest.add "List basics", (test) ->
+Tinytest.add "List - basics", (test) ->
     lst = J.List [6, 4]
     test.isTrue lst.contains 4
     test.isFalse lst.contains "4"
@@ -38,7 +44,7 @@ Tinytest.add "List basics", (test) ->
 
 
 
-Tinytest.add "Dict and list reactivity 1", (test) ->
+Tinytest.add "Dict and List reactivity 1", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
     testOutputs = []
     c = Tracker.autorun (c) ->
@@ -51,25 +57,23 @@ Tinytest.add "Dict and list reactivity 1", (test) ->
     test.equal testOutputs, [3, 203]
     c.stop()
 
-Tinytest.add "Dict and list reactivity 2", (test) ->
+Tinytest.add "Dict and List reactivity 2", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
     nonreactiveMappedLst = lst.map (x) -> 2 * x
-    test.equal nonreactiveMappedLst.toArr(), [0, 2, 4, 6, 8]
+    test.equal nonreactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 1"
 
     reactiveMappedLst = null
     c = Tracker.autorun (c) ->
         reactiveMappedLst = lst.map (x) -> 2 * x
-    test.equal reactiveMappedLst.toArr(), [0, 2, 4, 6, 8]
+    test.equal reactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 2"
 
     lst.set 2, 102
-    test.equal nonreactiveMappedLst.toArr(), [0, 2, 4, 6, 8]
-    test.equal reactiveMappedLst.toArr(), [0, 2, 4, 6, 8]
-    Tracker.flush()
-    test.equal reactiveMappedLst.toArr(), [0, 2, 204, 6, 8]
+    test.equal nonreactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 3"
+    test.equal reactiveMappedLst.toArr(), [0, 2, 204, 6, 8], "fail 4"
 
     c.stop()
 
-Tinytest.add "Dict and list reactivity 3", (test) ->
+Tinytest.add "Dict and List reactivity 3", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
     c = Tracker.autorun ->
         lst.reverse()
@@ -78,7 +82,7 @@ Tinytest.add "Dict and list reactivity 3", (test) ->
     test.equal lst.toArr(), [4, 3, 2, 1, 0], "Screwed up the reverse"
     c.stop()
 
-Tinytest.add "Dict and list reactivity 4", (test) ->
+Tinytest.add "Dict and List reactivity 4", (test) ->
     lst = J.List [4, 3, 2, 1, 0]
     sortedLst = []
     c = Tracker.autorun ->
@@ -93,7 +97,7 @@ Tinytest.add "Dict and list reactivity 4", (test) ->
 
     c.stop()
 
-Tinytest.add "List resize", (test) ->
+Tinytest.add "List - resize", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
     size = lst.size()
     test.equal size, 5
@@ -107,7 +111,7 @@ Tinytest.add "List resize", (test) ->
     test.throws -> lst.get(10)
     c.stop()
 
-Tinytest.add "Autovar 1", (test) ->
+Tinytest.add "AutoVar - basics 1", (test) ->
     x = new ReactiveVar 5
     xPlusOne = J.AutoVar -> x.get() + 1
     test.equal xPlusOne.get(), 6
@@ -116,8 +120,7 @@ Tinytest.add "Autovar 1", (test) ->
     Tracker.flush()
     test.equal xPlusOne.get(), 11
 
-Tinytest.add "Autovar - be lazy when no one is looking", (test) ->
-    return
+Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
     x = new ReactiveVar 5
     runCount = 0
     xPlusOne = J.AutoVar ->
@@ -150,7 +153,7 @@ Tinytest.add "Autovar - be lazy when no one is looking", (test) ->
     test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (2)"
 
 
-Tinytest.add "Autovar - don't be lazy if someone is looking", (test) ->
+Tinytest.add "AutoVar - don't be lazy if someone is looking", (test) ->
     x = new ReactiveVar 5
     runCount = 0
     xPlusOne = J.AutoVar ->
@@ -189,7 +192,7 @@ Tinytest.add "Autovar - don't be lazy if someone is looking", (test) ->
     watchOnce.stop()
 
 
-Tinytest.add "Autodict basics", (test) ->
+Tinytest.add "AutoDict - Basics", (test) ->
     size = new ReactiveVar 3
     d = J.AutoDict(
         -> ['zero', 'one', 'two', 'three', 'four', 'five'][0...size.get()]
@@ -208,7 +211,7 @@ Tinytest.add "Autodict basics", (test) ->
     test.equal d.get('three'), "three is a number"
 
 
-Tinytest.add "Autodict reactivity", (test) ->
+Tinytest.add "Autodict - reactivity", (test) ->
     coef = new ReactiveVar 2
     size = new ReactiveVar 3
     d = J.AutoDict(
@@ -266,7 +269,7 @@ Tinytest.add "Autodict reactivity", (test) ->
     watcher.stop()
 
 
-Tinytest.add "Autodict laziness", (test) ->
+Tinytest.add "AutoDict - laziness", (test) ->
     coef = new ReactiveVar 2
     size = new ReactiveVar 3
     keyFuncRunCount = 0
@@ -292,13 +295,37 @@ Tinytest.add "Autodict laziness", (test) ->
     test.equal valueFuncRunCount, 2
 
 
-
-
-
-
-
-
-
+Tinytest.add "AutoList - reactivity 1", (test) ->
+    coef = new ReactiveVar 10
+    size = new ReactiveVar 3
+    sizeFuncRunCount = 0
+    valueFuncRunCount = 0
+    al = J.AutoList(
+        ->
+            sizeFuncRunCount += 1
+            size.get()
+        (key) ->
+            valueFuncRunCount += 1
+            key * coef.get()
+    )
+    test.equal sizeFuncRunCount, 1
+    test.equal al.toArr(), [0, 10, 20]
+    test.throws -> al.resize 5
+    test.throws -> al.set 2, 2
+    size.set 2
+    coef.set 100
+    test.equal sizeFuncRunCount, 1
+    test.equal valueFuncRunCount, 3
+    Tracker.flush()
+    test.equal al.toArr(), [0, 100]
+    test.equal sizeFuncRunCount, 2
+    test.equal valueFuncRunCount, 5
+    al.replaceSizeFunc ->
+        sizeFuncRunCount += 1
+        2 * size.get()
+    test.equal al.toArr(), [0, 100, 200, 300]
+    test.equal sizeFuncRunCount, 3
+    test.equal valueFuncRunCount, 7
 
 
 

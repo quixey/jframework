@@ -15,10 +15,10 @@ class J.List
         @active = true
         @readOnly = false
 
-        @_size = arr.length
-        @_sizeDep = new Deps.Dependency()
-
         @_dict = J.Dict fields
+
+    _resize: (size) ->
+        @_dict.replaceKeys ("#{i}" for i in [0...size])
 
     clear: ->
         @resize 0
@@ -46,9 +46,10 @@ class J.List
 
     get: (index) ->
         # Reactive
-        unless parseInt(index) is index and 0 <= index < @_size
+        if _.isNumber(index) and @_dict.hasKey "#{index}"
+            @_dict.get "#{index}"
+        else
             throw new Meteor.Error "List index out of range"
-        @_dict.get index
 
     getReversed: ->
         # Reactive
@@ -62,8 +63,7 @@ class J.List
 
     getValues: ->
         # Reactive
-        @_sizeDep.depend()
-        @_dict.get i for i in [0...@_size]
+        @_dict.get i for i in [0...@size()]
 
     join: (separator) ->
         # Reactive
@@ -71,27 +71,21 @@ class J.List
 
     map: (mapFunc) ->
         # Reactive
-
-#        ## Fixme: This is the fine-granularity solution
-#        J.LazyList(
-#            => @size()
-#            (i) => mapFunc @get i
-#        )
-
-        J.List @getValues().map mapFunc
+        if Tracker.active
+            J.AutoList(
+                => @size()
+                (i) => mapFunc @get i
+            )
+        else
+            J.List @getValues().map mapFunc
 
     push: (value) ->
         adder = {}
-        adder[@_size] = value
+        adder[@size()] = value
         @_dict.setOrAdd adder
-        @_size += 1
-        @_sizeDep.changed()
 
     resize: (size) ->
-        return if size is @_size
-        @_dict.replaceKeys [0...size]
-        @_size = size
-        @_sizeDep.changed()
+        @_resize size
 
     reverse: ->
         reversedArr = Tracker.nonreactive => @getReversed().toArr()
@@ -101,7 +95,7 @@ class J.List
     set: (index, value) ->
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} instance is read-only"
-        unless parseInt(index) is index and 0 <= index < @_size
+        unless _.isNumber(index) and @_dict.hasKey "#{index}"
             throw new Meteor.Error "List index out of range"
 
         setter = {}
@@ -124,8 +118,7 @@ class J.List
 
     size: ->
         # Reactive
-        @_sizeDep.depend()
-        @_size
+        @_dict.size()
 
     toArr: ->
         # Reactive

@@ -43,9 +43,6 @@ class J.AutoDict extends J.Dict
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
 
-    clone: ->
-        throw new Meteor.Error "There is no AutoDict.clone"
-
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
 

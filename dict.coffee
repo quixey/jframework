@@ -96,6 +96,10 @@ class J.Dict
         null
 
     forceGet: (key) ->
+        # Reactive
+        unless @active
+            throw new Meteor.Error "#{@constructor.name} is stopped"
+
         if @hasKey key
             @_fields[key].get()
         else
@@ -173,6 +177,7 @@ class J.Dict
 
     size: ->
         # Reactive
+        # TODO: Can make this its own finer-grained sizeDep
         @getKeys().length
 
     stop: ->
