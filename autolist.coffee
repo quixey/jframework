@@ -13,7 +13,10 @@ class J.AutoList extends J.List
         @onChange = onChange
         @equalsFunc = equalsFunc
 
-        @_dict = J.AutoDict(
+        @active = true
+        if Tracker.active then Tracker.onInvalidate => @stop()
+
+        @_dict = Tracker.nonreactive => J.AutoDict(
             => "#{i}" for i in [0...@sizeFunc()]
             (key) => @valueFunc parseInt(key)
             (
@@ -27,6 +30,11 @@ class J.AutoList extends J.List
 
     clear: ->
         throw new Meteor.Error "There is no AutoList.clear"
+
+    get: ->
+        unless @active
+            throw new Meteor.Error "AutoList is stopped"
+        super
 
     push: ->
         throw new Meteor.Error "There is no AutoList.push"
@@ -48,6 +56,10 @@ class J.AutoList extends J.List
 
     sort: ->
         throw new Meteor.Error "There is no AutoList.sort"
+
+    stop: ->
+        @_dict.stop()
+        @active = false
 
     toString: ->
         # Reactive

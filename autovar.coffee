@@ -28,8 +28,9 @@ class J.AutoVar
         @_var = new ReactiveVar undefined, @equalsFunc
 
         @active = true
-        @_valueComp = null
+        if Tracker.active then Tracker.onInvalidate => @stop()
 
+        @_valueComp = null
         if @onChange? then @_setupValueComp()
 
     _worthRecomputing: ->
@@ -73,7 +74,6 @@ class J.AutoVar
         if @active
             @_valueComp.stop()
             @active = false
-            J.Dict._deepStop Tracker.nonreactive => @_var.get()
 
     toString: ->
         # Reactive

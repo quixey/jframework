@@ -21,7 +21,6 @@ class J.Dict
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
         @_keysDep = new Deps.Dependency()
 
-        @active = true
         @readOnly = false
 
         @setOrAdd fields unless _.isEmpty fields
@@ -32,8 +31,6 @@ class J.Dict
 
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
-
-        @_stopField key
 
         delete @[key]
         delete @_fields[key]
@@ -79,9 +76,6 @@ class J.Dict
         @_initField key, undefined for key in keysDiff.added
         keysDiff
 
-    _stopField: (key) ->
-        @constructor._deepStop Tracker.nonreactive => @_fields[key].get()
-
     clear: ->
         @_clear()
 
@@ -97,9 +91,6 @@ class J.Dict
 
     forceGet: (key) ->
         # Reactive
-        unless @active
-            throw new Meteor.Error "#{@constructor.name} is stopped"
-
         if @hasKey key
             @_fields[key].get()
         else
@@ -107,9 +98,6 @@ class J.Dict
 
     get: (key, defaultValue = undefined) ->
         # Reactive
-        unless @active
-            throw new Meteor.Error "#{@constructor.name} is stopped"
-
         # The @hasKey call is necessary to reactively invalidate
         # the computation if and when this field gets added/deleted.
         # It's not at all redundant with @_fields[key].get(), which
@@ -150,8 +138,6 @@ class J.Dict
     set: (fields) ->
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
-        unless @active
-            throw new Meteor.Error "#{@constructor.name} is stopped"
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} is read-only"
 
@@ -177,14 +163,7 @@ class J.Dict
 
     size: ->
         # Reactive
-        # TODO: Can make this its own finer-grained sizeDep
         @getKeys().length
-
-    stop: ->
-        if @active
-            @_stopField key for key of @_fields
-            @active = false
-        null
 
     toObj: ->
         fields = @getFields()
@@ -211,14 +190,6 @@ class J.Dict
             @_deepSetReadOnly(v, readOnly) for v in x
         else if J.util.isPlainObject x
             @_deepSetReadOnly(v, readOnly) for k, v of x
-
-    @_deepStop = (x) ->
-        if x instanceof J.Dict or x instanceof J.List or x instanceof J.AutoVar
-            x.stop()
-        else if _.isArray x
-            @_deepStop(v) for v in x
-        else if J.util.isPlainObject x
-            @_deepStop(v) for k, v of x
 
     @decodeKey: (encodedKey) ->
         ###

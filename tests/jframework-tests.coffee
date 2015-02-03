@@ -385,10 +385,26 @@ Tinytest.add "AutoList - onChange", (test) ->
     ]
 
 
-
-
-
-
+Tinytest.add "List - reverse", (test) ->
+    lst = J.List [0, 1, 2, 3]
+    reversed = lst.getReversed()
+    test.equal lst.toArr(), [0, 1, 2, 3]
+    test.equal reversed.toArr(), [3, 2, 1, 0]
+    lst.set 2, 22
+    test.equal reversed.toArr(), [3, 2, 1, 0]
+    test.equal lst.toArr(), [0, 1, 22, 3]
+    reversed = null
+    c = Tracker.autorun (c) ->
+        reversed = lst.getReversed()
+    test.equal reversed.toArr(), [3, 22, 1, 0]
+    lst.set 2, 222
+    test.equal reversed.toArr(), [3, 222, 1, 0]
+    test.isFalse c.invalidated
+    lst.set 2, 2
+    c.stop()
+    test.throws -> reversed.get 2
+    test.throws -> reversed.toArr()
+    test.equal lst.toArr(), [0, 1, 2, 3]
 
 
 

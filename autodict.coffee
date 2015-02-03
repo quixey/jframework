@@ -22,10 +22,17 @@ class J.AutoDict extends J.Dict
 
         @_keysComp = null
         @keysFunc = null
+
+        @active = true
+
         @replaceKeysFunc keysFunc
 
+    _delete: (key) ->
+        @_fields[key].stop()
+        super
+
     _initField: (key) ->
-        @_fields[key] = new J.AutoVar(
+        @_fields[key] = Tracker.nonreactive => J.AutoVar(
             => @valueFunc.call null, key
             (
                 if _.isFunction @onChange then (oldValue, newValue) =>
@@ -37,14 +44,21 @@ class J.AutoDict extends J.Dict
         )
         super
 
-    _stopField: (key) ->
-        @_fields[key].stop()
-
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
 
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
+
+    forceGet: ->
+        unless @active
+            throw new Meteor.Error "AutoDict is stopped"
+        super
+
+    get: ->
+        unless @active
+            throw new Meteor.Error "AutoDict is stopped"
+        super
 
     replaceKeys: ->
         throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
@@ -80,7 +94,8 @@ class J.AutoDict extends J.Dict
     stop: ->
         if @active
             @_keysComp.stop()
-        super
+            @_fields[key].stop() for key in @_fields
+            @active = false
 
     toString: ->
         # Reactive

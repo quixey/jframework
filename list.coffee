@@ -12,7 +12,6 @@ class J.List
         for x, i in arr
             fields[i] = x
 
-        @active = true
         @readOnly = false
 
         @_dict = J.Dict fields
@@ -53,12 +52,10 @@ class J.List
 
     getReversed: ->
         # Reactive
-        # Fixme: Use a LazyList for the fine-granularity solution
-        J.List @toArr().reverse()
+        @map (value, i) => @get @size() - 1 - i
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
         # Reactive
-        # Fixme: Use a LazyList for the fine-granularity solution
         J.List J.util.sortByKey @getValues(), keySpec
 
     getValues: ->
@@ -74,7 +71,7 @@ class J.List
         if Tracker.active
             J.AutoList(
                 => @size()
-                (i) => mapFunc @get i
+                (i) => mapFunc @get(i), i
             )
         else
             J.List @getValues().map mapFunc
@@ -110,11 +107,6 @@ class J.List
         sortedArr = Tracker.nonreactive => @getSorted(keySpec).toArr()
         @set i, sortedArr[i] for i in [0...sortedArr.length]
         null
-
-    stop: ->
-        if @active
-            @active = false
-            @_dict.stop()
 
     size: ->
         # Reactive
