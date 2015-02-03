@@ -255,23 +255,20 @@ J.util =
         J.util.sortByKey arr, keySpec
         arr.reverse()
 
-    toString: (obj) ->
-        getJsonable = (x) ->
-            if J.util.isPlainObject x
-                jsonable = {}
-                for key, value of x
-                    if value is undefined
-                        jsonable[key] = '<undefined>'
-                    else
-                        jsonable[key] = value
-                jsonable
-            else if _.isArray x
-                (getJsonable(y) for y in x)
-            else
-                x
-
-        JSON.stringify getJsonable obj
-
+    stringify: (obj) ->
+        if obj is undefined
+            'undefined'
+        else if (
+            _.isString(obj) or _.isNumber(obj) or _.isBoolean(obj) or
+            obj is null
+        )
+            JSON.stringify obj
+        else if _.isArray(obj)
+            "[#{(J.util.stringify x for x in obj).join(", ")}]"
+        else if J.util.isPlainObject(obj)
+            "{#{("#{J.util.stringify k}:#{J.util.stringify v}" for k, v of obj).join ', '}}"
+        else
+            obj.toString()
 
 
 

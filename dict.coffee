@@ -1,5 +1,10 @@
 class J.Dict
-    constructor: (fieldsOrKeys, @equalsFunc = J.util.equals) ->
+    constructor: (fieldsOrKeys, equalsFunc = J.util.equals) ->
+        unless @ instanceof J.Dict
+            return new J.Dict fieldsOrKeys, equalsFunc
+
+        @equalsFunc = equalsFunc
+
         if fieldsOrKeys?
             if _.isArray fieldsOrKeys
                 fields = {}
@@ -26,7 +31,7 @@ class J.Dict
         null
 
     _delete: (key) ->
-        J.assert key of @_fields, "Missing key #{J.util.toString key}"
+        J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
         @_stopField key
 
@@ -38,10 +43,20 @@ class J.Dict
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
 
+    _forceSet: (fields) ->
+        for key, value of fields
+            if key not of @_fields
+                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+            @_fields[key].set @constructor._deepReactify value
+        null
+
     _initField: (key, value) ->
         # This question mark is because a child class may have
         # already initted this.
-        @_fields[key] ?= new ReactiveVar value, @equalsFunc
+        @_fields[key] ?= new ReactiveVar(
+            @constructor._deepReactify value
+            @equalsFunc
+        )
 
         # This question mark is to avoid overshadowing reserved
         # members like "set".
@@ -70,16 +85,14 @@ class J.Dict
     clear: ->
         @_clear()
 
+    clone: ->
+        # Nonreactive because a clone is its own
+        # new piece of application state.
+        @constructor Tracker.nonreactive => @getFields()
+
     delete: (key) ->
         if key of @_fields
             @_delete key
-        null
-
-    _forceSet: (fields) ->
-        for key, value of fields
-            if key not of @_fields
-                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set @constructor._deepReactify value
         null
 
     forceGet: (key) ->
@@ -131,6 +144,8 @@ class J.Dict
         @_replaceKeys newKeys
 
     set: (fields) ->
+        unless J.util.isPlainObject fields
+            throw new Meteor.Error "Invalid setter: #{fields}"
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
         if @readOnly
@@ -139,6 +154,8 @@ class J.Dict
         @_forceSet fields
 
     setOrAdd: (fields) ->
+        unless J.util.isPlainObject fields
+            throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} instance is read-only"
 
@@ -179,7 +196,7 @@ class J.Dict
 
     toString: ->
         # Reactive
-        J.util.toString @toObj()
+        "Dict#{J.util.stringify @getFields()}"
 
 
     @_deepSetReadOnly = (x, readOnly = true) ->
@@ -197,6 +214,50 @@ class J.Dict
             @_deepStop(v) for v in x
         else if J.util.isPlainObject x
             @_deepStop(v) for k, v of x
+
+    @decodeKey: (encodedKey) ->
+        ###
+            encodedKey:
+                A string that was outputted by @encodeKey
+
+            Returns:
+                An object which is equal to (according to J.util.equals)
+                the original key.
+
+            NOTE:
+                It's unclear if it's ever good practice to call this
+                function in production code. It just seems like a useful
+                console thing.
+        ###
+
+        unless _.isString(encodedKey) and encodedKey.indexOf('<<KEY>>') is 0
+            throw new Meteor.Error "Not an encoded key."
+
+        preparedX = EJSON.parse encodedKey.substring '<<KEY>>'.length
+
+        decodeModelInstances = (y) ->
+            if J.util.isPlainObject(y) and _.size(y) is 1 and y.$attachedModelInstance?
+                instanceSpec = y.$attachedModelInstance
+                instance = J.models[instanceSpec.modelName].findOne instanceSpec.id
+
+                # It's pretty awkward if the original instance dies
+                # and then a new instance with that id takes its
+                # place between encoding and decoding, but whatever.
+                # Decoding a dict key seems like just something to do
+                # in the console anyway.
+                # This is one reason we probably shouldn't call this
+                # function in production code.
+                unless instance?
+                    console.warn "Model instance died after being encoded."
+
+                instance
+            else if _.isArray y
+                decodeModelInstances z for z in y
+            else
+                y
+
+        decodeModelInstances preparedX
+
 
     @diff: (arrA, arrB) ->
         setA = J.util.makeDictSet arrA
@@ -218,11 +279,40 @@ class J.Dict
 
     @_deepReactify: (x) ->
         if _.isArray x
-            new J.List (@_deepReactify v for v in x)
+            J.List (@_deepReactify v for v in x)
         else if J.util.isPlainObject x
             fields = {}
             for key, value of x
                 fields[key] = @_deepReactify value
-            new J.Dict fields
+            J.Dict fields
         else
             x
+
+    @encodeKey: (x) ->
+        ###
+            Returns:
+                A string which may be used as a dict key
+                and later decoded back to the original
+                input using @decodeKey
+        ###
+
+        prepare = (y) ->
+            if _.isArray y
+                prepare z for z in y
+            else if y instanceof J.Model
+                if y.attached and y.alive
+                    $attachedModelInstance:
+                        modelName: y.modelClass.name
+                        _id: y._id
+                else
+                    throw new Meteor.Error "Only attached and alive
+                        model instances are valid Dict keys"
+            else if (
+                _.isString(y) or _.isNumber(y) or _.isBoolean(y) or
+                y is null
+            )
+                y
+            else
+                throw new Meteor.Error "Can't encode key containing: #{y}"
+
+        "<<KEY>>#{EJSON.stringify prepare x}"

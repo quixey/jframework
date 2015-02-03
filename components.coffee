@@ -82,7 +82,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
         if reactiveSpec.valForKey? then reactSpec[reactiveName] =
             do (reactiveName, reactiveSpec) -> ->
-                @reactives[reactiveName] ?= new J.AutoDict(
+                @reactives[reactiveName] ?= J.AutoDict(
                     reactiveSpec.keys.bind @
                     reactiveSpec.valForKey.bind @
                     reactiveSpec.onChange ? null

@@ -1,13 +1,39 @@
 class J.AutoVar
-    constructor: (@valueFunc, @onChange = null, @equalsFunc = J.util.equals) ->
-        unless _.isFunction(@valueFunc)
+    constructor: (valueFunc, onChange = null, equalsFunc = J.util.equals) ->
+        ###
+            AutoVars default to being "lazy", i.e. not calculated
+            until .get().
+
+            onChange:
+                A function to call with (oldValue, newValue) when
+                the value changes.
+                May also pass onChange=true or null.
+                If onChange is either a function or true, the
+                AutoVar becomes non-lazy.
+        ###
+
+        unless @ instanceof J.AutoVar
+            return new J.AutoVar valueFunc, onChange, equalsFunc
+
+        unless _.isFunction(valueFunc)
             throw new Meteor.Error "AutoVar must be constructed with valueFunc"
+
+        unless onChange is null or _.isFunction(onChange) or onChange is true
+            throw new Meteor.Error "Invalid onChange argument: #{onChange}"
+
+        @valueFunc = valueFunc
+        @onChange = onChange
+        @equalsFunc = equalsFunc
 
         @_var = new ReactiveVar undefined, @equalsFunc
 
         @active = true
-        @_valuecomp = null
-        @_setupValueComp()
+        @_valueComp = null
+
+        if @onChange? then @_setupValueComp()
+
+    _worthRecomputing: ->
+        @_var.dep.hasDependents() or @onChange?
 
     _recompute: ->
         oldValue = Tracker.nonreactive => @_var.get()
@@ -17,18 +43,22 @@ class J.AutoVar
 
         @_var.set newValue
         unless @equalsFunc oldValue, newValue
-            @onChange?.call null, oldValue, newValue
+            if _.isFunction(@onChange) then @onChange.call null, oldValue, newValue
 
     _setupValueComp: ->
         @_valueComp?.stop()
-        @_valueComp = Tracker.nonreactive => Tracker.autorun (c) =>
+        @_valueComp = Tracker.nonreactive => Tracker.autorun (valueComp) =>
             @_recompute()
+
+            valueComp.onInvalidate =>
+                unless @_worthRecomputing()
+                    @_valueComp.stop()
 
     get: ->
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
 
-        if @_valueComp.invalidated
+        if not @_valueComp? or @_valueComp.invalidated
             @_setupValueComp()
 
         @_var.get()
@@ -44,3 +74,7 @@ class J.AutoVar
             @_valueComp.stop()
             @active = false
             J.Dict._deepStop Tracker.nonreactive => @_var.get()
+
+    toString: ->
+        # Reactive
+        "AutoVar(#{J.util.stringify @get()})"

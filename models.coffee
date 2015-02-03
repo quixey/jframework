@@ -31,6 +31,8 @@ class J.Model
 
 
     clone: ->
+        # Nonreactive because the clone's fields are
+        # their own new piece of application state.
         doc = Tracker.nonreactive => @toDoc false
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
@@ -124,7 +126,7 @@ class J.Model
 
         if @attached
             throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
-                to collection #{J.util.toString @collection._name}"
+                to collection #{J.util.stringify @collection._name}"
 
         @_fields.set fields
         null
@@ -250,7 +252,7 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
         delete nonIdInitFields._id
         nonIdFieldSpecs = _.clone fieldSpecs
         delete nonIdFieldSpecs._id
-        @_fields = J.Dict.fromDeepObj nonIdInitFields
+        @_fields = J.Dict nonIdInitFields
         @_fields.replaceKeys _.keys nonIdFieldSpecs
 
         if @_id? and @modelClass.fieldSpecs._id is J.PropTypes.key
@@ -354,15 +356,15 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                     instanceById[instance._id] = instance
                 instanceById
 
-            fetchList: (docIds, includeHoles = false) ->
+            fetchIds: (docIds, includeHoles = false) ->
                 instanceDict = @fetchDict docIds
-                instanceList = []
+                instanceArr = []
                 for docId in docIds
                     if instanceDict[docId]?
-                        instanceList.push instanceDict[docId]
+                        instanceArr.push instanceDict[docId]
                     else if includeHoles
-                        instanceList.push null
-                instanceList
+                        instanceArr.push null
+                instanceArr
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection

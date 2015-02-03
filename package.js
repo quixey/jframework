@@ -10,6 +10,7 @@ Npm.depends({
 Package.onUse(function(api) {
     api.use("underscore");
     api.use("coffeescript");
+    api.use("tracker");
     api.use("reactive-var");
     api.use("quixey:react");
 
@@ -17,11 +18,11 @@ Package.onUse(function(api) {
     api.imply("quixey:react");
 
     // Sets up window.ReactRouter
-    api.add_files(
+    api.addFiles(
         '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
     );
 
-    api.add_files([
+    api.addFiles([
         "lib/date.js",
         "lib/URI.js",
         "j.coffee",
@@ -38,4 +39,14 @@ Package.onUse(function(api) {
 
     api.export("J");
     api.export("$$");
+});
+
+Package.onTest(function(api) {
+    api.use(["tinytest", "coffeescript", "tracker", "jframework"]);
+    api.imply("tracker");
+    api.imply("reactive-var");
+    api.imply("tinytest");
+    api.imply("jframework");
+    api.addFiles("tests/jframework-tests.coffee");
+    api.addFiles("tests/jframework-client-tests.coffee", "client");
 });

@@ -1,9 +1,24 @@
 class J.AutoDict extends J.Dict
-    constructor: (keysFunc, @valueFunc, @onChange = null, @equalsFunc = J.util.equals) ->
-        unless _.isFunction(keysFunc) and _.isFunction(@valueFunc)
+    constructor: (keysFunc, valueFunc, onChange = null, equalsFunc = J.util.equals) ->
+        unless @ instanceof J.AutoDict
+            return new J.AutoDict keysFunc, valueFunc, onChange, equalsFunc
+
+        unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
-        super {}, @equalsFunc
+        super {}, equalsFunc
+
+        @valueFunc = valueFunc
+
+        ###
+            onChange:
+                A function to call with (oldValue, newValue) when
+                the value changes.
+                May also pass onChange=true or null.
+                If onChange is either a function or true, the
+                AutoDict becomes non-lazy.
+        ###
+        @onChange = onChange
 
         @_keysComp = null
         @keysFunc = null
@@ -12,7 +27,12 @@ class J.AutoDict extends J.Dict
     _initField: (key) ->
         @_fields[key] = new J.AutoVar(
             => @valueFunc.call null, key
-            (oldValue, newValue) => @onChange?.call null, key, oldValue, newValue
+            (
+                if _.isFunction @onChange then (oldValue, newValue) =>
+                    @onChange?.call null, key, oldValue, newValue
+                else
+                    @onChange
+            )
             @equalsFunc
         )
         super
@@ -22,6 +42,9 @@ class J.AutoDict extends J.Dict
 
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
+
+    clone: ->
+        throw new Meteor.Error "There is no AutoDict.clone"
 
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
@@ -61,3 +84,7 @@ class J.AutoDict extends J.Dict
         if @active
             @_keysComp.stop()
         super
+
+    toString: ->
+        # Reactive
+        "AutoDict#{J.util.stringify @toObj()}"
