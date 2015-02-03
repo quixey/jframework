@@ -265,7 +265,9 @@ J._defineComponent = (componentName, componentSpec) ->
         for reactiveName of @reactives
             if reactiveName of @_reactiveComps
                 # It's a ReactiveVar
-                J.Dict._deepStop Tracker.nonreactive => @reactives[reactiveName].get()
+                val = Tracker.nonreactive => @reactives[reactiveName].get()
+                if val instanceof J.AutoDict or val instanceof J.AutoList or val instanceof J.AutoVar
+                    val.stop()
                 @_reactiveComps[reactiveName].stop()
             else
                 # It's an AutoDict
