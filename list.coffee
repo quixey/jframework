@@ -43,12 +43,35 @@ class J.List
         return false unless x instanceof @constructor
         J.util.deepEquals @toArr(), x.toArr()
 
+    filter: (f = _.identity) ->
+        # Reactive
+        J.List _.filter @getValues(), f
+
+    forEach: (f) ->
+        # Reactive
+        # Like map but returns an array
+        f value, i for value, i in @getValues()
+
     get: (index) ->
         # Reactive
         if _.isNumber(index) and @_dict.hasKey "#{index}"
             @_dict.get "#{index}"
         else
             throw new Meteor.Error "List index out of range"
+
+    getConcat: (lst) ->
+        # Reactive
+        if Tracker.active
+            J.AutoList(
+                => @size() + lst.size()
+                (i) =>
+                    if i < @size()
+                        @get i
+                    else
+                        lst.get i - @size()
+            )
+        else
+            J.List @getValues().concat lst.getValues()
 
     getReversed: ->
         # Reactive
@@ -128,6 +151,13 @@ class J.List
 
     toString: ->
         "List#{J.util.stringify @getValues()}"
+
+    tryGet: (index) ->
+        # Reactive
+        if @_dict.hasKey "#{index}"
+            @get index
+        else
+            undefined
 
     @fromDeepArr: (arr) ->
         unless _.isArray arr
