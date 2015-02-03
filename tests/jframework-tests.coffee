@@ -211,7 +211,7 @@ Tinytest.add "AutoDict - Basics", (test) ->
     test.equal d.get('three'), "three is a number"
 
 
-Tinytest.add "Autodict - reactivity", (test) ->
+Tinytest.add "AutoDict - reactivity", (test) ->
     coef = new ReactiveVar 2
     size = new ReactiveVar 3
     d = J.AutoDict(
@@ -304,11 +304,12 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
         ->
             sizeFuncRunCount += 1
             size.get()
-        (key) ->
+        (i) ->
             valueFuncRunCount += 1
-            key * coef.get()
+            i * coef.get()
     )
     test.equal sizeFuncRunCount, 1
+    test.equal valueFuncRunCount, 0
     test.equal al.toArr(), [0, 10, 20]
     test.throws -> al.resize 5
     test.throws -> al.set 2, 2
@@ -328,10 +329,60 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
     test.equal valueFuncRunCount, 7
 
 
-
-
-
-
+Tinytest.add "AutoList - onChange", (test) ->
+    coef = new ReactiveVar 10
+    size = new ReactiveVar 3
+    sizeFuncRunCount = 0
+    valueFuncRunCount = 0
+    onChangeHistory = []
+    al = J.AutoList(
+        ->
+            sizeFuncRunCount += 1
+            size.get()
+        (i) ->
+            valueFuncRunCount += 1
+            i * coef.get()
+        (i, oldValue, newValue) ->
+            onChangeHistory.push [i, oldValue, newValue]
+    )
+    test.equal sizeFuncRunCount, 1
+    test.equal valueFuncRunCount, 3
+    test.equal onChangeHistory, [
+        [0, undefined, 0]
+        [1, undefined, 10]
+        [2, undefined, 20]
+    ]
+    onChangeHistory = []
+    test.equal al.toArr(), [0, 10, 20]
+    test.equal valueFuncRunCount, 3
+    size.set 5
+    test.equal onChangeHistory, []
+    test.equal al.size(), 3
+    Tracker.flush()
+    test.equal onChangeHistory, [
+        [3, undefined, 30]
+        [4, undefined, 40]
+    ]
+    test.equal al.size(), 5
+    onChangeHistory = []
+    size.set 4
+    test.equal al.size(), 5
+    test.equal onChangeHistory, []
+    Tracker.flush()
+    test.equal onChangeHistory, []
+    test.equal al.size(), 4
+    coef.set 100
+    test.equal onChangeHistory, []
+    test.equal al.get(2), 200
+    test.equal onChangeHistory, [
+        [2, 20, 200]
+    ]
+    onChangeHistory = []
+    Tracker.flush()
+    test.equal onChangeHistory, [
+        [1, 10, 100]
+        [3, 30, 300]
+    ]
 
 
 

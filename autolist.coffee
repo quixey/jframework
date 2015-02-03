@@ -16,7 +16,12 @@ class J.AutoList extends J.List
         @_dict = J.AutoDict(
             => "#{i}" for i in [0...@sizeFunc()]
             (key) => @valueFunc parseInt(key)
-            @onChange
+            (
+                if _.isFunction @onChange then (key, oldValue, newValue) =>
+                    @onChange?.call null, parseInt(key), oldValue, newValue
+                else
+                    @onChange
+            )
             @equalsFunc
         )
 
