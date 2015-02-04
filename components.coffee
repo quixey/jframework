@@ -114,13 +114,21 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
+        depth = 0
         for reactiveName, reactiveSpec of componentSpec.reactives ? {}
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 =>
-                    # console.log "#{@toString()}.#{reactiveName}()"
-                    reactiveSpec.val.call @
+                    dots = "....................".substring(0, depth * 4)
+                    spaces = "                    ".substring(0, depth * 4)
+                    # console.log "#{dots} #{@toString()}.#{reactiveName}()"
+                    depth += 1
+                    ret = reactiveSpec.val.call @
+                    depth -= 1
+                    # console.log "#{spaces}    =", ret
+                    ret
                 (
                     if reactiveSpec.onChange? then =>
+                        J.assert not Tracker.active
                         # console.log "#{@toString()}.#{reactiveName}.onChange", arguments
                         reactiveSpec.onChange.apply @, arguments
                     else null
