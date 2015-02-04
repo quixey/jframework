@@ -9,128 +9,202 @@
 ###
 
 
-
-
-J.Model = ->
-
-_.extend J.Model,
-    fromJSONValue: (jsonValue) ->
+class J.Model
+    @fromJSONValue: (jsonValue) ->
         ###
             jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
             It's just the someValue part.
         ###
 
         unless J.util.isPlainObject jsonValue
-            throw new Meteor.Error 'Override J.Model.fromJSONValue to decode non-object values'
+            throw new Meteor.Error 'Must override J.Model.fromJSONValue to decode non-object values'
 
         for fieldName, value of jsonValue
-            throw new Meteor.Error "Bad jsonValue for #{@modelName}: #{jsonValue}" if fieldName[0] is '$'
+            if fieldName[0] is '$'
+                throw new Meteor.Error "Bad jsonValue for #{@name}: #{jsonValue}"
 
-        m = new @ EJSON.fromJSONValue jsonValue
+        @fromDoc jsonValue
 
 
-_.extend J.Model.prototype,
+    @fromDoc: (doc) ->
+        new @ EJSON.fromJSONValue doc
+
+
     clone: ->
-        doc = @toDoc()
+        # Nonreactive because the clone's fields are
+        # their own new piece of application state.
+        doc = Tracker.nonreactive => @toDoc false
+        instance = @modelClass.fromDoc doc
+        instance.collection = @collection
 
-        # FIXME: This is a temporary hack because the existence
-        # of an _id is currently the only thing that tips off the
-        # application layer whether an entity is new/existing,
-        # but at the same time entities whose fieldSpec says
-        # _id: J.PropTypes.key have their ids auto-generated
-        # from their other fields.
-        # We need a more serious framework for saved/unsaved
-        # and bound/unbound model instances ASAP.
-        if doc._id? and not @_id? then delete doc._id
+        # Note that clones are always detached, alive, and not read-only
+        instance
 
-        @modelClass.fromJSONValue doc
 
-    fields: (fields) ->
-        if fields?
-            for fieldName, value of fields
-                if fieldName is '_id'
-                    throw new Meteor.Error "Can't set #{@modelName}._id as a field,
-                        but you can do it at constructor-time."
-                else if fieldName of @modelClass.fieldSpecs
-                    @_fields[fieldName] = value
-                else
-                    throw new Meteor.Error "Class #{@modelName} has no field named #{JSON.stringify fieldName}"
-            null
-        else
-            @_fields
+    get: (fieldName) ->
+        unless @alive
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
-    insert: (callback) ->
-        @modelClass.insert @, callback
+        @_fields.forceGet fieldName
 
-    remove: (callback) ->
-        unless @_id?
-            throw new Meteor.Error "Can't remove #{@modelName} instance without an _id"
 
-        @modelClass.remove @_id, callback
+    insert: (collection = @collection, callback) ->
+        if _.isFunction(collection) and arguments.length is 1
+            # Can call insert(callback) to use @collection
+            # as the collection.
+            callback = collection
+            collection = @collection
 
-    save: (callback) ->
-        if @_id?
-            doc = @toDoc()
+        unless collection instanceof Mongo.Collection
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
+
+        if @attached and @collection is collection
+            throw new Meteor.Error "Can't insert #{@modelClass.name} instance into its own attached collection"
+
+        unless @alive
+            throw new Meteor.Error "Can't insert dead #{@modelClass.name} instance"
+
+        doc = Tracker.nonreactive => @toDoc true
+        J.assert J.util.isPlainObject doc
+        if not doc._id?
+            # The Mongo driver will give us an ID but we
+            # can't pass it a null ID.
             delete doc._id
 
-            @modelClass.collection.upsert @_id,
-                $set: doc,
-                callback
-            null
-        else
-            @insert callback
+        # Returns @_id
+        @_id = collection.insert doc, callback
 
-    toDoc: ->
+
+    remove: (callback) ->
+        unless @alive
+            throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
+
+        @collection.remove @_id, callback
+
+
+    save: (collection = @collection, callback) ->
+        if _.isFunction(collection) and arguments.length is 1
+            # Can call save(callback) to use @collection
+            # as the collection.
+            callback = collection
+            collection = @collection
+
+        unless collection instanceof Mongo.Collection
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
+
+        if @attached and @collection is collection
+            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
+
+        unless @alive
+            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
+
+        doc = Tracker.nonreactive => @toDoc true
+        J.assert J.util.isPlainObject doc
+
+        if doc._id?
+            @_id = doc._id
+            fields = _.clone doc
+            delete fields._id
+            collection.upsert @_id,
+                $set: fields,
+                callback
+        else
+            # The Mongo driver will give us an ID but we
+            # can't pass it a null ID
+            delete doc._id
+            @_id = collection.insert doc, callback
+
+        @_id
+
+
+    set: (fields) ->
+        unless J.util.isPlainObject fields
+            throw new Meteor.Error "Invalid fields setter: #{fields}"
+
+        unless @alive
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+
+        if @attached
+            throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
+                to collection #{J.util.stringify @collection._name}"
+
+        @_fields.set fields
+        null
+
+
+    toDoc: (denormalize = false) ->
+        # Reactive.
         # Returns an EJSON object with all the
         # user-defined types serialized into JSON, but
         # not the EJSON primitives (Date and Binary).
         # (A "compound EJSON object" can contain user-defined
         # types in the form of J.Model instances.)
 
-        toPrimitiveEjsonObj = (value) ->
-            if value instanceof J.Model
-                value.toDoc()
-            else if _.isArray value
+        unless @alive
+            throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
+
+        toPrimitiveEjsonObj = (value) =>
+            if _.isArray(value)
                 (toPrimitiveEjsonObj v for v in value)
-            else if J.util.isPlainObject value
+            else if J.util.isPlainObject(value)
                 ret = {}
                 for k, v of value
                     ret[k] = toPrimitiveEjsonObj v
                 ret
-            else
+            else if value instanceof J.Model
+                value.toDoc denormalize
+            else if (
+                _.isNumber(value) or _.isBoolean(value) or _.isString(value) or
+                value instanceof Date or value instanceof RegExp or
+                value is null or value is undefined
+            )
                 value
+            else
+                throw new Meteor.Error "Unsupported value type: #{value}"
 
-        doc = toPrimitiveEjsonObj @_fields
+        doc = toPrimitiveEjsonObj @_fields.toObj()
 
-        if @_id?
+        if denormalize and @modelClass.fieldSpecs._id is J.PropTypes.key
+            key = @key()
+            J.assert not @_id? or @_id is key
+            doc._id = key
+        else
             doc._id = @_id
-        else if @modelClass.fieldSpecs._id is J.PropTypes.key
-            doc._id = @key()
 
         doc
 
+
     toJSONValue: ->
         ###
-            Used by Meteor EJSON.
+            Used by Meteor EJSON, e.g. EJSON.stringify.
             Note that the name is misleading because
             EJSON's special primitives (Date and Binary)
             aren't returned as JSON.
         ###
-        @toDoc()
+
+        @toDoc false
 
 
     toString: ->
         EJSON.stringify @
 
+
     typeName: ->
         ### Used by Meteor EJSON ###
-        @modelName
+        @modelClass.name
+
 
     update: (args...) ->
-        unless @_id?
-            throw new Meteor.Error "Can't update #{@modelName} instance without an _id"
+        unless @alive
+            throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
 
-        @modelClass.collection.update.bind(@modelClass.collection, @_id).apply null, args
+        unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
+            # Calling something like .update(foo: bar) would replace the entire
+            # Mongo doc, which is basically always a mistake. We almost always
+            # want to call something like .update($set: foo: bar) instead.
+            throw new Meteor.Error "Must use a $ operation for #{@modelClass.name}.update"
+
+        @collection.update.bind(@collection, @_id).apply null, args
 
 
 
@@ -152,13 +226,34 @@ J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, mem
 
 
 J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
-    modelConstructor = (initFields = {}) ->
+    modelConstructor = (initFields = {}, @collection = @modelClass.collection) ->
         @_id = initFields._id ? null
-        @_fields = {}
 
-        fields = _.clone initFields
-        delete fields._id
-        @fields fields
+        # @collection is the collection that was queried
+        # to obtain this instance, or the original attached
+        # clone-ancestor of this instance, or just the
+        # default place we're going to be inserting/saving to.
+
+        # If true, this instance reactively receives
+        # changes from its collection and is immutable
+        # to the application layer.
+        # Note that an attached instance always has an _id.
+        @attached = false
+
+        # Attached instances die when the collection
+        # they came from no longer contains their ID.
+        # They never come back to life, but a new
+        # attached instance with the same ID may
+        # eventually replace them in the collection.
+        # Detached instances are always alive.
+        @alive = true
+
+        nonIdInitFields = _.clone initFields
+        delete nonIdInitFields._id
+        nonIdFieldSpecs = _.clone fieldSpecs
+        delete nonIdFieldSpecs._id
+        @_fields = J.Dict nonIdInitFields
+        @_fields.replaceKeys _.keys nonIdFieldSpecs
 
         if @_id? and @modelClass.fieldSpecs._id is J.PropTypes.key
             unless @_id is @key()
@@ -183,7 +278,6 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
     modelClass.prototype = new J.Model()
     _.extend modelClass.prototype, members
-    modelClass.prototype.modelName = modelName
     modelClass.prototype.modelClass = modelClass
 
 
@@ -191,23 +285,62 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
     throw new Meteor.Error "#{modelName} fieldSpecs missing _id" unless '_id' of fieldSpecs
 
-    _.each fieldSpecs, (fieldSpec, fieldName) ->
-        return if fieldName is '_id'
+    for fieldName, fieldSpec of fieldSpecs
+        continue if fieldName is '_id'
 
-        modelClass.prototype[fieldName] = () ->
-            if arguments.length == 0
-                @_fields[fieldName]
+        modelClass.prototype[fieldName] ?= do (fieldName) -> (value) ->
+            if arguments.length is 0
+                # Getter
+                @get fieldName
             else
-                @_fields[fieldName] = arguments[0]
-                null
+                setter = {}
+                setter[fieldName] = value
+                @set setter
 
 
     # Wire up class methods for collection operations
 
     if collectionName?
-        collection = new Mongo.Collection collectionName,
-            transform: (doc) ->
-                modelClass.fromJSONValue doc
+        if Meteor.isClient
+            # The client has attached instances which power
+            # a lot of fancy granular reactivity.
+
+            collection = new Mongo.Collection collectionName,
+                transform: (doc) ->
+                    J.assert doc._id of collection._attachedInstances
+                    collection._attachedInstances[doc._id]
+
+            collection._attachedInstances = {} # _id: instance
+
+            collection.find().observeChanges
+                added: (id, fields) ->
+                    doc = _.clone fields
+                    doc._id = id
+                    instance = modelClass.fromDoc doc
+                    instance.collection = collection
+                    instance.attached = true
+                    instance._fields.setReadOnly true, true
+                    collection._attachedInstances[id] = instance
+
+                changed: (id, fields) ->
+                    instance = collection._attachedInstances[id]
+                    instance._fields._forceSet fields
+
+                removed: (id) ->
+                    instance = collection._attachedInstances[id]
+                    instance.alive = false
+                    delete collection._attachedInstances[id]
+
+        if Meteor.isServer
+            # The server uses exclusively detached instances and
+            # doesn't make use of much reactivity.
+
+            collection = new Mongo.Collection collectionName,
+                transform: (doc) ->
+                    instance = modelClass.fromDoc doc
+                    instance.collection = collection
+                    instance
+
 
         _.extend modelClass,
             collection: collection,
@@ -222,38 +355,23 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 for instance in instances
                     instanceById[instance._id] = instance
                 instanceById
-            fetchList: (docIds, includeHoles = false) ->
+
+            fetchIds: (docIds, includeHoles = false) ->
                 instanceDict = @fetchDict docIds
-                instanceList = []
+                instanceArr = []
                 for docId in docIds
                     if instanceDict[docId]?
-                        instanceList.push instanceDict[docId]
+                        instanceArr.push instanceDict[docId]
                     else if includeHoles
-                        instanceList.push null
-                instanceList
+                        instanceArr.push null
+                instanceArr
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
             insert: (instance, callback) ->
                 unless instance instanceof modelClass
                     throw new Meteor.Error "#{@name}.insert requires #{@name} instance."
-
-                doc = instance.toJSONValue()
-
-                if @fieldSpecs._id is J.PropTypes.key
-                    # If the fieldSpec contains this magic "key"
-                    # declaration, then propagate the field values
-                    # into the key at first-write time.
-
-                    if instance._id?
-                        throw new Meteor.Error "#{@name} can't have an _id (#{JSON.stringify instance._id}) at insert time"
-
-                    instance._id = doc._id
-
-                unless J.util.isPlainObject doc
-                    throw new Meteor.Error 'Bad argument to #{modelName}.insert: #{doc}'
-
-                instance._id = collection.insert doc, callback
+                instance.insert collection, callback
 
             update: collection.update.bind collection
             upsert: collection.upsert.bind collection

@@ -2,9 +2,9 @@ _.extend J,
     assert: (boolValue, errorMessage) ->
         unless boolValue
             if errorMessage
-                throw "Assertion failed: #{errorMessage}"
+                throw new Meteor.Error "Assertion failed: #{errorMessage}"
             else
-                throw "Assertion failed."
+                throw new Meteor.Error "Assertion failed."
 
 J.util =
     compare: (a, b) ->
@@ -56,24 +56,28 @@ J.util =
         J.util.flattenId(objOrId) in J.util.flattenIds objOrIdArr
 
     equals: (a, b) ->
-        return true if a is b
+        # Go one level deep into arrays because some reactive expressions
+        # seem to make good use of this.
 
-        if (
-            J.Model? and a instanceof J.Model and b instanceof J.Model and
-            a.modelClass is b.modelClass and
-            a._id? and b._id?
-        )
-            a._id is b._id
+        if a is b
+            true
+        else if _.isArray(a) and _.isArray(b) and a.length is b.length
+            _.all (a[i] is b[i] for i in [0...a.length])
+        else
+            false
+
+    deepEquals: (a, b) ->
+        if a is b
+            true
 
         else if _.isArray(a) and _.isArray(b)
-            a.length is b.length and _.all (J.util.equals a[i], b[i] for i in [0...a.length])
+            a.length is b.length and _.all (
+                J.util.deepEquals(a[i], b[i]) for i in [0...a.length]
+            )
 
-        else if J.util.isPlainObject(a) and J.util.isPlainObject(b)
+        else if J.util.isPlainObject(a) and J.util.isPlainObject(b) and
             J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
-                # J.util.equals(a[k], b[k]) for k of a
-                # Fixme: it's actually more efficient not to bother with
-                # a deep comparison, for now.
-                a[k] is b[k] for k of a
+                J.util.equals(a[k], b[k]) for k of a
             )
 
         else
@@ -125,7 +129,7 @@ J.util =
 
             if J.Model? and value instanceof J.Model
                 unless _.isFunction value[nextKey]
-                    throw "Invalid fieldSpec part #{value.modelName}.#{nextKey} (from #{fieldSpec})"
+                    throw new Meteor.Error "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
                 value = value[nextKey]()
             else
                 value = value[nextKey]
@@ -142,11 +146,20 @@ J.util =
         ###
 
         unless _.isString url
-            throw "URL must be a string: #{url}"
+            throw new Meteor.Error "URL must be a string: #{url}"
 
         uri = URI url
         uri.setQuery extraParams
         uri.href()
+
+    invalidateAtTime: (ms) ->
+        # TODO: ms can be a Date in the future too
+        dep = new Deps.Dependency()
+        dep.depend()
+        setTimeout(
+            => dep.changed()
+            ms
+        )
 
     isPlainObject: (obj) ->
         ### Based on $.isPlainObject ###
@@ -155,6 +168,7 @@ J.util =
         return false if obj is obj.window
         return false if obj.nodeType
         return false if obj.constructor and not ({}).hasOwnProperty.call(obj.constructor.prototype, 'isPrototypeOf')
+        return false if obj._isReactElement
         true
 
     makeDictSet: (arr) ->
@@ -221,7 +235,7 @@ J.util =
             else if _.isFunction keySpec
                 keySpec
             else
-                throw "Invalid keySpec: #{keySpec}"
+                throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
@@ -235,52 +249,66 @@ J.util =
         else if typeof x is 'object' and 'key' of x
             J.util.getField x, 'key'
         else
-            throw "No default sort-key semantics for: #{x}"
-
+            throw new Meteor.Error "No default sort-key semantics for: #{x}"
 
     sortByKeyReverse: (arr, keySpec = J.util.sortByKeyFunc) ->
         J.util.sortByKey arr, keySpec
         arr.reverse()
 
+    stringify: (obj) ->
+        if obj is undefined
+            'undefined'
+        else if (
+            _.isString(obj) or _.isNumber(obj) or _.isBoolean(obj) or
+            obj is null
+        )
+            JSON.stringify obj
+        else if _.isArray(obj)
+            "[#{(J.util.stringify x for x in obj).join(", ")}]"
+        else if J.util.isPlainObject(obj)
+            "{#{("#{J.util.stringify k}:#{J.util.stringify v}" for k, v of obj).join ', '}}"
+        else
+            obj.toString()
+
 
 
 J.utilTests =
     sorting: ->
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             [false, -2]
             [1, -5, 6]
         ) is -1
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             [1, 2, 3, 'test', 5]
             [1, 2.0, 3, 'TeSt', 5.0]
         ) is 0
-        throw 'fail' unless J.util.compare(
+        J.assert J.util.compare(
             {key: 6}
             5
         ) is 1
-        throw 'fail' unless J.util.equals(
+        J.assert J.util.deepEquals(
             ['G', 'f'].sort(J.util.compare)
             ['f', 'G']
         )
 
     matchesUrlPattern: ->
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time=",
             "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time="
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?q=best+restaurants&loc={mountain+view,ca|}'
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?q=best+restaurants&loc={mountain\+view,ca|}'
         )
-        throw 'fail' if J.util.matchesUrlPattern(
+        J.assert not J.util.matchesUrlPattern(
             'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
             'func://yelp.com/search?cflt=pizza&q=best+restaurants&loc={mountain+view,ca|}'
         )
-        throw 'fail' unless J.util.matchesUrlPattern(
+        J.assert J.util.matchesUrlPattern(
             'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements=',
             'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements={a||b}'
         )
