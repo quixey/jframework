@@ -68,50 +68,10 @@ J._defineComponent = (componentName, componentSpec) ->
         if reactiveName of reactSpec
             throw new Meteor.Error "Name conflict between #{componentName}.#{reactiveName} and
                 #{componentName}.reactives.#{reactiveName}"
-        unless _.isFunction(reactiveSpec.val) or (
-            # type is J.$instanceOf(J.AutoDict) and
-            _.isFunction(reactiveSpec.keys) and
-            _.isFunction(reactiveSpec.valForKey)
-        )
+        unless _.isFunction(reactiveSpec.val)
             throw new Meteor.Error "#{componentName}.reactives.#{reactiveName} must have a val function"
 
-        if reactiveSpec.valForKey? then reactSpec[reactiveName] =
-            do (reactiveName, reactiveSpec) -> ->
-                @reactives[reactiveName] ?= J.AutoDict(
-                    reactiveSpec.keys.bind @
-                    reactiveSpec.valForKey.bind @
-                    reactiveSpec.onChange ? null
-                    reactiveSpec.same ? J.util.equals
-                )
-
-        else reactSpec[reactiveName] = do (reactiveName, reactiveSpec) -> ->
-            equalsFunc = reactiveSpec.same ? J.util.equals
-
-            updateReactiveVar = =>
-                oldValue = Tracker.nonreactive => @reactives[reactiveName].get()
-                newValue = reactiveSpec.val.apply @
-                if newValue is undefined
-                    throw new Meteor.Error "Can't return undefined from #{@}.reactives.#{reactiveName}.val"
-
-                @reactives[reactiveName].set newValue
-
-                if reactiveSpec.onChange? and not equalsFunc oldValue, newValue
-                    reactiveSpec.onChange.call @, oldValue, newValue
-
-            if @_reactiveComps[reactiveName]?.invalidated
-                # Accessing an invalidated reactive before Meteor's flush has
-                # time to recompute it. We'll effectively move it to the front
-                # of the flush queue so it never returns an invalidated value.
-                @_reactiveComps[reactiveName].stop()
-                @_reactiveComps[reactiveName] = Tracker.nonreactive =>
-                    Tracker.autorun (c) => updateReactiveVar()
-            else
-                valuePeek = Tracker.nonreactive => @reactives[reactiveName].get()
-                if valuePeek is undefined
-                    J.assert reactiveName not of @_reactiveComps
-                    @_reactiveComps[reactiveName] = Tracker.nonreactive =>
-                        Tracker.autorun (c) => updateReactiveVar()
-
+        reactSpec[reactiveName] = do (reactiveName) -> ->
             @reactives[reactiveName].get()
 
 
@@ -153,14 +113,13 @@ J._defineComponent = (componentName, componentSpec) ->
                 @_props[propName].get()
 
         # Set up @reactives
-        @_reactiveComps = {} # nonDictReactiveName: computation
-        @reactives = {} # reactiveName: reactiveVar|J.AutoDict
+        @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of componentSpec.reactives ? {}
-            if reactiveSpec.val?
-                # AutoDicts get initialized later because they
-                # immediately want to run their keyFunc.
-                @reactives[reactiveName] = new ReactiveVar undefined,
-                    reactiveSpec.same ? J.util.equals
+            @reactives[reactiveName] = J.AutoVar(
+                reactiveSpec.val.bind @
+                reactiveSpec.onChange ? null
+                reactiveSpec.same ? J.util.equals
+            )
 
         # Set up @state
         initialState = {}
@@ -257,32 +216,13 @@ J._defineComponent = (componentName, componentSpec) ->
             @_renderComp.stop()
             @_renderComp = null
 
-        for reactiveName of @reactives
-            if reactiveName of @_reactiveComps
-                # It's a ReactiveVar
-                val = Tracker.nonreactive => @reactives[reactiveName].get()
-                if val instanceof J.AutoDict or val instanceof J.AutoList or val instanceof J.AutoVar
-                    val.stop()
-                @_reactiveComps[reactiveName].stop()
-            else
-                # It's an AutoDict
-                @reactives[reactiveName].stop()
-        @_reactiveComps = null
-        @reactives = null
+        for reactiveName, autoVar of @reactives
+            autoVar.stop()
 
         componentSpec.componentWillUnmount?.apply @
 
 
     reactSpec.render = ->
-        # Make sure we've run all the reactives' val-functions at least once.
-        # Even if the render function never uses a reactive, that reactive
-        # might need to monitor a value and do some side effect in its onChange.
-        for reactiveName, reactiveSpec of componentSpec.reactives
-            # We should be able to optimize this by only running
-            # reactives with onChange functions, since val functions
-            # aren't supposed to have side effects, but whatever.
-            @[reactiveName]()
-
         ###
             There are three times at which a component may be re-rendered:
 
@@ -322,20 +262,21 @@ J._defineComponent = (componentName, componentSpec) ->
             renderedComponent = componentSpec.render.apply @
 
         @_renderComp.onInvalidate (c) =>
-            unless c.stopped
-                @_renderComp.stop()
+            return if c.stopped
 
-                Tracker.afterFlush =>
-                    # The component may have unmounted
-                    return unless @isMounted()
+            @_renderComp.stop()
 
-                    # Between c's invalidation time and now, the component may
-                    # have been re-rendered at time (1) - see comment above - in
-                    # which case there would be a new @_renderComp
-                    return unless c is @_renderComp
+            Tracker.afterFlush =>
+                # The component may have unmounted
+                return unless @isMounted()
 
-                    @_renderComp = null
-                    @forceUpdate()
+                # Between c's invalidation time and now, the component may
+                # have been re-rendered at time (1) - see comment above - in
+                # which case there would be a new @_renderComp
+                return unless c is @_renderComp
+
+                @_renderComp = null
+                @forceUpdate()
 
         renderedComponent
 
