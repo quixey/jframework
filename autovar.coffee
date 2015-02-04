@@ -43,8 +43,11 @@ class J.AutoVar
             throw new Meteor.Error "AutoVar.valueFunc must not return undefined"
 
         @_var.set newValue
+
         unless @equalsFunc oldValue, newValue
-            if _.isFunction(@onChange) then @onChange.call null, oldValue, newValue
+            if _.isFunction(@onChange)
+                Tracker.afterFlush =>
+                    @onChange.call @, oldValue, newValue
 
     _setupValueComp: ->
         @_valueComp?.stop()

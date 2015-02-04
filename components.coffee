@@ -19,11 +19,6 @@ J.dc = J.defineComponent = (componentName, componentSpec) ->
         spec: componentSpec
 
 
-class ReactiveDef
-    constructor: (@params) ->
-
-J.Reactive = (params) -> new ReactiveDef params
-
 J._defineComponent = (componentName, componentSpec) ->
     for memberName in [
         'getDefaultProps'

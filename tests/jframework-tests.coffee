@@ -204,7 +204,7 @@ Tinytest.add "AutoDict - Basics", (test) ->
     test.equal d.get('two'), "two is a number"
     test.isUndefined d.get('four')
     size.set 4
-    test.equal d.size(), 3
+    test.equal d.size(), 4
     Tracker.flush()
     test.equal d.size(), 4
     test.equal d.getKeys(), ['zero', 'one', 'two', 'three']
@@ -343,45 +343,44 @@ Tinytest.add "AutoList - onChange", (test) ->
             valueFuncRunCount += 1
             i * coef.get()
         (i, oldValue, newValue) ->
-            onChangeHistory.push [i, oldValue, newValue]
+            onChangeHistory.push [i, oldValue, newValue, @size()]
     )
     test.equal sizeFuncRunCount, 1
     test.equal valueFuncRunCount, 3
+    test.equal onChangeHistory, []
+    Tracker.flush()
     test.equal onChangeHistory, [
-        [0, undefined, 0]
-        [1, undefined, 10]
-        [2, undefined, 20]
+        [0, undefined, 0, 3]
+        [1, undefined, 10, 3]
+        [2, undefined, 20, 3]
     ]
     onChangeHistory = []
     test.equal al.toArr(), [0, 10, 20]
     test.equal valueFuncRunCount, 3
     size.set 5
     test.equal onChangeHistory, []
-    test.equal al.size(), 3
+    test.equal al.size(), 5
+    test.equal onChangeHistory, []
     Tracker.flush()
     test.equal onChangeHistory, [
-        [3, undefined, 30]
-        [4, undefined, 40]
+        [3, undefined, 30, 5]
+        [4, undefined, 40, 5]
     ]
     test.equal al.size(), 5
     onChangeHistory = []
     size.set 4
-    test.equal al.size(), 5
-    test.equal onChangeHistory, []
-    Tracker.flush()
-    test.equal onChangeHistory, []
     test.equal al.size(), 4
-    coef.set 100
     test.equal onChangeHistory, []
+    Tracker.flush()
+    test.equal onChangeHistory, []
+    coef.set 100
     test.equal al.get(2), 200
-    test.equal onChangeHistory, [
-        [2, 20, 200]
-    ]
-    onChangeHistory = []
+    test.equal onChangeHistory, []
     Tracker.flush()
     test.equal onChangeHistory, [
-        [1, 10, 100]
-        [3, 30, 300]
+        [2, 20, 200, 4]
+        [1, 10, 100, 4]
+        [3, 30, 300, 4]
     ]
 
 
@@ -407,4 +406,22 @@ Tinytest.add "List - reverse", (test) ->
     test.equal lst.toArr(), [0, 1, 2, 3]
 
 
-
+Tinytest.add "List - getConcat", (test) ->
+    lst1 = J.List [3, 5, 6]
+    lst2 = J.List [7, 8]
+    concatted = lst1.getConcat lst2
+    test.equal concatted.get(2), 6
+    test.equal concatted.toArr(), [3, 5, 6, 7, 8]
+    test.throws -> concatted.get 6
+    lst1.push 'x'
+    test.equal concatted.toArr(), [3, 5, 6, 7, 8]
+    c = Tracker.autorun (c) ->
+        concatted = lst1.getConcat lst2
+    test.equal concatted.toArr(), [3, 5, 6, 'x', 7, 8]
+    lst1.push 'y'
+    test.equal concatted.toArr(), [3, 5, 6, 'x', 'y', 7, 8]
+    lst2.set 1, 'z'
+    test.equal concatted.toArr(), [3, 5, 6, 'x', 'y', 7, 'z']
+    test.equal concatted.get(0), 3
+    c.stop()
+    test.throws -> concatted.get 0

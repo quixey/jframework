@@ -36,13 +36,28 @@ class J.AutoDict extends J.Dict
             => @valueFunc.call null, key
             (
                 if _.isFunction @onChange then (oldValue, newValue) =>
-                    @onChange?.call null, key, oldValue, newValue
+                    @onChange?.call @, key, oldValue, newValue
                 else
                     @onChange
             )
             @equalsFunc
         )
         super
+
+    _setupKeysFunc: ->
+        @_keysComp?.stop()
+        @_keysComp = Tracker.nonreactive => Tracker.autorun (c) =>
+            newKeys = @keysFunc.apply null
+            if newKeys is null
+                @_clear()
+            else if _.isArray newKeys
+                unless _.all (_.isString(key) for key in newKeys)
+                    throw new Meteor.Error "AutoDict keys must all be type string."
+                if _.size(J.util.makeDictSet newKeys) < newKeys.length
+                    throw new Meteor.Error "AutoDict keys must be unique."
+                @_replaceKeys newKeys
+            else
+                throw new Meteor.Error "AutoDict.keysFunc must return an array or null. Got #{newKeys}"
 
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
@@ -60,24 +75,22 @@ class J.AutoDict extends J.Dict
             throw new Meteor.Error "AutoDict is stopped"
         super
 
+    getKeys: ->
+        if @_keysComp.invalidated
+            @_setupKeysFunc()
+        super
+
+    hasKey: ->
+        if @_keysComp.invalidated
+            @_setupKeysFunc()
+        super
+
     replaceKeys: ->
         throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
 
     replaceKeysFunc: (keysFunc) ->
-        @_keysComp?.stop()
         @keysFunc = keysFunc
-        @_keysComp = Tracker.nonreactive => Tracker.autorun (c) =>
-            newKeys = @keysFunc.apply null
-            if newKeys is null
-                @_clear()
-            else if _.isArray newKeys
-                unless _.all (_.isString(key) for key in newKeys)
-                    throw new Meteor.Error "AutoDict keys must all be type string."
-                if _.size(J.util.makeDictSet newKeys) < newKeys.length
-                    throw new Meteor.Error "AutoDict keys must be unique."
-                @_replaceKeys newKeys
-            else
-                throw new Meteor.Error "AutoDict.keysFunc must return an array or null. Got #{newKeys}"
+        @_setupKeysFunc()
 
     replaceValueFunc: (@valueFunc) ->
         # autoVar.replaceValueFunc would be overkill because the individual

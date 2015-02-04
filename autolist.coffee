@@ -21,7 +21,7 @@ class J.AutoList extends J.List
             (key) => @valueFunc parseInt(key)
             (
                 if _.isFunction @onChange then (key, oldValue, newValue) =>
-                    @onChange?.call null, parseInt(key), oldValue, newValue
+                    @onChange?.call @, parseInt(key), oldValue, newValue
                 else
                     @onChange
             )
