@@ -115,9 +115,16 @@ J._defineComponent = (componentName, componentSpec) ->
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of componentSpec.reactives ? {}
-            @reactives[reactiveName] = J.AutoVar(
-                reactiveSpec.val.bind(@)
-                reactiveSpec.onChange?.bind(@) ? null
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
+                =>
+                    # console.log "#{@toString()}.#{reactiveName}()"
+                    reactiveSpec.val.call @
+                (
+                    if reactiveSpec.onChange? then =>
+                        # console.log "#{@toString()}.#{reactiveName}.onChange", arguments
+                        reactiveSpec.onChange.apply @, arguments
+                    else null
+                )
                 reactiveSpec.same?.bind(@) ? J.util.equals
             )
 

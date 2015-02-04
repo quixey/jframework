@@ -506,11 +506,11 @@ Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
 Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
     size = new ReactiveVar 3
     val = new ReactiveVar 100
-    keyFuncRunCount = 0
+    keysFuncRunCount = 0
     valueFuncRunCount = 0
     d = J.AutoDict(
         ->
-            keyFuncRunCount += 1
+            keysFuncRunCount += 1
             "#{x}" for x in [0...size.get()]
         (key) ->
             valueFuncRunCount += 1
@@ -528,6 +528,44 @@ Tinytest.add "AutoDict - Make sure key still exists when expediting value recalc
     size.set 0
     val.set 300
     test.isUndefined d.get('0')
+
+
+Tinytest.add "AutoVar - Invalidation propagation", (test) ->
+    x = new ReactiveVar 5
+    a = J.AutoVar -> x.get()
+    b = J.AutoVar -> a.get()
+    c = J.AutoVar -> b.get()
+    d = J.AutoVar -> c.get() + a.get()
+    test.equal d.get(), 10
+    x.set 6
+    test.equal d.get(), 12
+    Tracker.flush()
+    test.equal d.get(), 12
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
