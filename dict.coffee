@@ -136,6 +136,12 @@ class J.Dict
         @_replaceKeys newKeys
 
     set: (fields) ->
+        if not J.util.isPlainObject(fields) and arguments.length > 1
+            # Support set(fieldName, value) syntax
+            fieldName = fields
+            value = arguments[1]
+            fields = {}
+            fields[fieldName] = value
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
@@ -144,6 +150,12 @@ class J.Dict
         @_forceSet fields
 
     setOrAdd: (fields) ->
+        if not J.util.isPlainObject(fields) and arguments.length > 1
+            # Support set(fieldName, value) syntax
+            fieldName = fields
+            value = arguments[1]
+            fields = {}
+            fields[fieldName] = value
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
