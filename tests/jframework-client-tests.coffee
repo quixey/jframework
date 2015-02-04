@@ -27,6 +27,6 @@ Tinytest.add "Component basics", (test) ->
     test.equal mountedCp.prop.p(), "PPP"
     test.equal mountedCp.x(), 3
     lst.set(3, 77)
-    test.equal mountedCp.xPlusOne(), 4
+    test.equal mountedCp.xPlusOne(), 78
     Tracker.flush()
     test.equal mountedCp.xPlusOne(), 78

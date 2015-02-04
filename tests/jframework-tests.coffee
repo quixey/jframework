@@ -346,9 +346,10 @@ Tinytest.add "AutoList - onChange", (test) ->
             onChangeHistory.push [i, oldValue, newValue, @size()]
     )
     test.equal sizeFuncRunCount, 1
-    test.equal valueFuncRunCount, 3
+    test.equal valueFuncRunCount, 0
     test.equal onChangeHistory, []
     Tracker.flush()
+    test.equal valueFuncRunCount, 3
     test.equal onChangeHistory, [
         [0, undefined, 0, 3]
         [1, undefined, 10, 3]
@@ -430,3 +431,40 @@ Tinytest.add "Dict - encode/decode key", (test) ->
     J.Dict.encodeKey 'test' is '<<KEY>>test'
     a = [1, 2, ['3', true, 4], '5']
     test.equal a, J.Dict.decodeKey J.Dict.encodeKey(_.clone(a))
+
+Tinytest.add "List - .contains reactivity", (test) ->
+    lst = J.List [0, 1, 2, 3, 4]
+    containsHistory = []
+    lastContains = null
+    Tracker.autorun ->
+        lastContains = lst.contains 2
+        containsHistory.push lastContains
+    test.isTrue lastContains
+    lst.set 3, 33
+    Tracker.flush()
+    test.isTrue lastContains
+    lst.set 2, 22
+    Tracker.flush()
+    test.isFalse lastContains
+    lst.set 4, 2
+    Tracker.flush()
+    test.isTrue lastContains
+    lst.set 4, 4
+    Tracker.flush()
+    test.isFalse lastContains
+    lst.push 5
+    Tracker.flush()
+    test.isFalse lastContains
+    lst.push 2
+    Tracker.flush()
+    test.isTrue lastContains
+    lst.push 3
+    Tracker.flush()
+    test.isTrue lastContains
+    lst.resize 20
+    Tracker.flush()
+    test.isTrue lastContains
+    lst.resize 4
+    test.isTrue lastContains
+    Tracker.flush()
+    test.isFalse lastContains
