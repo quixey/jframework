@@ -76,7 +76,7 @@ class J.AutoVar
 
     stop: ->
         if @active
-            @_valueComp.stop()
+            @_valueComp?.stop()
             @active = false
 
     toString: ->

@@ -468,3 +468,90 @@ Tinytest.add "List - .contains reactivity", (test) ->
     test.isTrue lastContains
     Tracker.flush()
     test.isFalse lastContains
+
+Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
+    size = new ReactiveVar 3
+    val = new ReactiveVar 100
+    keyFuncRunCount = 0
+    valueFuncRunCount = 0
+    d = J.AutoDict(
+        ->
+            keyFuncRunCount += 1
+            "#{x}" for x in [0...size.get()]
+        (key) ->
+            valueFuncRunCount += 1
+            val.get() + parseInt key
+    )
+    test.equal keyFuncRunCount, 1
+    test.equal valueFuncRunCount, 0
+    test.equal d.toObj(),
+        0: 100
+        1: 101
+        2: 102
+    test.equal valueFuncRunCount, 3
+    size.set 2
+    test.equal valueFuncRunCount, 3
+    test.isUndefined d.get('2')
+    test.equal d.get('1'), 101
+    test.equal valueFuncRunCount, 3
+    val.set 200
+    test.equal valueFuncRunCount, 3
+    test.isUndefined d.get('2')
+    test.equal valueFuncRunCount, 3
+    test.equal d.get('1'), 201
+    test.equal valueFuncRunCount, 4
+    Tracker.flush()
+    test.equal valueFuncRunCount, 4
+
+Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
+    size = new ReactiveVar 3
+    val = new ReactiveVar 100
+    keyFuncRunCount = 0
+    valueFuncRunCount = 0
+    d = J.AutoDict(
+        ->
+            keyFuncRunCount += 1
+            "#{x}" for x in [0...size.get()]
+        (key) ->
+            valueFuncRunCount += 1
+            val.get() + parseInt key
+    )
+    size.set 2
+    test.isUndefined d.get('2')
+    Tracker.flush()
+    test.equal d.toObj(),
+        0: 100
+        1: 101
+    val.set 200
+    size.set 1
+    test.isUndefined d.get('1')
+    size.set 0
+    val.set 300
+    test.isUndefined d.get('0')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
