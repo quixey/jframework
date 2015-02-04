@@ -31,7 +31,8 @@ class J.AutoVar
         if Tracker.active then Tracker.onInvalidate => @stop()
 
         @_valueComp = null
-        if @onChange? then @_setupValueComp()
+        if @onChange? then Tracker.afterFlush =>
+            if not @_valueComp? then @_setupValueComp()
 
     _worthRecomputing: ->
         @_var.dep.hasDependents() or @onChange?

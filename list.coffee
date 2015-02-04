@@ -43,6 +43,10 @@ class J.List
         return false unless x instanceof @constructor
         J.util.deepEquals @toArr(), x.toArr()
 
+    find: (f = _.identity) ->
+        # Reactive
+        _.find @getValues(), f
+
     filter: (f = _.identity) ->
         # Reactive
         J.List _.filter @getValues(), f

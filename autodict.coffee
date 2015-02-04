@@ -48,6 +48,8 @@ class J.AutoDict extends J.Dict
         @_keysComp?.stop()
         @_keysComp = Tracker.nonreactive => Tracker.autorun (c) =>
             newKeys = @keysFunc.apply null
+            if newKeys instanceof J.List then newKeys = newKeys.toArr()
+
             if newKeys is null
                 @_clear()
             else if _.isArray newKeys

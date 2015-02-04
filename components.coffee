@@ -116,9 +116,9 @@ J._defineComponent = (componentName, componentSpec) ->
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of componentSpec.reactives ? {}
             @reactives[reactiveName] = J.AutoVar(
-                reactiveSpec.val.bind @
-                reactiveSpec.onChange ? null
-                reactiveSpec.same ? J.util.equals
+                reactiveSpec.val.bind(@)
+                reactiveSpec.onChange?.bind(@) ? null
+                reactiveSpec.same?.bind(@) ? J.util.equals
             )
 
         # Set up @state
