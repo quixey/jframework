@@ -425,3 +425,8 @@ Tinytest.add "List - getConcat", (test) ->
     test.equal concatted.get(0), 3
     c.stop()
     test.throws -> concatted.get 0
+
+Tinytest.add "Dict - encode/decode key", (test) ->
+    J.Dict.encodeKey 'test' is '<<KEY>>test'
+    a = [1, 2, ['3', true, 4], '5']
+    test.equal a, J.Dict.decodeKey J.Dict.encodeKey(_.clone(a))

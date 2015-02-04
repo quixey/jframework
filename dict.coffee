@@ -226,7 +226,7 @@ class J.Dict
         decodeModelInstances = (y) ->
             if J.util.isPlainObject(y) and _.size(y) is 1 and y.$attachedModelInstance?
                 instanceSpec = y.$attachedModelInstance
-                instance = J.models[instanceSpec.modelName].findOne instanceSpec.id
+                instance = J.models[instanceSpec.modelName].findOne instanceSpec._id
 
                 # It's pretty awkward if the original instance dies
                 # and then a new instance with that id takes its
@@ -301,6 +301,6 @@ class J.Dict
             )
                 y
             else
-                throw new Meteor.Error "Can't encode key containing: #{y}"
+                throw new Meteor.Error "Can't encode key containing: #{J.util.stringify y}"
 
         "<<KEY>>#{EJSON.stringify prepare x}"
