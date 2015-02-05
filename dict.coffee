@@ -54,9 +54,10 @@ class J.Dict
         # invalidates the computation if and when this field gets
         # changed.
         if @hasKey key
-            @_fields[key].get()
+            value = @_fields[key].get()
+            if value instanceof J.AutoVar then value.get() else value
         else if force
-            throw new Meteor.Error "#{@constructor.name} missing key #{J.util.stringify key}"
+            throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
         else
             undefined
 

@@ -447,6 +447,24 @@ Tinytest.add "List - reverse", (test) ->
     test.throws -> reversed.toArr()
     test.equal lst.toArr(), [0, 1, 2, 3]
 
+Tinytest.add "AutoVar - unpack nested AutoVars in .get", (test) ->
+    x = new ReactiveVar 5
+    a = J.AutoVar -> J.AutoVar -> J.AutoVar -> x.get()
+    test.equal a.get(), 5
+    dict = J.Dict a: a
+    test.equal dict.get('a'), 5
+    lst = J.List [0, 1, a]
+    test.equal lst.get(2), 5
+    autoDict = J.AutoDict(
+        -> ['a']
+        -> a
+    )
+    test.equal autoDict.get('a'), 5
+    autoList = J.AutoList(
+        -> 1
+        -> a
+    )
+    test.equal autoList.get(0), 5
 
 Tinytest.add "List - getConcat", (test) ->
     lst1 = J.List [3, 5, 6]

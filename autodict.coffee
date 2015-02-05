@@ -24,6 +24,7 @@ class J.AutoDict extends J.Dict
         @_keysVar = J.AutoVar(
             =>
                 newKeys = @keysFunc.apply null
+
                 if newKeys instanceof J.List
                     newKeys = newKeys.toArr()
                 else if newKeys is null
@@ -31,7 +32,8 @@ class J.AutoDict extends J.Dict
 
                 if _.isArray newKeys
                     unless _.all (_.isString(key) for key in newKeys)
-                        throw new Meteor.Error "AutoDict keys must all be type string."
+                        throw new Meteor.Error "AutoDict keys must all be type string.
+                            Got #{J.util.stringify newKeys}"
                     if _.size(J.util.makeDictSet newKeys) < newKeys.length
                         throw new Meteor.Error "AutoDict keys must be unique."
                     newKeys

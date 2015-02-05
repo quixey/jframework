@@ -52,8 +52,18 @@ class J.AutoVar
 
         @_arrIndexOfDeps = {} # value: dep
 
+    _deepGet: ->
+        # Reactive
+        ###
+            Unwrap any nested AutoVars during get(). This is because
+            @valueFunc may get a performance benefit from isolating
+            part of its reactive logic in an AutoVar.
+        ###
+        value = @_var.get()
+        if value instanceof J.AutoVar then value.get() else value
+
     _recompute: ->
-        oldValue = Tracker.nonreactive => @_var.get()
+        oldValue = Tracker.nonreactive => @_deepGet()
         rawValue = @valueFunc.call null
         newValue =
             if @wrap and rawValue not in [@constructor._UNDEFINED, @constructor._UNDEFINED_WITHOUT_SET]
@@ -115,13 +125,15 @@ class J.AutoVar
     get: ->
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
+        if arguments.length
+            throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
         if @_valueComp?
             @constructor.flush()
         else
             @_setupValueComp()
 
-        @_var.get()
+        @_deepGet()
 
     indexOf: (x) ->
         # Reactive
