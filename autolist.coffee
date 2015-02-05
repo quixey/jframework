@@ -39,12 +39,6 @@ class J.AutoList extends J.List
     push: ->
         throw new Meteor.Error "There is no AutoList.push"
 
-    replaceSizeFunc: (@sizeFunc) ->
-        @_dict.replaceKeysFunc => "#{i}" for i in [0...@sizeFunc()]
-
-    replaceValueFunc: (@valueFunc) ->
-        @_dict.replaceValueFunc @valueFunc
-
     resize: ->
         throw new Meteor.Error "There is no AutoList.resize"
 

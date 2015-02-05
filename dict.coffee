@@ -47,6 +47,19 @@ class J.Dict
             @_fields[key].set @constructor._deepReactify value
         null
 
+    _get: (key, force) ->
+        # The @hasKey call is necessary to reactively invalidate
+        # the computation if and when this field gets added/deleted.
+        # It's not at all redundant with @_fields[key].get(), which
+        # invalidates the computation if and when this field gets
+        # changed.
+        if @hasKey key
+            @_fields[key].get()
+        else if force
+            throw new Meteor.Error "#{@constructor.name} missing key #{J.util.stringify key}"
+        else
+            undefined
+
     _initField: (key, value) ->
         # This question mark is because a child class may have
         # already initted this.
@@ -91,22 +104,11 @@ class J.Dict
 
     forceGet: (key) ->
         # Reactive
-        if @hasKey key
-            @_fields[key].get()
-        else
-            throw new Meteor.Error "#{@constructor.name} missing key #{JSON.stringify key}"
+        @_get key, true
 
-    get: (key, defaultValue = undefined) ->
+    get: (key) ->
         # Reactive
-        # The @hasKey call is necessary to reactively invalidate
-        # the computation if and when this field gets added/deleted.
-        # It's not at all redundant with @_fields[key].get(), which
-        # invalidates the computation if and when this field gets
-        # changed.
-        if @hasKey key
-            @_fields[key].get()
-        else
-            defaultValue
+        @_get key, false
 
     getFields: (keys = @getKeys()) ->
         # Reactive

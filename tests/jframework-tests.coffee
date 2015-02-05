@@ -66,6 +66,8 @@ Tinytest.add "Dict and List reactivity 2", (test) ->
     c = Tracker.autorun (c) ->
         reactiveMappedLst = lst.map (x) -> 2 * x
     test.equal reactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 2"
+    Tracker.flush()
+    test.equal reactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 2.1"
 
     lst.set 2, 102
     test.equal nonreactiveMappedLst.toArr(), [0, 2, 4, 6, 8], "fail 3"
@@ -96,6 +98,7 @@ Tinytest.add "Dict and List reactivity 4", (test) ->
     test.equal sortedLst.toArr(), [0, 1, 2, 4, 5]
 
     c.stop()
+
 
 Tinytest.add "List - resize", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
@@ -249,23 +252,6 @@ Tinytest.add "AutoDict - reactivity", (test) ->
     coef.set 4
     Tracker.flush()
     test.equal dHistory.length, 0
-    d.replaceKeysFunc -> ['7', '8']
-    Tracker.flush()
-    test.equal dHistory.length, 0
-    watcher.stop()
-
-    watcher = Tracker.autorun =>
-        dHistory.push d.toObj()
-    test.equal dHistory.pop(), {
-        7: 'xxx'
-        8: 32
-    }
-    d.replaceKeysFunc -> ['8', '9']
-    Tracker.flush()
-    test.equal dHistory.pop(), {
-        8: 32
-        9: 36
-    }
     watcher.stop()
 
 
@@ -282,14 +268,20 @@ Tinytest.add "AutoDict - laziness", (test) ->
             valueFuncRunCount += 1
             if key is '7' then 'xxx' else coef.get() * parseInt(key)
     )
-    test.equal keyFuncRunCount, 1
+    test.equal keyFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal d.get('3'), 6
+    test.equal keyFuncRunCount, 1
     test.equal valueFuncRunCount, 1
     test.equal d.get('3'), 6
+    test.equal keyFuncRunCount, 1
+    test.equal valueFuncRunCount, 1
     Tracker.flush()
+    test.equal keyFuncRunCount, 1
     test.equal valueFuncRunCount, 1
     test.equal d.get('9'), 18
+    test.equal keyFuncRunCount, 1
+    test.equal valueFuncRunCount, 2
     Tracker.flush()
     test.equal keyFuncRunCount, 1
     test.equal valueFuncRunCount, 2
@@ -308,7 +300,7 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
             valueFuncRunCount += 1
             i * coef.get()
     )
-    test.equal sizeFuncRunCount, 1
+    test.equal sizeFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal al.toArr(), [0, 10, 20]
     test.throws -> al.resize 5
@@ -321,12 +313,6 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
     test.equal al.toArr(), [0, 100]
     test.equal sizeFuncRunCount, 2
     test.equal valueFuncRunCount, 5
-    al.replaceSizeFunc ->
-        sizeFuncRunCount += 1
-        2 * size.get()
-    test.equal al.toArr(), [0, 100, 200, 300]
-    test.equal sizeFuncRunCount, 3
-    test.equal valueFuncRunCount, 7
 
 
 Tinytest.add "AutoList - onChange", (test) ->
@@ -469,6 +455,61 @@ Tinytest.add "List - .contains reactivity", (test) ->
     Tracker.flush()
     test.isFalse lastContains
 
+Tinytest.add "AutoVar - indexOf", (test) ->
+    size = new ReactiveVar 3
+    valueFuncRunCount = 0
+    a = J.AutoVar(
+        ->
+            valueFuncRunCount += 1
+            [0...size.get()]
+    )
+    test.equal valueFuncRunCount, 0
+    test.isTrue a.contains 2
+    test.equal valueFuncRunCount, 1
+    test.isTrue a.contains 1
+    test.equal valueFuncRunCount, 1
+    size.set 2
+    test.isTrue a.contains 1
+    test.equal valueFuncRunCount, 2
+    test.isFalse a.contains 2
+    test.equal valueFuncRunCount, 2
+    a.stop()
+
+Tinytest.add "AutoVar - indexOf reactivity", (test) ->
+    size = new ReactiveVar 3
+    aRunCount = 0
+    aContains2RunCount = 0
+    a = J.AutoVar(
+        ->
+            aRunCount += 1
+            [0...size.get()]
+    )
+    aContains2 = J.AutoVar(
+        ->
+            aContains2RunCount += 1
+            a.contains 2
+    )
+    Tracker.flush()
+    test.equal aRunCount, 0
+    test.equal aContains2RunCount, 0
+    test.isTrue aContains2.get()
+    test.equal aRunCount, 1
+    test.equal aContains2RunCount, 1
+    test.isTrue a.contains(1)
+    test.equal aRunCount, 1
+    test.equal aContains2RunCount, 1
+    size.set 4
+    test.isTrue aContains2.get()
+    test.equal aRunCount, 2
+    test.equal aContains2RunCount, 1
+    size.set 2
+    test.isTrue aContains2.get()
+    test.equal aRunCount, 3
+    test.equal aContains2RunCount, 2
+    a.stop()
+    aContains2.stop()
+
+
 Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
     size = new ReactiveVar 3
     val = new ReactiveVar 100
@@ -482,26 +523,30 @@ Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
             valueFuncRunCount += 1
             val.get() + parseInt key
     )
-    test.equal keyFuncRunCount, 1
+    test.equal keyFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal d.toObj(),
         0: 100
         1: 101
         2: 102
+    test.equal keyFuncRunCount, 1
     test.equal valueFuncRunCount, 3
     size.set 2
     test.equal valueFuncRunCount, 3
     test.isUndefined d.get('2')
+    test.equal valueFuncRunCount, 3
     test.equal d.get('1'), 101
-    test.equal valueFuncRunCount, 3
+    test.equal valueFuncRunCount, 4
     val.set 200
-    test.equal valueFuncRunCount, 3
+    test.equal valueFuncRunCount, 4
     test.isUndefined d.get('2')
-    test.equal valueFuncRunCount, 3
+    test.equal valueFuncRunCount, 4
     test.equal d.get('1'), 201
-    test.equal valueFuncRunCount, 4
+    test.equal valueFuncRunCount, 5
     Tracker.flush()
-    test.equal valueFuncRunCount, 4
+    test.equal valueFuncRunCount, 5
+    d.stop()
+
 
 Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
     size = new ReactiveVar 3
@@ -530,21 +575,85 @@ Tinytest.add "AutoDict - Make sure key still exists when expediting value recalc
     test.isUndefined d.get('0')
 
 
-Tinytest.add "AutoVar - Invalidation propagation", (test) ->
+Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
     x = new ReactiveVar 5
     a = J.AutoVar -> x.get()
     b = J.AutoVar -> a.get()
     c = J.AutoVar -> b.get()
-    d = J.AutoVar -> c.get() + a.get()
-    test.equal d.get(), 10
+    d = J.AutoVar -> c.get()
+    e = J.AutoVar -> d.get()
+    test.equal e.get(), 5
     x.set 6
-    test.equal d.get(), 12
+    test.equal e.get(), 6
     Tracker.flush()
-    test.equal d.get(), 12
+    test.equal e.get(), 6
 
+Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
+    x = new ReactiveVar 5
+    a = J.AutoVar -> x.get()
+    b = J.AutoVar -> a.get()
+    c = J.AutoVar -> b.get()
+    d = J.AutoVar -> c.get()
+    e = J.AutoVar -> c.get() + a.get()
+    test.equal e.get(), 10
+    x.set 6
+    test.equal e.get(), 12
+    Tracker.flush()
+    test.equal e.get(), 12
 
+Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
+    history = []
+    x = new ReactiveVar 5
+    a = J.AutoVar ->
+        history.push 'a'
+        x.get()
+    b = J.AutoVar ->
+        history.push 'b'
+        a.get()
+    c = J.AutoVar ->
+        history.push 'c'
+        b.get()
+    d = J.AutoVar ->
+        history.push 'd'
+        c.get()
+    e = J.AutoVar ->
+        history.push 'e'
+        a.get() + d.get()
 
+    test.equal history, []
+    test.equal e.get(), 10
+    test.equal history, ['e', 'a', 'd', 'c', 'b']
+    history = []
+    x.set 6
+    test.equal history, []
+    test.equal e.get(), 12
+    test.equal history, ['a', 'b', 'c', 'd', 'e']
 
+Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
+    history = []
+    x = new ReactiveVar 5
+    a = J.AutoVar ->
+        history.push 'a'
+        x.get()
+    b = J.AutoVar ->
+        history.push 'b'
+        Math.floor(a.get() / 100) * 100 # Round down to nearest 100
+    c = J.AutoVar ->
+        history.push 'c'
+        b.get()
+    test.equal c.get(), 0
+    test.equal history, ['c', 'b', 'a']
+    history = []
+    x.set 55
+    test.equal c.get(), 0
+    test.isTrue 'a' in history
+    test.isTrue 'b' in history
+    test.isFalse 'c' in history
+    history = []
+    x.set 101
+    test.equal c.get(), 100
+    test.isTrue 'a' in history
+    test.isTrue 'c' in history
 
 
 

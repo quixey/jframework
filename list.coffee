@@ -58,9 +58,11 @@ class J.List
 
     get: (index) ->
         # Reactive
-        if _.isNumber(index) and @_dict.hasKey "#{index}"
-            @_dict.get "#{index}"
-        else
+        unless _.isNumber(index)
+            throw new Meteor.Error "Index must be a number"
+        try
+            @_dict.forceGet "#{index}"
+        catch
             throw new Meteor.Error "List index out of range"
 
     getConcat: (lst) ->
@@ -87,7 +89,7 @@ class J.List
 
     getValues: ->
         # Reactive
-        @_dict.get i for i in [0...@size()]
+        @_dict.get "#{i}" for i in [0...@size()]
 
     join: (separator) ->
         # Reactive
