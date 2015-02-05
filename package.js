@@ -9,11 +9,13 @@ Npm.depends({
 
 Package.onUse(function(api) {
     api.use("underscore");
+    api.use("ordered-dict");
     api.use("coffeescript");
     api.use("tracker");
     api.use("reactive-var");
     api.use("quixey:react");
 
+    api.imply("ordered-dict");
     api.imply("underscore");
     api.imply("quixey:react");
 
@@ -43,7 +45,8 @@ Package.onUse(function(api) {
 });
 
 Package.onTest(function(api) {
-    api.use(["tinytest", "coffeescript", "tracker", "jframework"]);
+    api.use(["ordered-dict", "tinytest", "coffeescript", "tracker", "jframework"]);
+    api.imply("ordered-dict");
     api.imply("tracker");
     api.imply("reactive-var");
     api.imply("tinytest");

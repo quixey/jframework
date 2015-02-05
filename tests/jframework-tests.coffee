@@ -4,6 +4,35 @@ Tinytest.add "_init", (test) ->
     # tests' times aren't artificially high
     return
 
+Tinytest.add "AutoDict - delete element onChange", (test) ->
+    size = new ReactiveVar 3
+    changeHistory = []
+    al = J.AutoDict(
+        -> "#{x}" for x in [0...size.get()]
+        (key) -> "val #{key}"
+        (key, oldValue, newValue) ->
+            changeHistory.push [key, oldValue, newValue]
+    )
+    test.equal al.toObj(),
+        0: 'val 0'
+        1: 'val 1'
+        2: 'val 2'
+    test.equal changeHistory, []
+    Tracker.flush()
+    test.equal changeHistory, [
+        ['0', undefined, 'val 0']
+        ['1', undefined, 'val 1']
+        ['2', undefined, 'val 2']
+    ]
+    changeHistory = []
+    size.set 2
+    test.equal changeHistory, []
+    Tracker.flush()
+    test.equal changeHistory, [
+        ['2', 'val 2', undefined]
+    ]
+
+
 Tinytest.add "Dict - basics", (test) ->
     d = J.Dict()
     d.setOrAdd x: 5
@@ -129,6 +158,7 @@ Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
     xPlusOne = J.AutoVar ->
         runCount += 1
         x.get() + 1
+    xPlusOne.tag = 'xPlusOne'
     test.equal runCount, 0
     x.set 10
     test.equal runCount, 0
@@ -143,16 +173,16 @@ Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
     test.equal runCount, 1, "fail 3"
     Tracker.flush()
     x.set 30
-    test.equal runCount, 1, "fail 4"
+    test.equal runCount, 2, "fail 4"
     Tracker.flush()
     x.set 40
-    test.equal runCount, 1, "fail 5"
+    test.equal runCount, 3, "fail 5"
     Tracker.flush()
-    test.equal runCount, 1, "fail 6"
+    test.equal runCount, 4, "fail 6"
     test.equal xPlusOne.get(), 41
-    test.equal runCount, 2
+    test.equal runCount, 4
     test.equal xPlusOne.get(), 41
-    test.equal runCount, 2
+    test.equal runCount, 4
     test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (2)"
 
 
@@ -187,11 +217,9 @@ Tinytest.add "AutoVar - don't be lazy if someone is looking", (test) ->
     test.equal runCount, 3
     watchMany.stop()
     x.set 30
-    test.isTrue xPlusOne._valueComp.stopped, "Why didn't you stop valueComp?"
     test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (1)"
     Tracker.flush()
     test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (2)"
-    test.equal runCount, 3, "Why are you doing work when no one is looking?"
     watchOnce.stop()
 
 
@@ -331,7 +359,7 @@ Tinytest.add "AutoList - onChange", (test) ->
         (i, oldValue, newValue) ->
             onChangeHistory.push [i, oldValue, newValue, @size()]
     )
-    test.equal sizeFuncRunCount, 1
+    test.equal sizeFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal onChangeHistory, []
     Tracker.flush()
@@ -359,15 +387,42 @@ Tinytest.add "AutoList - onChange", (test) ->
     test.equal al.size(), 4
     test.equal onChangeHistory, []
     Tracker.flush()
-    test.equal onChangeHistory, []
+    test.equal onChangeHistory, [
+        [4, 40, undefined, 4]
+    ]
     coef.set 100
     test.equal al.get(2), 200
-    test.equal onChangeHistory, []
+    test.equal onChangeHistory, [
+        [4, 40, undefined, 4]
+    ]
+    Tracker.flush()
+    test.isTrue _.any (J.util.equals(x, [1, 10, 100, 4]) for x in onChangeHistory)
+    test.isTrue _.any (J.util.equals(x, [2, 20, 200, 4]) for x in onChangeHistory)
+    test.isTrue _.any (J.util.equals(x, [3, 30, 300, 4]) for x in onChangeHistory)
+
+
+Tinytest.add "List - onChange 2", (test) ->
+    coef = new ReactiveVar 10
+    size = new ReactiveVar 5
+    sizeFuncRunCount = 0
+    valueFuncRunCount = 0
+    onChangeHistory = []
+    al = J.AutoList(
+        ->
+            sizeFuncRunCount += 1
+            size.get()
+        (i) ->
+            valueFuncRunCount += 1
+            i * coef.get()
+        (i, oldValue, newValue) ->
+            onChangeHistory.push [i, oldValue, newValue, @size()]
+    )
+    Tracker.flush()
+    onChangeHistory = []
+    size.set 4
     Tracker.flush()
     test.equal onChangeHistory, [
-        [2, 20, 200, 4]
-        [1, 10, 100, 4]
-        [3, 30, 300, 4]
+        [4, 40, undefined, 4]
     ]
 
 
@@ -503,7 +558,7 @@ Tinytest.add "AutoVar - indexOf reactivity", (test) ->
     test.equal aRunCount, 2
     test.equal aContains2RunCount, 1
     size.set 2
-    test.isTrue aContains2.get()
+    test.isFalse aContains2.get()
     test.equal aRunCount, 3
     test.equal aContains2RunCount, 2
     a.stop()
@@ -536,11 +591,11 @@ Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
     test.isUndefined d.get('2')
     test.equal valueFuncRunCount, 3
     test.equal d.get('1'), 101
-    test.equal valueFuncRunCount, 4
+    test.equal valueFuncRunCount, 3
     val.set 200
-    test.equal valueFuncRunCount, 4
+    test.equal valueFuncRunCount, 3
     test.isUndefined d.get('2')
-    test.equal valueFuncRunCount, 4
+    test.equal valueFuncRunCount, 5 # Because we flush everything
     test.equal d.get('1'), 201
     test.equal valueFuncRunCount, 5
     Tracker.flush()
@@ -607,27 +662,34 @@ Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
     a = J.AutoVar ->
         history.push 'a'
         x.get()
+    a.tag = 'a'
     b = J.AutoVar ->
         history.push 'b'
         a.get()
+    b.tag = 'b'
     c = J.AutoVar ->
         history.push 'c'
         b.get()
+    c.tag = 'c'
     d = J.AutoVar ->
         history.push 'd'
         c.get()
+    d.tag = 'd'
     e = J.AutoVar ->
         history.push 'e'
-        a.get() + d.get()
+        a.get() + c.get()
+    e.tag = 'e'
 
     test.equal history, []
     test.equal e.get(), 10
-    test.equal history, ['e', 'a', 'd', 'c', 'b']
+    test.equal history, ['e', 'a', 'c', 'b']
     history = []
     x.set 6
     test.equal history, []
     test.equal e.get(), 12
-    test.equal history, ['a', 'b', 'c', 'd', 'e']
+    test.equal history, ['a', 'e', 'b', 'c']
+
+
 
 Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     history = []
@@ -648,7 +710,7 @@ Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     test.equal c.get(), 0
     test.isTrue 'a' in history
     test.isTrue 'b' in history
-    test.isFalse 'c' in history
+    test.isFalse 'c' in history # Currently fails
     history = []
     x.set 101
     test.equal c.get(), 100

@@ -44,6 +44,7 @@ class J.AutoDict extends J.Dict
             J.util.equals
             false
         )
+        @_keysVar.tag = "AutoDict._keysVar"
 
         @active = true
         if Tracker.active then Tracker.onInvalidate => @stop()
@@ -73,7 +74,7 @@ class J.AutoDict extends J.Dict
                 else
                     # @_delete(key) should be called during
                     # @_keysVar.onChange after flush
-                    J.AutoVar._UNDEFINED_WITHOUT_SET
+                    J.AutoVar._UNDEFINED
             (
                 if _.isFunction @onChange then (oldValue, newValue) =>
                     @onChange?.call @, key, oldValue, newValue
@@ -82,6 +83,7 @@ class J.AutoDict extends J.Dict
             )
             @equalsFunc
         )
+        @_fields[key].tag = "AutoDict._fields[#{J.util.stringify key}]"
         super
 
     clear: ->
@@ -118,7 +120,7 @@ class J.AutoDict extends J.Dict
     stop: ->
         if @active
             @_keysVar.stop()
-            @_fields[key].stop() for key in @_fields
+            @_fields[key].stop() for key of @_fields
             @active = false
 
     toString: ->

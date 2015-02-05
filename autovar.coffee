@@ -61,22 +61,20 @@ class J.AutoVar
 
         @_arrIndexOfDeps = {} # value: dep
 
-    _worthRecomputing: ->
-        @_var.dep.hasDependents() or @onChange?
-
     _recompute: ->
         oldValue = Tracker.nonreactive => @_var.get()
+        rawValue = @valueFunc.call null
         newValue =
-            if @wrap
-                J.Dict._deepReactify @valueFunc.call null
+            if @wrap and rawValue not in [@constructor._UNDEFINED, @constructor._UNDEFINED_WITHOUT_SET]
+                J.Dict._deepReactify rawValue
             else
-                @valueFunc.call null
+                rawValue
 
         if newValue is undefined
             throw new Meteor.Error "AutoVar.valueFunc must not return undefined"
-        else if newValue is @_UNDEFINED_WITHOUT_SET
+        else if newValue is @constructor._UNDEFINED_WITHOUT_SET
             return undefined
-        else if newValue is @_UNDEFINED
+        else if newValue is @constructor._UNDEFINED
             newValue = undefined
 
         @_var.set newValue
@@ -109,13 +107,15 @@ class J.AutoVar
     _setupValueComp: ->
         @_valueComp?.stop()
         @_valueComp = Tracker.nonreactive => Tracker.autorun (valueComp) =>
+            pos = @constructor._pending.indexOf @
+            if pos >= 0
+                @constructor._pending.splice pos, 1
+
             @_recompute()
-
             valueComp.onInvalidate =>
-                @_var.dep.changed()
-
-                unless @_worthRecomputing()
-                    @_valueComp.stop()
+                unless valueComp.stopped
+                    if @ not in @constructor._pending
+                        @constructor._pending.push @
 
     contains: (x) ->
         # Reactive
@@ -125,7 +125,9 @@ class J.AutoVar
         unless @active
             throw new Meteor.Error "#{@constructor.name} is stopped"
 
-        if not @_valueComp? or @_valueComp.invalidated
+        if @_valueComp?
+            @constructor.flush()
+        else
             @_setupValueComp()
 
         @_var.get()
@@ -152,14 +154,25 @@ class J.AutoVar
 
     stop: ->
         if @active
-            @_valueComp?.stop()
             @active = false
+            @_valueComp?.stop()
+            pos = @constructor._pending.indexOf @
+            if pos >= 0
+                @constructor._pending.splice pos, 1
 
     toString: ->
         # Reactive
         "AutoVar(#{J.util.stringify @get()})"
 
+
+    @_pending: []
+
+    @flush: ->
+        while @_pending.length
+            av = @_pending.shift()
+            av._setupValueComp()
+
     # Internal classes return this in @_valueFunc
     # in order to make .get() return undefined
-    @_UNDEFINED_WITHOUT_SET = {}
-    @_UNDEFINED = {}
+    @_UNDEFINED_WITHOUT_SET = {'AutoVar':'UNDEFINED_WITHOUT_SET'}
+    @_UNDEFINED = {'AutoVar': 'UNDEFINED'}
