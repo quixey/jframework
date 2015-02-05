@@ -25,7 +25,6 @@ if Meteor.isClient
                 if value then query[fieldName] = URI.decodeQuery(value.replace(/\*hashtag\*/, '#'))
             query
 
-
         _rawQueryFromClean: (cleanQuery) ->
             rawQuery = {}
             fieldNames = _.keys cleanQuery
@@ -34,7 +33,6 @@ if Meteor.isClient
                 if value then rawQuery[fieldName] = value
             rawQuery
 
-
         makeGoodPath: (routeName, params={}, query={}) ->
             URI.decodeQuery(@makePath(
                 routeName,
@@ -42,49 +40,12 @@ if Meteor.isClient
                 @_rawQueryFromClean query
             )).replace(/\ /g, '+').replace(/#/, '*hashtag*')
 
-
-        getInitialState: ->
-            # The logic of reading @stateFromRoute is inlined
-            # into components.coffee getInitialState.
-            {}
-
-
-        componentDidMount: ->
-            currentRoutes = @getRoutes()
-            lastRoute = currentRoutes[currentRoutes.length - 1]
-            isLastRoute = lastRoute.handler.displayName is @constructor.displayName
-
-            if isLastRoute and lastRoute.name?
-                routePieces = if @routeFromState? then @routeFromState(@state) else {}
-                newPath = @makeGoodPath lastRoute.name, routePieces.params, routePieces.query
-
-                if newPath isnt URI().resource()
-                    # TODO: Block the re-rendering here; it's completely unnecessary.
-                    console.log 'REPLACE', newPath
-                    ReactRouter.HistoryLocation.replace newPath
-
-
-        componentWillReceiveProps: (nextProps) ->
-            ###
-            Hacked this into the Meteor lifecycle in components.coffee
-            if @stateFromRoute?
-                @setState @stateFromRoute @getParams(), @_cleanQueryFromRaw()
-            ###
-
-
-        componentDidUpdate: (prevProps, prevState) ->
-            currentRoutes = @getRoutes()
-            lastRoute = currentRoutes[currentRoutes.length - 1]
-            isLastRoute = lastRoute.handler.displayName is @constructor.displayName
-
-            if isLastRoute and lastRoute.name?
-                routePieces = if @routeFromState? then @routeFromState(@state) else {}
-                newPath = @makeGoodPath lastRoute.name, routePieces.params, routePieces.query
-                if newPath isnt URI().resource()
-                    # TODO: Block the re-rendering here; it's completely unnecessary.
-                    # console.log 'PUSH', newPath
-                    ReactRouter.HistoryLocation.push newPath
-
+    ###
+        NOTE:
+        J Framework components.coffee has some inline code that conditions
+        on whether a control has J.Routable in its mixins, because we
+        wanted to use features (like a Reactive) outside the React Mixin framework.
+    ###
 
     J.subscriptions = {}
     Meteor.startup ->
@@ -93,13 +54,9 @@ if Meteor.isClient
 if Meteor.isClient then Meteor.startup ->
     rootRoute = J._routeGenerator()
 
-    onSubscriptionReady = ->
-        ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-            React.render $$(Handler), document.body
-
     Meteor.autorun (c) ->
         if J.subscriptions.init.ready()
             c.stop()
-
-            # setTimeout to get out of this dead Meteor computation
-            setTimeout onSubscriptionReady, 1
+            Tracker.nonreactive =>
+                ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
+                    React.render $$(Handler), document.body

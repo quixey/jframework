@@ -64,7 +64,27 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     # Make reactive getters for @reactives, e.g. @a gets/sets @reactives.a
-    for reactiveName, reactiveSpec of componentSpec.reactives ? {}
+
+    # For J.Routable components, make an automatic _route reactive
+    reactiveSpecByName = _.clone componentSpec.reactives ? {}
+    if J.Routable in (componentSpec.mixins ? []) and componentSpec.stateFromRoute?
+        reactiveSpecByName._route =
+            type: J.$object
+            val: -> @routeFromState()
+            onChange: (oldRouteSpec, newRouteSpec) ->
+                currentRoutes = @getRoutes()
+                lastRoute = currentRoutes[currentRoutes.length - 1]
+                isLastRoute = lastRoute.handler.displayName is @constructor.displayName
+
+                if isLastRoute and lastRoute.name?
+                    newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
+                    if newPath isnt URI().resource()
+                        # TODO: Block the re-rendering here; it's completely unnecessary.
+                        # console.log 'PUSH', newPath
+                        ReactRouter.HistoryLocation.push newPath
+
+
+    for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
             throw new Meteor.Error "Name conflict between #{componentName}.#{reactiveName} and
                 #{componentName}.reactives.#{reactiveName}"
@@ -115,7 +135,7 @@ J._defineComponent = (componentName, componentSpec) ->
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
         depth = 0
-        for reactiveName, reactiveSpec of componentSpec.reactives ? {}
+        for reactiveName, reactiveSpec of reactiveSpecByName
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 =>
                     dots = "....................".substring(0, depth * 4)
@@ -203,7 +223,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
-        if @_renderComp.invalidated
+        if @_renderComp?.invalidated
             @_renderComp.stop()
             @_renderComp = null
             true

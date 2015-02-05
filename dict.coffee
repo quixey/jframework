@@ -106,6 +106,11 @@ class J.Dict
         # Reactive
         @_get key, true
 
+    forEach: (f) ->
+        # Reactive
+        f key, value for key, value of @getFields()
+        null
+
     get: (key) ->
         # Reactive
         @_get key, false

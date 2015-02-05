@@ -1,15 +1,6 @@
 ###
     TODO:
 
-    1.
-    Track all AutoVars in a global AutoVar DAG.
-    Say that a "fresh" AutoVar is an AutoVar whose computation
-    is valid, and that has only ancestors with valid computations.
-    When .get is called, we need a synchronous "refresh" along
-    the DAG up to that point.
-    Re-sort the Meteor flush queue or something?
-
-    2.
     Make a J.ReactiveVar class which is like Meteor's ReactiveVar
     but has a bunch of functions powered by finer-grained deps like:
         general:
