@@ -13,6 +13,13 @@ nextComponentId = 0
 # must be defined before all components.
 componentDefinitionQueue = []
 
+componentDebug = Meteor.settings.public?.debug?.jframework?.components ? false
+_debugDepth = 0
+_getDebugPrefix = (component = null, tabWidth = 4) ->
+    numSpaces = Math.max 0, tabWidth * _debugDepth - 1
+    "#{(' 'for i in [0...numSpaces]).join('')}#{if component? and _debugDepth is 0 then component.toString() else ''}"
+
+
 J.dc = J.defineComponent = (componentName, componentSpec) ->
     componentDefinitionQueue.push
         name: componentName
@@ -55,7 +62,9 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
-                @state[stateFieldName].get()
+                ret = @state[stateFieldName].get()
+                if componentDebug then console.log _getDebugPrefix(@), "#{stateFieldName}()", ret
+                ret
             else
                 # Setter
                 stateFields = {}
@@ -67,22 +76,32 @@ J._defineComponent = (componentName, componentSpec) ->
 
     # For J.Routable components, make an automatic _route reactive
     reactiveSpecByName = _.clone componentSpec.reactives ? {}
-    if J.Routable in (componentSpec.mixins ? []) and componentSpec.stateFromRoute?
-        reactiveSpecByName._route =
+    if J.Routable in (componentSpec.mixins ? [])
+        reactiveSpecByName.route ?=
             type: J.$object
-            val: -> @routeFromState()
-            onChange: (oldRouteSpec, newRouteSpec) ->
-                currentRoutes = @getRoutes()
-                lastRoute = currentRoutes[currentRoutes.length - 1]
-                isLastRoute = lastRoute.handler.displayName is @constructor.displayName
+            val: ->
+                params: {}
+                query: {}
 
-                if isLastRoute and lastRoute.name?
-                    newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
-                    if newPath isnt URI().resource()
-                        # TODO: Block the re-rendering here; it's completely unnecessary.
-                        # console.log 'PUSH', newPath
-                        ReactRouter.HistoryLocation.push newPath
+        pushNewRoute = (oldRouteSpec, newRouteSpec) ->
+            currentRoutes = @getRoutes()
+            lastRoute = currentRoutes[currentRoutes.length - 1]
+            isLastRoute = lastRoute.handler.displayName is @constructor.displayName
 
+            if isLastRoute and lastRoute.name?
+                newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
+                if newPath isnt URI().resource()
+                    # TODO: Block the re-rendering here; it's completely unnecessary.
+                    # console.log 'PUSH', newPath
+                    ReactRouter.HistoryLocation.push newPath
+
+        origOnChange = reactiveSpecByName.route.onChange
+        if origOnChange?
+            reactiveSpecByName.route.onChange = (oldRouteSpec, newRouteSpec) ->
+                origOnChange.call @, oldRouteSpec, newRouteSpec
+                pushNewRoute.call @, oldRouteSpec, newRouteSpec
+        else
+            reactiveSpecByName.route.onChange = pushNewRoute
 
     for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
@@ -130,27 +149,29 @@ J._defineComponent = (componentName, componentSpec) ->
             @_props[propName] = new ReactiveVar @props[propName],
                 propSpec.same ? J.util.equals
             @prop[propName] = do (propName) => =>
-                @_props[propName].get()
+                ret = @_props[propName].get()
+                if componentDebug then console.log _getDebugPrefix(@), "prop.#{propName}()", ret
+                ret
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
-        depth = 0
         for reactiveName, reactiveSpec of reactiveSpecByName
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 =>
-                    dots = "....................".substring(0, depth * 4)
-                    spaces = "                    ".substring(0, depth * 4)
-                    # console.log "#{dots} #{@toString()}.#{reactiveName}()"
-                    depth += 1
+                    if componentDebug then console.log _getDebugPrefix(@), "!#{reactiveName}()"
+                    _debugDepth += 1
                     ret = reactiveSpec.val.call @
-                    depth -= 1
-                    # console.log "#{spaces}    =", ret
+                    if componentDebug then console.log _getDebugPrefix(), ret
+                    _debugDepth -= 1
                     ret
                 (
-                    if reactiveSpec.onChange? then =>
+                    if reactiveSpec.onChange? then (oldValue, newValue) =>
                         J.assert not Tracker.active
-                        # console.log "#{@toString()}.#{reactiveName}.onChange", arguments
-                        reactiveSpec.onChange.apply @, arguments
+                        if componentDebug
+                            console.log "#{@toString()}.#{reactiveName}.onChange!"
+                            console.log "    old:", oldValue
+                            console.log "    new:", newValue
+                        reactiveSpec.onChange.call @, oldValue, newValue
                     else null
                 )
                 reactiveSpec.same?.bind(@) ? J.util.equals
@@ -169,7 +190,12 @@ J._defineComponent = (componentName, componentSpec) ->
                     stateFromRoute[stateFieldName]
                 else if _.isFunction stateFieldSpec.default
                     # TODO: If the type is J.$function then use the other if-branch
-                    stateFieldSpec.default.apply @
+                    if componentDebug then console.log _getDebugPrefix(@), "#{stateFieldName} !default()"
+                    _debugDepth += 1
+                    ret = stateFieldSpec.default.apply @
+                    if componentDebug then console.log _getDebugPrefix(), ret
+                    _debugDepth -= 1
+                    ret
                 else
                     stateFieldSpec.default
             initialState[stateFieldName] = new ReactiveVar initialValue,
@@ -211,7 +237,9 @@ J._defineComponent = (componentName, componentSpec) ->
             @_props[propName].set newValue
 
             unless equalsFunc oldValue, newValue
-                propSpec.onChange?.call @, oldValue, newValue
+                if propSpec.onChange?
+                    if componentDebug then console.log _getDebugPrefix(@), "props.#{propName}.onChange!", oldValue, newValue
+                    propSpec.onChange.call @, oldValue, newValue
 
 
     reactSpec.componentDidMount = ->
@@ -232,11 +260,11 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
-        componentSpec.componentDidUpdate?.call @, prevProps, prevState
-
         prevSetCallbacks = @_setCallbacks ? []
         delete @_setCallbacks
         callback() for callback in prevSetCallbacks
+
+        componentSpec.componentDidUpdate?.call @, prevProps, prevState
 
 
     reactSpec.componentWillUnmount = ->
@@ -293,8 +321,11 @@ J._defineComponent = (componentName, componentSpec) ->
                     in #{@toString()}.render"
             @_renderComp.stop()
 
-        @_renderComp = Tracker.autorun =>
+        @_renderComp = Tracker.autorun (c) =>
+            if componentDebug then console.log _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
+            _debugDepth += 1
             renderedComponent = componentSpec.render.apply @
+            _debugDepth -= 1
 
         @_renderComp.onInvalidate (c) =>
             return if c.stopped

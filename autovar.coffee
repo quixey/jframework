@@ -124,7 +124,7 @@ class J.AutoVar
 
     get: ->
         unless @active
-            throw new Meteor.Error "#{@constructor.name} is stopped"
+            throw new Meteor.Error "#{@constructor.name} is stopped: #{@}"
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
@@ -164,8 +164,10 @@ class J.AutoVar
                 @constructor._pending.splice pos, 1
 
     toString: ->
-        # Reactive
-        "AutoVar(#{J.util.stringify @get()})"
+        if @tag?
+            "AutoVar(#{@tag}=#{J.util.stringify @_var.get()})"
+        else
+            "AutoVar(#{J.util.stringify @_var.get()})"
 
 
     @_pending: []
