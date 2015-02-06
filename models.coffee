@@ -6,6 +6,22 @@
     with a field type system to have a special value to indicate when _id is computed,
     like a "key" type for the _id, as opposed to being its own entropy.
     It's saying whether "_id" is part of the Normalized Kernel.
+
+  *
+    fetch and fetchOne - like find and findOne
+        * Acts like a Reactive, throwing a notReadyError
+        * Supports
+        * Being ready means
+            * More info from the server wouldn't change the query result
+        * fetchOne returns null (not undefined) meaning "Doesn't currently exist on source"
+        * Return Lists
+        * Supports recursive "fields"
+
+  *
+    Model instance field getters like .name():
+        If this is an attached instance, treat it like a Reactive's get
+            whose val is -> @fetchOne(@_id, fields: name: true)
+        Otherwise naively return the value, even if it's undefined, like a tryGet.
 ###
 
 

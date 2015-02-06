@@ -8,16 +8,18 @@ Npm.depends({
 });
 
 Package.onUse(function(api) {
-    api.use("underscore");
-    api.use("ordered-dict");
-    api.use("coffeescript");
-    api.use("tracker");
-    api.use("reactive-var");
-    api.use("quixey:react");
+    api.use([
+        "underscore",
+        "coffeescript",
+        "tracker",
+        "reactive-var",
+        "quixey:react"
+    ]);
 
-    api.imply("ordered-dict");
-    api.imply("underscore");
-    api.imply("quixey:react");
+    api.imply([
+        "underscore",
+        "quixey:react"
+    ]);
 
     // Sets up window.ReactRouter
     api.addFiles(
@@ -45,12 +47,31 @@ Package.onUse(function(api) {
 });
 
 Package.onTest(function(api) {
-    api.use(["ordered-dict", "tinytest", "coffeescript", "tracker", "jframework"]);
-    api.imply("ordered-dict");
-    api.imply("tracker");
-    api.imply("reactive-var");
-    api.imply("tinytest");
-    api.imply("jframework");
-    api.addFiles("tests/jframework-tests.coffee");
-    api.addFiles("tests/jframework-client-tests.coffee", "client");
+    api.use([
+        "ordered-dict",
+        "tinytest",
+        "coffeescript",
+        "tracker",
+        "jframework"
+    ]);
+
+    api.imply([
+        "tracker",
+        "reactive-var",
+        "tinytest",
+        "jframework"
+    ]);
+
+    api.addFiles([
+        "test-models",
+        "tests/jframework-tests.coffee",
+        "tests/publish-tests.coffee"
+    ]);
+
+    api.addFiles([
+    ], "server");
+
+    api.addFiles([
+        "tests/jframework-client-tests.coffee"
+    ], "client");
 });
