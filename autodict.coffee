@@ -76,7 +76,7 @@ class J.AutoDict extends J.Dict
                 else
                     # @_delete(key) should be called during
                     # @_keysVar.onChange after flush
-                    J.AutoVar._UNDEFINED
+                    J.AutoVar._UNDEFINED_WITHOUT_SET
             (
                 if _.isFunction @onChange then (oldValue, newValue) =>
                     @onChange?.call @, key, oldValue, newValue

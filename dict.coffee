@@ -158,12 +158,14 @@ class J.Dict
         @_forceSet fields
 
     setOrAdd: (fields) ->
+        ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
             # Support set(fieldName, value) syntax
             fieldName = fields
             value = arguments[1]
             fields = {}
             fields[fieldName] = value
+            ret = value # This type of setter returns the value too
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
@@ -176,6 +178,7 @@ class J.Dict
             else
                 @_initField key, value
         @set setters
+        ret
 
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
@@ -211,49 +214,7 @@ class J.Dict
         else if J.util.isPlainObject x
             @_deepSetReadOnly(v, readOnly) for k, v of x
 
-    @decodeKey: (encodedKey) ->
-        ###
-            encodedKey:
-                A string that was outputted by @encodeKey
-
-            Returns:
-                An object which is equal to (according to J.util.equals)
-                the original key.
-
-            NOTE:
-                It's unclear if it's ever good practice to call this
-                function in production code. It just seems like a useful
-                console thing.
-        ###
-
-        unless _.isString(encodedKey) and encodedKey.indexOf('<<KEY>>') is 0
-            throw new Meteor.Error "Not an encoded key."
-
-        preparedX = EJSON.parse encodedKey.substring '<<KEY>>'.length
-
-        decodeModelInstances = (y) ->
-            if J.util.isPlainObject(y) and _.size(y) is 1 and y.$attachedModelInstance?
-                instanceSpec = y.$attachedModelInstance
-                instance = J.models[instanceSpec.modelName].findOne instanceSpec._id
-
-                # It's pretty awkward if the original instance dies
-                # and then a new instance with that id takes its
-                # place between encoding and decoding, but whatever.
-                # Decoding a dict key seems like just something to do
-                # in the console anyway.
-                # This is one reason we probably shouldn't call this
-                # function in production code.
-                unless instance?
-                    console.warn "Model instance died after being encoded."
-
-                instance
-            else if _.isArray y
-                decodeModelInstances z for z in y
-            else
-                y
-
-        decodeModelInstances preparedX
-
+        "<<KEY>>#{EJSON.stringify prepare x}"
 
     @diff: (arrA, arrB) ->
         setA = J.util.makeDictSet arrA
@@ -283,32 +244,3 @@ class J.Dict
             J.Dict fields
         else
             x
-
-    @encodeKey: (x) ->
-        ###
-            Returns:
-                A string which may be used as a dict key
-                and later decoded back to the original
-                input using @decodeKey
-        ###
-
-        prepare = (y) ->
-            if _.isArray y
-                prepare z for z in y
-            else if y instanceof J.Model
-                if y.attached and y.alive
-                    $attachedModelInstance:
-                        modelName: y.modelClass.name
-                        _id: y._id
-                else
-                    throw new Meteor.Error "Only attached and alive
-                        model instances are valid Dict keys"
-            else if (
-                _.isString(y) or _.isNumber(y) or _.isBoolean(y) or
-                y is null
-            )
-                y
-            else
-                throw new Meteor.Error "Can't encode key containing: #{J.util.stringify y}"
-
-        "<<KEY>>#{EJSON.stringify prepare x}"

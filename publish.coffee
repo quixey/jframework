@@ -4,6 +4,10 @@
             {
                 modelName:
                 selector:
+                fields:
+                sort:
+                skip:
+                limit:
             }
         ]
 ###
@@ -12,6 +16,8 @@ dataSessions = {}
 
 Meteor.methods
     _addDataQueries: (dataSessionId, querySpecs) ->
+        console.log 'called _addDataQueries', dataSessionId, querySpecs
+
         session = dataSessions[dataSessionId]
         if not session?
             throw new Meteor.Error "Data session not found: #{JSON.stringify dataSessionId}"
@@ -21,28 +27,37 @@ Meteor.methods
                 throw new Meteor.Error "Invalid modelName in querySpec:
                     #{J.util.toString querySpec}"
 
-        session.querySpecs.extend querySpecs
+        console.log 'gonna extend'
+        session.querySpecs().extend querySpecs
+        console.log '...extended'
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
+    console.log 'publish _jdata, sessionId=', dataSessionId, dataSessions
+
     check dataSessionId, String
     session = dataSessions[dataSessionId] = J.Dict
         querySpecs: J.List()
-        mergedQuerySpecs: J.List()
 
-    mergedQuerySpecsVar = J.AutoVar(
+    mergedQuerySpecsVar = session.setOrAdd 'mergedQuerySpecs', J.AutoVar(
         =>
+            console.log 'recalc mergedQuerySpecsVar'
             rawQuerySpecs = session.querySpecs().toArr()
-
-            mergedQuerySpecs = []
-            rawQuerySpecs.forEach (rawQuerySpec) =>
-                mergedQuerySpecs.push rawQuerySpec
-            session.mergedQuerySpecs mergedQuerySpecs
+            rawQuerySpecs.map _.identity
     )
 
     observerByQuerySpec = J.AutoDict(
-        => session.mergedQuerySpecs()
-        (querySpec) =>
+        =>
+            console.log 'recalc observerbyqueryspec'
+            session.mergedQuerySpecs().forEach (spec) -> JSON.stringify spec.toObj()
+
+        Meteor.bindEnvironment (encodedQuerySpec) =>
+            console.log 'YO YO', encodedQuerySpec
+            return "YO YO"
+
+            querySpec = JSON.parse encodedQuerySpec
+            console.log 'calc querySpec: ', querySpec
+
             modelClass = J.models[querySpec.modelName]
 
             options = {}
@@ -55,8 +70,25 @@ Meteor.publish '_jdata', (dataSessionId) ->
             cursor = modelClass.collection.find querySpec.selector, options
 
             cursor.observeChanges
+                added: (id, fields) =>
+                    @added modelClass.collection._name, id, fields
+                changed: (id, fields) =>
+                    @changed modelClass.collection._name, id, fields
+                removed: (id) =>
+                    @removed modelClass.collection._name, id
+
+            console.log 'got cursor: ', cursor
+            cursor
+            # TODO: @ready
+
+#        (encodedQuerySpec, oldObserver, newObserver) =>
+#            console.log 'observerByQuerySpec onchange: ', arguments
+#            oldObserver?.stop()
     )
 
     @onStop =>
+        console.log 'Stop publish _jdata', dataSessionId
         mergedQuerySpecsVar.stop()
+        observerByQuerySpec.forEach (querySpec, observer) => observer.stop()
+        observerByQuerySpec.stop()
         delete dataSessions[dataSessionId]

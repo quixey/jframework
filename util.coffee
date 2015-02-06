@@ -156,7 +156,7 @@ J.util =
         # TODO: ms can be a Date in the future too
         dep = new Deps.Dependency()
         dep.depend()
-        setTimeout(
+        Meteor.setTimeout(
             => dep.changed()
             ms
         )

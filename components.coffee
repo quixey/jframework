@@ -13,7 +13,7 @@ nextComponentId = 0
 # must be defined before all components.
 componentDefinitionQueue = []
 
-componentDebug = Meteor.settings.public?.debug?.jframework?.components ? false
+componentDebug = Meteor.settings?.public?.jframework?.debug?.components ? false
 componentDebugStack = []
 _pushDebugFlag = (flag = null) ->
     componentDebugStack.push componentDebug

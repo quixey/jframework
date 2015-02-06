@@ -72,7 +72,7 @@ class J.AutoVar
                 rawValue
 
         if newValue is undefined
-            throw new Meteor.Error "AutoVar.valueFunc must not return undefined"
+            throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
         else if newValue is @constructor._UNDEFINED_WITHOUT_SET
             return undefined
         else if newValue is @constructor._UNDEFINED
@@ -80,7 +80,9 @@ class J.AutoVar
 
         @_var.set newValue
 
-        # Check if we should fire @_arr* deps
+        # Check if we should fire @_arr* deps (if oldValue and newValue are arrays)
+        # TODO: This fine-grained dependency stuff should be part of a J.ReactiveVar
+        # class that J.AutoVar inherits from
         oldArr = null
         if oldValue instanceof J.List
             oldArr = Tracker.nonreactive => oldValue.getValues()

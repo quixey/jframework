@@ -47,6 +47,34 @@ Tinytest.add "Dict - basics", (test) ->
     test.equal d.toObj(), {}
     test.equal d.size(), 0
 
+Tinytest.add "AutoDict - onChange", (test) ->
+    changeHistory = []
+    keysVar = new ReactiveVar ['a', 'b']
+    ad = J.AutoDict(
+        -> keysVar.get()
+        (key) -> 5
+        (key, oldValue, newValue) ->
+            changeHistory.push [key, oldValue, newValue]
+    )
+    test.equal changeHistory, []
+    Tracker.flush()
+    test.equal changeHistory, [
+        ['a', undefined, 5]
+        ['b', undefined, 5]
+    ]
+    changeHistory = []
+    keysVar.set ['c', 'a']
+    test.equal changeHistory, []
+    Tracker.flush()
+    test.equal changeHistory, [
+        ['b', 5, undefined]
+        ['c', undefined, 5]
+    ]
+    test.equal ad.toObj(),
+        a: 5
+        c: 5
+    ad.stop()
+
 
 Tinytest.add "List - basics", (test) ->
     lst = J.List [6, 4]
@@ -71,6 +99,33 @@ Tinytest.add "List - basics", (test) ->
     test.notEqual lst.get(2), [1]
     test.isTrue lst.get(2).deepEquals J.List [1]
 
+Tinytest.add "List - extend", (test) ->
+    lst = J.List ['zero', 'one']
+    valFuncHistory = []
+    d = J.AutoDict(
+        -> lst
+        (x) ->
+            valFuncHistory.push x
+            "val for #{x}"
+        (x, oldVal, newVal) ->
+    )
+    Tracker.flush()
+    test.equal valFuncHistory, ['zero', 'one']
+    valFuncHistory = []
+    lst.extend ['two', 'three']
+    Tracker.flush()
+    test.equal valFuncHistory, ['two', 'three']
+    lst = J.List ['zero', 'one']
+
+    runCount = 0
+    c = Tracker.autorun ->
+        runCount += 1
+        lst.toArr()
+    lst.extend ['two', 'three']
+    test.equal runCount, 1
+    Tracker.flush()
+    test.equal runCount, 2
+    c.stop()
 
 
 Tinytest.add "Dict and List reactivity 1", (test) ->
@@ -485,11 +540,6 @@ Tinytest.add "List - getConcat", (test) ->
     test.equal concatted.get(0), 3
     c.stop()
     test.throws -> concatted.get 0
-
-Tinytest.add "Dict - encode/decode key", (test) ->
-    J.Dict.encodeKey 'test' is '<<KEY>>test'
-    a = [1, 2, ['3', true, 4], '5']
-    test.equal a, J.Dict.decodeKey J.Dict.encodeKey(_.clone(a))
 
 Tinytest.add "List - .contains reactivity", (test) ->
     lst = J.List [0, 1, 2, 3, 4]

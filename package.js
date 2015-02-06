@@ -42,6 +42,10 @@ Package.onUse(function(api) {
         "routing.coffee"
     ]);
 
+    api.addFiles([
+        "publish.coffee"
+    ], "server");
+
     api.export("J");
     api.export("$$");
 });
@@ -63,13 +67,10 @@ Package.onTest(function(api) {
     ]);
 
     api.addFiles([
-        "test-models",
+        "tests/test-models.coffee",
         "tests/jframework-tests.coffee",
         "tests/publish-tests.coffee"
     ]);
-
-    api.addFiles([
-    ], "server");
 
     api.addFiles([
         "tests/jframework-client-tests.coffee"
