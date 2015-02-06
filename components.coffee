@@ -14,6 +14,13 @@ nextComponentId = 0
 componentDefinitionQueue = []
 
 componentDebug = Meteor.settings.public?.debug?.jframework?.components ? false
+componentDebugStack = []
+_pushDebugFlag = (flag = null) ->
+    componentDebugStack.push componentDebug
+    componentDebug = flag ? componentDebug
+_popDebugFlag = ->
+    componentDebug = componentDebugStack.pop()
+
 _debugDepth = 0
 _getDebugPrefix = (component = null, tabWidth = 4) ->
     numSpaces = Math.max 0, tabWidth * _debugDepth - 1
@@ -45,6 +52,7 @@ J._defineComponent = (componentName, componentSpec) ->
     delete reactSpec.props
     delete reactSpec.state
     delete reactSpec.reactives
+    delete reactSpec.debug
 
     reactSpec.displayName = componentName
 
@@ -62,8 +70,14 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
+                _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
+
                 ret = @state[stateFieldName].get()
-                if componentDebug then console.log _getDebugPrefix(@), "#{stateFieldName}()", ret
+
+                if componentDebug
+                    console.log _getDebugPrefix(@), "#{stateFieldName}()", ret
+                _popDebugFlag()
+
                 ret
             else
                 # Setter
@@ -148,9 +162,11 @@ J._defineComponent = (componentName, componentSpec) ->
         for propName, propSpec of propSpecs
             @_props[propName] = new ReactiveVar @props[propName],
                 propSpec.same ? J.util.equals
-            @prop[propName] = do (propName) => =>
+            @prop[propName] = do (propName, propSpec) => =>
+                _pushDebugFlag propSpec.debug ? componentSpec.debug
                 ret = @_props[propName].get()
                 if componentDebug then console.log _getDebugPrefix(@), "prop.#{propName}()", ret
+                _popDebugFlag()
                 ret
 
         # Set up @reactives
@@ -158,11 +174,18 @@ J._defineComponent = (componentName, componentSpec) ->
         for reactiveName, reactiveSpec of reactiveSpecByName
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 =>
-                    if componentDebug then console.log _getDebugPrefix(@), "!#{reactiveName}()"
-                    _debugDepth += 1
+                    _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
+                    if componentDebug
+                        console.log _getDebugPrefix(@), "!#{reactiveName}()"
+                        _debugDepth += 1
+
                     ret = reactiveSpec.val.call @
-                    if componentDebug then console.log _getDebugPrefix(), ret
-                    _debugDepth -= 1
+
+                    if componentDebug
+                        console.log _getDebugPrefix(), ret
+                        _debugDepth -= 1
+                    _popDebugFlag()
+
                     ret
                 (
                     if reactiveSpec.onChange? then (oldValue, newValue) =>
@@ -190,11 +213,18 @@ J._defineComponent = (componentName, componentSpec) ->
                     stateFromRoute[stateFieldName]
                 else if _.isFunction stateFieldSpec.default
                     # TODO: If the type is J.$function then use the other if-branch
-                    if componentDebug then console.log _getDebugPrefix(@), "#{stateFieldName} !default()"
-                    _debugDepth += 1
+                    _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
+                    if componentDebug
+                        console.log _getDebugPrefix(@), "#{stateFieldName} !default()"
+                        _debugDepth += 1
+
                     ret = stateFieldSpec.default.apply @
-                    if componentDebug then console.log _getDebugPrefix(), ret
-                    _debugDepth -= 1
+
+                    if componentDebug
+                        console.log _getDebugPrefix(), ret
+                        _debugDepth -= 1
+                    _popDebugFlag()
+
                     ret
                 else
                     stateFieldSpec.default
@@ -322,10 +352,16 @@ J._defineComponent = (componentName, componentSpec) ->
             @_renderComp.stop()
 
         @_renderComp = Tracker.autorun (c) =>
-            if componentDebug then console.log _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
-            _debugDepth += 1
+            _pushDebugFlag componentSpec.debug
+            if componentDebug
+                console.log _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
+                _debugDepth += 1
+
             renderedComponent = componentSpec.render.apply @
-            _debugDepth -= 1
+
+            if componentDebug
+                _debugDepth -= 1
+            _popDebugFlag()
 
         @_renderComp.onInvalidate (c) =>
             return if c.stopped
