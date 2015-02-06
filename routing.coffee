@@ -47,8 +47,10 @@ if Meteor.isClient
         wanted to use features (like a Reactive) outside the React Mixin framework.
     ###
 
+    J.DATA_SESSION_ID = "#{parseInt Math.random() * 1000000000}"
     J.subscriptions = {}
     Meteor.startup ->
+        J.subscriptions.jdata = Meteor.subscribe '_jdata', J.DATA_SESSION_ID
         J.subscriptions.init = Meteor.subscribe 'init'
 
 if Meteor.isClient then Meteor.startup ->

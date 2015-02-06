@@ -43,6 +43,17 @@ class J.List
         return false unless x instanceof @constructor
         J.util.deepEquals @toArr(), x.toArr()
 
+    extend: (values) ->
+        valuesArr =
+            if values instanceof J.List
+                values.getValues()
+            else values
+
+        adder = {}
+        for value, i in valuesArr
+            adder["#{@size() + i}"] = value
+        @_dict.setOrAdd adder
+
     find: (f = _.identity) ->
         # Reactive
         _.find @getValues(), f
@@ -106,9 +117,7 @@ class J.List
             J.List @getValues().map mapFunc
 
     push: (value) ->
-        adder = {}
-        adder[@size()] = value
-        @_dict.setOrAdd adder
+        @extend [value]
 
     resize: (size) ->
         @_resize size
