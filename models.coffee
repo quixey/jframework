@@ -401,8 +401,10 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 instanceArr
 
             fetch: (selector = {}, options = {}) ->
-                if Meteor.isServer
-                    return @find(selector, options).fetch()
+                options.reactive = false
+                cursor = @find selector, options
+
+                return cursor.fetch() if Meteor.isServer
 
                 querySpec =
                     modelName: modelName
@@ -412,8 +414,7 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                     skip: options.skip
                     limit: options.limit
 
-                if J.fetching.isQueryReady querySpec
-                    return @find(selector, options).fetch()
+                return cursor.fetch() if J.fetching.isQueryReady querySpec
 
                 J.fetching.requestQuerySpec querySpec
 

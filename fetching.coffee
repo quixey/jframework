@@ -6,6 +6,7 @@ J.fetching =
     _pendingQsSet: {}
     _waitingQsSet: {}
     _readyQsSet: {} # querySpecString: true
+    _batchDep: new J.Dependency()
 
 
     flushQueries: ->
@@ -27,6 +28,7 @@ J.fetching =
                 delete @_waitingQsSet[qsString]
                 @_readyQsSet[qsString] = true
 
+            @_batchDep.changed()
 
 
     isQueryReady: (querySpec) ->
@@ -47,3 +49,6 @@ J.fetching =
         @_pendingQsSet[qsString] = true
         if isNewBatch then Tracker.afterFlush =>
             @flushQueries()
+
+        @_batchDep.depend()
+        undefined

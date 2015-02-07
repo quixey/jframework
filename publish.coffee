@@ -10,6 +10,8 @@
                 limit:
             }
         ]
+        currentWrite: <WriteFenceWrite>?
+
 ###
 dataSessions = {}
 
@@ -27,6 +29,9 @@ Meteor.methods
                     #{J.util.toString querySpec}"
 
         session.querySpecs().extend querySpecs
+
+        J.assert not session.currentWrite?
+        session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
@@ -66,7 +71,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
         cursor = modelClass.collection.find querySpec.selector, options
 
-        cursor.observeChanges
+        observer = cursor.observeChanges
             added: (id, fields) =>
                 log "ADDED: ", querySpec, id, fields
                 @added modelClass.collection._name, id, fields
@@ -76,6 +81,8 @@ Meteor.publish '_jdata', (dataSessionId) ->
             removed: (id) =>
                 log "REMOVED: ", querySpec, id
                 @removed modelClass.collection._name, id
+
+        observer
 
 
     mergedSpecStringsVar = J.AutoVar(
@@ -88,6 +95,9 @@ Meteor.publish '_jdata', (dataSessionId) ->
                 observerByQuerySpecString.get(specString).stop()
 
             log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
+
+            if diff.added.length or diff.deleted.length
+                session.currentWrite.committed()
     )
 
 
