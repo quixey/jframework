@@ -76,8 +76,8 @@ Meteor.publish '_jdata', (dataSessionId) ->
             mergedQuerySpecs
     )
 
-
-    observerByQuerySpecString = J.Dict()
+    observerByQsString = J.Dict()
+    fieldsByModelIdQuery = {} # modelName: docId: fieldName: querySpecString: value
     makeObserver = (querySpec) =>
         log "Make observer for: ", querySpec
         modelClass = J.models[querySpec.modelName]
@@ -91,16 +91,60 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
         cursor = modelClass.collection.find querySpec.selector, options
 
+        qsString = EJSON.stringify querySpec
+
         observer = cursor.observeChanges
             added: (id, fields) =>
-                log "ADDED:", querySpec, id, fields
-                @added modelClass.collection._name, id, fields
+                log querySpec, "server says ADDED:", id, fields
+
+                if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
+                    log querySpec, "passing on ADDED:", id, fields
+                    @added modelClass.collection._name, id, fields
+
+                fieldsByModelIdQuery[querySpec.modelName] ?= {}
+                fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
+                for fieldName, value of fields
+                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
+                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+
             changed: (id, fields) =>
-                log "CHANGED:", querySpec, id
-                @changed modelClass.collection._name, id, fields
+                log querySpec, "server says CHANGED:", id, fields
+
+                changedFields = {}
+
+                for fieldName, value of fields
+                    oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
+                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                    if not EJSON.equals oldValue, newValue
+                        changedFields[fieldName] = value
+
+                if not _.isEmpty changedFields
+                    log querySpec, "passing along CHANGED:", id, changedFields
+                    @changed modelClass.collection._name, id, changedFields
+
             removed: (id) =>
-                log "REMOVED:", querySpec, id
-                @removed modelClass.collection._name, id
+                log querySpec, "server says REMOVED:", id
+
+                changedFields = {}
+
+                for fieldName in _.keys fieldsByModelIdQuery[querySpec.modelName][id]
+                    oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName])[0]
+                    delete fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString]
+                    newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName])[0]
+                    if not EJSON.equals oldValue, newValue
+                        changedFields[fieldName] = newValue
+                    if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id][fieldName]
+                        delete fieldsByModelIdQuery[querySpec.modelName][id][fieldName]
+
+                if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
+                    delete fieldsByModelIdQuery[querySpec.modelName][id]
+                    log querySpec, "passing along REMOVED:", id
+                    @removed modelClass.collection._name, id
+                else if not _.isEmpty changedFields
+                    log querySpec, "passing along CHANGED:", id
+                    @changed modelClass.collection._name, id, changedFields
 
         observer
 
@@ -109,10 +153,38 @@ Meteor.publish '_jdata', (dataSessionId) ->
         => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
         (oldSpecStrings, newSpecStrings) =>
             diff = J.Dict.diff oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
-            for specString in diff.added
-                observerByQuerySpecString.setOrAdd specString, makeObserver EJSON.parse specString
-            for specString in diff.deleted
-                observerByQuerySpecString.get(specString).stop()
+            for qsString in diff.added
+                observerByQsString.setOrAdd qsString, makeObserver EJSON.parse qsString
+            for qsString in diff.deleted
+                querySpec = EJSON.parse qsString
+                log querySpec, 'STOPPED'
+
+                observerByQsString.get(qsString).stop()
+                observerByQsString.delete qsString
+
+                modelClass = J.models[querySpec.modelName]
+                for docId in _.keys fieldsByModelIdQuery[querySpec.modelName] ? {}
+                    cursorValues = fieldsByModelIdQuery[querySpec.modelName][docId]
+
+                    changedFields = {}
+                    for fieldName in _.keys cursorValues
+                        valueByQsString = cursorValues[fieldName]
+                        oldValue = _.values(valueByQsString)[0]
+                        delete valueByQsString[qsString]
+                        newValue = _.values(valueByQsString)[0]
+                        if not EJSON.equals oldValue, newValue
+                            changedFields[fieldName] = newValue
+                        if _.isEmpty valueByQsString
+                            delete cursorValues[fieldName]
+
+                    if _.isEmpty cursorValues
+                        delete fieldsByModelIdQuery[querySpec.modelName][docId]
+                        log querySpec, "passing along REMOVED", docId
+                        @removed modelClass.collection._name, docId
+                    else if not _.isEmpty changedFields
+                        log querySpec, "passing along CHANGED", docId, changedFields
+                        @changed modelClass.collection._name, id, changedFields
+
 
             log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
 
@@ -126,7 +198,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         log 'Stop publish _jdata', dataSessionId
         mergedSpecStringsVar.stop()
         mergedQuerySpecsVar.stop()
-        observerByQuerySpecString.forEach (querySpecString, observer) => observer.stop()
+        observerByQsString.forEach (querySpecString, observer) => observer.stop()
         delete dataSessions[dataSessionId]
 
 

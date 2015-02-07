@@ -19,7 +19,7 @@ addTest "Fetching - throw out off AutoVar valueFunc when missing fetch data", (t
             test.equal count1, 4
             test.equal count2, 3
             test.equal count3, 2
-            # a.stop()
+            a.stop()
             onComplete()
             null
         true
