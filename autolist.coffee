@@ -28,6 +28,11 @@ class J.AutoList extends J.List
             @equalsFunc
         )
 
+    clone: ->
+        throw new Meteor.Error "There is no AutoList.clone.
+            You should be able to either use the same AutoList
+            or else call snapshot()."
+
     clear: ->
         throw new Meteor.Error "There is no AutoList.clear"
 
@@ -50,6 +55,9 @@ class J.AutoList extends J.List
 
     setDebug: (@debug) ->
         @_dict.setDebug debug
+
+    snapshot: ->
+        J.List Tracker.nonreactive => @getValues()
 
     sort: ->
         throw new Meteor.Error "There is no AutoList.sort"

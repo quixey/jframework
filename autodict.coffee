@@ -114,6 +114,11 @@ class J.AutoDict extends J.Dict
     clear: ->
         throw new Meteor.Error "There is no AutoDict.clear"
 
+    clone: ->
+        throw new Meteor.Error "There is no AutoDict.clone.
+            You should be able to either use the same AutoDict
+            or else call snapshot()."
+
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
 
@@ -143,6 +148,9 @@ class J.AutoDict extends J.Dict
 
     setOrAdd: ->
         throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"
+
+    snapshot: ->
+        J.Dict Tracker.nonreactive => @getFields()
 
     stop: ->
         if @active

@@ -13,7 +13,6 @@
 ###
 dataSessions = {}
 
-
 Meteor.methods
     _addDataQueries: (dataSessionId, querySpecs) ->
         console.log 'called _addDataQueries', dataSessionId, querySpecs
@@ -27,68 +26,77 @@ Meteor.methods
                 throw new Meteor.Error "Invalid modelName in querySpec:
                     #{J.util.toString querySpec}"
 
-        console.log 'gonna extend'
         session.querySpecs().extend querySpecs
-        console.log '...extended'
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
-    console.log 'publish _jdata, sessionId=', dataSessionId, dataSessions
+    log = ->
+        newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
+        console.log.apply console, newArgs
+
+    log 'publish _jdata'
 
     check dataSessionId, String
     session = dataSessions[dataSessionId] = J.Dict
         querySpecs: J.List()
+        mergedQuerySpecs: undefined
 
-    mergedQuerySpecsVar = session.setOrAdd 'mergedQuerySpecs', J.AutoVar(
+    mergedQuerySpecsVar = session.mergedQuerySpecs J.AutoVar(
         =>
-            console.log 'recalc mergedQuerySpecsVar'
-            rawQuerySpecs = session.querySpecs().toArr()
-            rawQuerySpecs.map _.identity
+            log "Recalc mergedQuerySpecsVar"
+            mergedQuerySpecs = J.List()
+            session.querySpecs().forEach (rawQuerySpec) ->
+                # TODO: Fancier merge stuff
+                mergedQuerySpecs.push rawQuerySpec
+            mergedQuerySpecs
     )
 
-    observerByQuerySpec = J.AutoDict(
-        =>
-            console.log 'recalc observerbyqueryspec'
-            session.mergedQuerySpecs().forEach (spec) -> JSON.stringify spec.toObj()
 
-        Meteor.bindEnvironment (encodedQuerySpec) =>
-            console.log 'YO YO', encodedQuerySpec
-            return "YO YO"
+    observerByQuerySpecString = J.Dict()
+    makeObserver = (querySpec) =>
+        log "Make observer for: ", querySpec
+        modelClass = J.models[querySpec.modelName]
 
-            querySpec = JSON.parse encodedQuerySpec
-            console.log 'calc querySpec: ', querySpec
+        options = {}
+        for optionName in ['sort', 'skip', 'limit']
+            if querySpec[optionName]?
+                options[optionName] = querySpec[optionName]
 
-            modelClass = J.models[querySpec.modelName]
+        # TODO: Interpret options.fields with fancy semantics
 
-            options = {}
-            for optionName in ['sort', 'skip', 'limit']
-                if querySpec[optionName]?
-                    options[optionName] = querySpec[optionName]
+        cursor = modelClass.collection.find querySpec.selector, options
 
-            # TODO: Interpret options.fields with fancy semantics
+        cursor.observeChanges
+            added: (id, fields) =>
+                log "ADDED: ", querySpec, id, fields
+                @added modelClass.collection._name, id, fields
+            changed: (id, fields) =>
+                log "CHANGED: ", querySpec, id
+                @changed modelClass.collection._name, id, fields
+            removed: (id) =>
+                log "REMOVED: ", querySpec, id
+                @removed modelClass.collection._name, id
 
-            cursor = modelClass.collection.find querySpec.selector, options
+        # TODO: ready
 
-            cursor.observeChanges
-                added: (id, fields) =>
-                    @added modelClass.collection._name, id, fields
-                changed: (id, fields) =>
-                    @changed modelClass.collection._name, id, fields
-                removed: (id) =>
-                    @removed modelClass.collection._name, id
 
-            console.log 'got cursor: ', cursor
-            cursor
-            # TODO: @ready
+    mergedSpecStringsVar = J.AutoVar(
+        => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
+        (oldSpecStrings, newSpecStrings) =>
+            diff = J.Dict.diff oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
+            for specString in diff.added
+                observerByQuerySpecString.setOrAdd specString, makeObserver EJSON.parse specString
+            for specString in diff.deleted
+                observerByQuerySpecString.get(specString).stop()
 
-#        (encodedQuerySpec, oldObserver, newObserver) =>
-#            console.log 'observerByQuerySpec onchange: ', arguments
-#            oldObserver?.stop()
+            log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
     )
+    mergedSpecStringsVar.debug = true
+
 
     @onStop =>
-        console.log 'Stop publish _jdata', dataSessionId
+        log 'Stop publish _jdata', dataSessionId
+        mergedSpecStringsVar.stop()
         mergedQuerySpecsVar.stop()
-        observerByQuerySpec.forEach (querySpec, observer) => observer.stop()
-        observerByQuerySpec.stop()
+        observerByQuerySpecString.forEach (querySpecString, observer) => observer.stop()
         delete dataSessions[dataSessionId]

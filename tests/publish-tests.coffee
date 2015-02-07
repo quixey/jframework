@@ -5,7 +5,7 @@ addTest = (testName, testFunc) ->
 addTest "addDataQueries - basics", (test, onComplete) ->
     Meteor.call '_addDataQueries', J.DATA_SESSION_ID, [
         modelName: 'Foo'
-        selector: {}
+        selector: b: $gt: 10
     ], (error, result) ->
         console.log 'addDataQueries callback: ', error, result
         onComplete()

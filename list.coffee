@@ -1,3 +1,9 @@
+###
+    TODO: Add a @observe() and @observeChanges() just like
+    Meteor's collection API. Good for List and AutoList.
+###
+
+
 class J.List
     constructor: (arr = [], equalsFunc = J.util.equals) ->
         unless @ instanceof J.List

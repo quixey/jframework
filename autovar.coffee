@@ -42,6 +42,7 @@ class J.AutoVar
         @wrap = wrap
 
         @_var = new ReactiveVar undefined, @equalsFunc
+        @_preservedValue = undefined
 
         @active = true
         if Tracker.active then Tracker.onInvalidate => @stop()
@@ -63,7 +64,14 @@ class J.AutoVar
         value = @_var.get()
         if value instanceof J.AutoVar then value.get() else value
 
+    _preserve: (v) ->
+        if v instanceof J.AutoDict or v instanceof J.AutoList
+            v.snapshot()
+        else
+            v
+
     _recompute: ->
+        oldPreservedValue = @_preservedValue
         oldValue = Tracker.nonreactive => @_deepGet()
 
         rawValue = @valueFunc.call null
@@ -81,17 +89,18 @@ class J.AutoVar
             newValue = undefined
 
         @_var.set newValue
+        @_preservedValue = @_preserve newValue
 
         # Check if we should fire @_arr* deps (if oldValue and newValue are arrays)
         # TODO: This fine-grained dependency stuff should be part of a J.ReactiveVar
         # class that J.AutoVar inherits from
         oldArr = null
-        if oldValue instanceof J.List
+        if oldValue instanceof J.List and oldValue.active isnt false
             oldArr = Tracker.nonreactive => oldValue.getValues()
         else if _.isArray oldValue
             oldArr = oldValue
         newArr = null
-        if newValue instanceof J.List
+        if newValue instanceof J.List and newValue.active isnt false
             newArr = Tracker.nonreactive => newValue.getValues()
         else if _.isArray newValue
             newArr = newValue
@@ -103,11 +112,15 @@ class J.AutoVar
                 if oldArr[i] isnt y
                     @_arrIndexOfDeps[i]?.changed()
 
+        if _.isFunction(@onChange) and not @equalsFunc oldValue, newValue
+            # AutoDicts and AutoLists might get stopped before
+            # onChange is called, but as long as they're not stopped
+            # now, it makes sense to let onChange read their
+            # preserved values.
 
-        if _.isFunction @onChange
-             if not @equalsFunc oldValue, newValue
-                Tracker.afterFlush Meteor.bindEnvironment =>
-                    @onChange.call @, oldValue, newValue
+            newPreservedValue = @_preservedValue
+            Tracker.afterFlush Meteor.bindEnvironment =>
+                @onChange.call @, oldPreservedValue, newPreservedValue
 
     _setupValueComp: ->
         @_valueComp?.stop()
@@ -118,6 +131,7 @@ class J.AutoVar
                     @constructor._pending.splice pos, 1
 
                 @_recompute()
+
                 valueComp.onInvalidate =>
                     unless valueComp.stopped
                         if @ not in @constructor._pending
@@ -152,7 +166,7 @@ class J.AutoVar
 
         i = value.indexOf x
 
-        @_arrIndexOfDeps[x] ?= new Deps.Dependency()
+        @_arrIndexOfDeps[x] ?= new Tracker.Dependency()
         @_arrIndexOfDeps[x].depend()
 
         i

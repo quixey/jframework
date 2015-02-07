@@ -154,7 +154,7 @@ J.util =
 
     invalidateAtTime: (ms) ->
         # TODO: ms can be a Date in the future too
-        dep = new Deps.Dependency()
+        dep = new Tracker.Dependency()
         dep.depend()
         Meteor.setTimeout(
             => dep.changed()

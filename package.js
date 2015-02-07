@@ -31,6 +31,7 @@ Package.onUse(function(api) {
         "lib/URI.js",
         "j.coffee",
         "util.coffee",
+        "dependency.coffee",
         "autovar.coffee",
         "dict.coffee",
         "list.coffee",
@@ -52,7 +53,7 @@ Package.onUse(function(api) {
 
 Package.onTest(function(api) {
     api.use([
-        "ordered-dict",
+        "insecure",
         "tinytest",
         "coffeescript",
         "tracker",

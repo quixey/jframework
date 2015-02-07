@@ -17,9 +17,11 @@ class J.Dict
         else
             fields = {}
 
+        @_creatorComp = Tracker.currentComputation
+
         @_fields = {}
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
-        @_keysDep = new Deps.Dependency()
+        @_keysDep = new J.Dependency @_creatorComp
 
         @readOnly = false
 
@@ -69,15 +71,17 @@ class J.Dict
             @equalsFunc
         )
 
+        # FIXME: We really need our own J.ReactiveVar class, instead
+        # of hacking the .dep field of Meteor's ReactiveVar
+        @_fields[key].dep = new J.Dependency @_creatorComp
+
         # This question mark is to avoid overshadowing reserved
         # members like "set".
         @[key] ?= (v) ->
             if arguments.length is 0
                 @forceGet key
             else
-                setter = {}
-                setter[key] = v
-                @set setter
+                @set key, v
 
         @_keysDep.changed()
         if @_hasKeyDeps[key]?
@@ -135,7 +139,7 @@ class J.Dict
     hasKey: (key) ->
         # Reactive
         if Tracker.active
-            @_hasKeyDeps[key] ?= new Deps.Dependency()
+            @_hasKeyDeps[key] ?= new J.Dependency @_creatorComp
             @_hasKeyDeps[key].depend()
 
         key of @_fields
@@ -144,18 +148,21 @@ class J.Dict
         @_replaceKeys newKeys
 
     set: (fields) ->
+        ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
             # Support set(fieldName, value) syntax
             fieldName = fields
             value = arguments[1]
             fields = {}
             fields[fieldName] = value
+            ret = value # This type of setter returns the value too
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} is read-only"
 
         @_forceSet fields
+        ret
 
     setOrAdd: (fields) ->
         ret = undefined
@@ -214,9 +221,11 @@ class J.Dict
         else if J.util.isPlainObject x
             @_deepSetReadOnly(v, readOnly) for k, v of x
 
-        "<<KEY>>#{EJSON.stringify prepare x}"
 
     @diff: (arrA, arrB) ->
+        unless _.all(_.isString(x) for x in arrA) and _.all(_.isString(x) for x in arrB)
+            throw new Meteor.Error "Dict.diff only works on arrays of strings."
+
         setA = J.util.makeDictSet arrA
         setB = J.util.makeDictSet arrB
         added: _.filter arrB, (x) -> x not of setA

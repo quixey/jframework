@@ -786,7 +786,60 @@ Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     test.isTrue 'a' in history
     test.isTrue 'c' in history
 
+Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
+    dep = null
+    c1 = Tracker.autorun ->
+        dep = new J.Dependency()
+        dep.depend()
+        dep.changed()
+    test.isFalse c1.invalidated
+    dep.changed()
+    test.isTrue c1.invalidated
+    c1.stop()
 
+
+Tinytest.add "Dict - don't invalidate creator computation", (test) ->
+    runCount = 0
+    runCount2 = 0
+    d = null
+    d2 = J.Dict()
+    c1 = Tracker.autorun (c) ->
+        # Since this autorun is creating d ,
+        # it won't invalidate when it's the
+        # one mutating d.
+        runCount += 1
+        d ?= J.Dict()
+        d.size()
+        d.setOrAdd 'a', (d.get('a') ? 0) + 1
+        d.hasKey 'b'
+        d.setOrAdd 'b', 4
+        test.isTrue d.hasKey 'b'
+        d.a()
+        test.equal d2.size(), 0
+    c2 = Tracker.autorun ->
+        runCount2 += 1
+        d.get('a')
+    test.equal runCount, 1
+    test.equal runCount2, 1
+    Tracker.flush()
+    test.equal runCount, 1
+    test.equal runCount2, 1
+    d.a 33
+    Tracker.flush()
+    test.equal runCount, 2
+    test.equal runCount2, 2
+    d.b 44
+    Tracker.flush()
+    test.equal runCount, 2
+    test.equal runCount2, 2
+    d.delete 'b'
+    test.isTrue c1.invalidated
+    test.isFalse c2.invalidated
+    Tracker.flush()
+    test.equal runCount, 3
+    test.equal runCount2, 3 # c1 invalidates c2
+    c1.stop()
+    c2.stop()
 
 
 
