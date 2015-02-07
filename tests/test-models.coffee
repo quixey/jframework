@@ -1,12 +1,20 @@
 ###
     Model definitions for tests to use.
-    # FIXME: Use a different test database for these
 ###
 
 J.dm 'Foo', 'foos',
-    _id: $$.string
+    _id:
+        type: $$.string
 
     fields:
-        a: $$.string
-        b: $$.string
-        c: $$.string
+        a:
+            type: $$.string
+        b:
+            type: $$.string
+        c:
+            type: $$.string
+
+    reactives:
+        d:
+            val: ->
+                @a() + @c()

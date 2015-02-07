@@ -286,9 +286,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         @_fields = J.Dict nonIdInitFields
         @_fields.replaceKeys _.keys @modelClass.fieldSpecs
 
-        if @_id? and @modelClass.idSpec is J.PropTypes.key
+        if @_id? and @modelClass.idSpec.type is J.PropTypes.key
             unless @_id is @key()
                 console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{@key()}"
+
+        @reactives = {} # reactiveName: autoVar
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
+                => reactiveSpec.val.call @
+            )
 
         null
 
@@ -311,22 +317,21 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     delete memberSpecs._id
     modelClass.fieldSpecs = memberSpecs.fields
     delete memberSpecs.fields
-    reactiveSpecs = memberSpecs.reactives
+    modelClass.reactiveSpecs = memberSpecs.reactives
     delete memberSpecs.reactives
 
     modelClass.prototype = new J.Model()
     _.extend modelClass.prototype, memberSpecs
     modelClass.prototype.modelClass = modelClass
 
-
-    # Wire up instance methods for getting/setting fields
-
     throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
+    # Set up instance methods for getting/setting fields
     for fieldName, fieldSpec of modelClass.fieldSpecs
-        continue if fieldName is '_id'
+        if fieldName is '_id'
+            throw "_id is not a valid field name for #{modelName}"
 
-        modelClass.prototype[fieldName] ?= do (fieldName) -> (value) ->
+        modelClass.prototype[fieldName] ?= do (fieldName, fieldSpec) -> (value) ->
             if arguments.length is 0
                 # Getter
                 @get fieldName
@@ -335,9 +340,21 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 setter[fieldName] = value
                 @set setter
 
+    # Set up reactives
+    for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+        if reactiveName of modelClass.fieldSpecs
+            throw "#{modelClass}.reactive can't have same name as field: #{reactiveName}"
 
-    # Wire up class methods for collection operations
+        unless reactiveSpec.val?
+            throw "#{modelClass}.reactives.#{reactiveName} missing val function"
 
+        modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
+            @reactives[reactiveName].get()
+
+
+
+
+    # Set up class methods for collection operations
     if collectionName?
         if Meteor.isClient
             # The client has attached instances which power
