@@ -47,8 +47,9 @@ class J.AutoVar
         if Tracker.active then Tracker.onInvalidate => @stop()
 
         @_valueComp = null
-        if @onChange? then Tracker.afterFlush =>
-            if not @_valueComp? then @_setupValueComp()
+        if @onChange? then Tracker.afterFlush Meteor.bindEnvironment =>
+            if not @_valueComp?
+                @_setupValueComp()
 
         @_arrIndexOfDeps = {} # value: dep
 
@@ -64,6 +65,7 @@ class J.AutoVar
 
     _recompute: ->
         oldValue = Tracker.nonreactive => @_deepGet()
+
         rawValue = @valueFunc.call null
         newValue =
             if @wrap and rawValue not in [@constructor._UNDEFINED, @constructor._UNDEFINED_WITHOUT_SET]
@@ -102,22 +104,24 @@ class J.AutoVar
                     @_arrIndexOfDeps[i]?.changed()
 
 
-        unless @equalsFunc oldValue, newValue
-            if _.isFunction @onChange then Tracker.afterFlush =>
-                @onChange.call @, oldValue, newValue
+        if _.isFunction @onChange
+             if not @equalsFunc oldValue, newValue
+                Tracker.afterFlush Meteor.bindEnvironment =>
+                    @onChange.call @, oldValue, newValue
 
     _setupValueComp: ->
         @_valueComp?.stop()
-        @_valueComp = Tracker.nonreactive => Tracker.autorun (valueComp) =>
-            pos = @constructor._pending.indexOf @
-            if pos >= 0
-                @constructor._pending.splice pos, 1
+        @_valueComp = Tracker.nonreactive =>
+            Tracker.autorun Meteor.bindEnvironment (valueComp) =>
+                pos = @constructor._pending.indexOf @
+                if pos >= 0
+                    @constructor._pending.splice pos, 1
 
-            @_recompute()
-            valueComp.onInvalidate =>
-                unless valueComp.stopped
-                    if @ not in @constructor._pending
-                        @constructor._pending.push @
+                @_recompute()
+                valueComp.onInvalidate =>
+                    unless valueComp.stopped
+                        if @ not in @constructor._pending
+                            @constructor._pending.push @
 
     contains: (x) ->
         # Reactive
@@ -155,6 +159,8 @@ class J.AutoVar
 
     set: ->
         throw new Meteor.Error "There is no AutoVar.set"
+
+    setDebug: (@debug) ->
 
     stop: ->
         if @active
