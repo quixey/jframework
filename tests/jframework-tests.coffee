@@ -539,6 +539,7 @@ Tinytest.add "List - getConcat", (test) ->
     test.equal concatted.toArr(), [3, 5, 6, 'x', 'y', 7, 'z']
     test.equal concatted.get(0), 3
     c.stop()
+    Tracker.flush() # Intentionally testing flushing after stopping
     test.throws -> concatted.get 0
 
 Tinytest.add "List - .contains reactivity", (test) ->

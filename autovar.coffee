@@ -103,9 +103,8 @@ class J.AutoVar
 
 
         unless @equalsFunc oldValue, newValue
-            if _.isFunction(@onChange)
-                Tracker.afterFlush =>
-                    @onChange.call @, oldValue, newValue
+            if _.isFunction @onChange then Tracker.afterFlush =>
+                @onChange.call @, oldValue, newValue
 
     _setupValueComp: ->
         @_valueComp?.stop()

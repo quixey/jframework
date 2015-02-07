@@ -21,6 +21,8 @@ class J.AutoDict extends J.Dict
         ###
         @onChange = onChange
 
+        @_pendingNewKeys = null
+
         @_keysVar = J.AutoVar(
             =>
                 newKeys = @keysFunc.apply null
@@ -40,9 +42,27 @@ class J.AutoDict extends J.Dict
                 else
                     throw new Meteor.Error "AutoDict.keysFunc must return an array
                         or null. Got #{newKeys}"
+
+                @_pendingNewKeys = newKeys
+
                 newKeys
+
             (oldKeys, newKeys) =>
-                @_replaceKeys newKeys
+                ###
+                    The naive implementation is @_replaceKeys(newKeys), but this has
+                    two problems:
+                    1. @_keysVar might queue up multiple change events before the flush,
+                       and it's wasteful to @_replaceKeys a bunch of times.
+                    2. Even worse, @get() may have been called on a new key, which
+                       would cause _initField to be called before the flush, and now
+                       we can only trust the last call to this onChange function,
+                       otherwise @_replaceKeys(newKeys) might actually revert the keys
+                       back to an earlier state and kill the field's AutoVar.
+                ###
+                if @_pendingNewKeys?
+                    @_replaceKeys @_pendingNewKeys
+                    @_pendingNewKeys = null
+
             J.util.equals
             false
         )
@@ -52,7 +72,10 @@ class J.AutoDict extends J.Dict
         if Tracker.active then Tracker.onInvalidate => @stop()
 
     _delete: (key) ->
+        oldValue = Tracker.nonreactive => @_fields[key].get()
         @_fields[key].stop()
+        if _.isFunction @onChange then Tracker.afterFlush =>
+            @onChange.call @, key, oldValue, undefined
         super
 
     _get: (key, force) ->
@@ -115,6 +138,8 @@ class J.AutoDict extends J.Dict
 
     set: ->
         throw new Meteor.Error "There is no AutoDict.set; use AutoDict.valueFunc"
+
+    setDebug: (@debug) ->
 
     setOrAdd: ->
         throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"

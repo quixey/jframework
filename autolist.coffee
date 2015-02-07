@@ -48,6 +48,9 @@ class J.AutoList extends J.List
     set: ->
         throw new Meteor.Error "There is no AutoList.set"
 
+    setDebug: (@debug) ->
+        @_dict.setDebug debug
+
     sort: ->
         throw new Meteor.Error "There is no AutoList.sort"
 

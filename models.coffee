@@ -22,6 +22,24 @@
         If this is an attached instance, treat it like a Reactive's get
             whose val is -> @fetchOne(@_id, fields: name: true)
         Otherwise naively return the value, even if it's undefined, like a tryGet.
+
+  *
+    Each field can have a default include: true/false
+
+
+Notes about the difference between reactives and normal functions:
+    * Reactives should be pure functions of the database and the current time
+        * No outside inputs - not the current user's ID or the current UI state
+        * Time is okay because we want to allow stuff like User.latestPosts
+        * That means the only notReadyError should be ultimately propagated
+          from a fetch call somewhere in the AutoVar stack. No not-ready external calls.
+    * When a normal function throws a notReady error, the system knows to fetch
+      any non-ready fetch objects that were instantiated during the partially-run
+      code. When a J.Model Reactive throws a notReady error, the system also
+      knows to @modelClass.fetchOne @_id, fields: reactiveName: true
+      i.e. anticipate all data in that reactive.
+    * Reactives can have include: true, or even include: {name: true, posts: {votes: true}},
+      just like fields.
 ###
 
 
