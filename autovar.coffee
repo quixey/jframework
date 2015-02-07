@@ -74,19 +74,37 @@ class J.AutoVar
         oldPreservedValue = @_preservedValue
         oldValue = Tracker.nonreactive => @_deepGet()
 
-        rawValue = @valueFunc.call null
-        newValue =
-            if @wrap and rawValue not in [@constructor._UNDEFINED, @constructor._UNDEFINED_WITHOUT_SET]
-                J.Dict._deepReactify rawValue
-            else
-                rawValue
+        try
+            rawValue = @valueFunc.call null
+        catch e
+            if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+                # This must be the first time that this var
+                # is being computed, and it's premature because
+                # data is currently being fetched. So we can
+                # return here. We don't have to do @_var.set
+                # or onChange or anything else.
+                J.assert oldValue is undefined
 
-        if newValue is undefined
-            throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
-        else if newValue is @constructor._UNDEFINED_WITHOUT_SET
+                if Tracker.active
+                    return undefined
+                else
+                    throw new Meteor.Error 'fetch-in-progress', "Must be in a
+                        reactive computation to use asynchronously computed
+                        AutoVar value expressions."
+            else
+                throw e
+
+        if rawValue is @constructor._UNDEFINED_WITHOUT_SET
+            # This is used for the AutoVars of AutoDict fields
+            # that are getting deleted synchronously (ahead of
+            # Tracker.flush) because they just realized that
+            # keysFunc doesn't include their key.
             return undefined
-        else if newValue is @constructor._UNDEFINED
-            newValue = undefined
+
+        else if rawValue is undefined
+            throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
+
+        newValue = if @wrap then J.Dict._deepReactify rawValue else rawValue
 
         @_var.set newValue
         @_preservedValue = @_preserve newValue
@@ -201,4 +219,3 @@ class J.AutoVar
     # Internal classes return this in @_valueFunc
     # in order to make .get() return undefined
     @_UNDEFINED_WITHOUT_SET = {'AutoVar':'UNDEFINED_WITHOUT_SET'}
-    @_UNDEFINED = {'AutoVar': 'UNDEFINED'}

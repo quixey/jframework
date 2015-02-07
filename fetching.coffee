@@ -3,6 +3,7 @@ Meteor.startup ->
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
+    FETCH_IN_PROGRESS: {name: "J.fetching.FETCH_IN_PROGRESS"}
     _pendingQsSet: {}
     _waitingQsSet: {}
     _readyQsSet: {} # querySpecString: true
@@ -51,4 +52,5 @@ J.fetching =
             @flushQueries()
 
         @_batchDep.depend()
-        undefined
+
+        throw @FETCH_IN_PROGRESS

@@ -401,7 +401,6 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 instanceArr
 
             fetch: (selector = {}, options = {}) ->
-                options.reactive = false
                 cursor = @find selector, options
 
                 return cursor.fetch() if Meteor.isServer
@@ -416,7 +415,10 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
                 return cursor.fetch() if J.fetching.isQueryReady querySpec
 
-                J.fetching.requestQuerySpec querySpec
+                if Tracker.active
+                    J.fetching.requestQuerySpec querySpec
+                else
+                    undefined
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection

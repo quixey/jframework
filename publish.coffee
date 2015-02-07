@@ -98,6 +98,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
             if diff.added.length or diff.deleted.length
                 session.currentWrite.committed()
+                delete session.currentWrite
     )
 
 
