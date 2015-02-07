@@ -400,6 +400,23 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                         instanceArr.push null
                 instanceArr
 
+            fetch: (selector = {}, options = {}) ->
+                if Meteor.isServer
+                    return @find(selector, options).fetch()
+
+                querySpec =
+                    modelName: modelName
+                    selector: selector
+                    fields: options.fields
+                    sort: options.sort
+                    skip: options.skip
+                    limit: options.limit
+
+                if J.fetching.isQueryReady querySpec
+                    return @find(selector, options).fetch()
+
+                J.fetching.requestQuerySpec querySpec
+
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
             insert: (instance, callback) ->

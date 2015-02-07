@@ -77,8 +77,6 @@ Meteor.publish '_jdata', (dataSessionId) ->
                 log "REMOVED: ", querySpec, id
                 @removed modelClass.collection._name, id
 
-        # TODO: ready
-
 
     mergedSpecStringsVar = J.AutoVar(
         => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
@@ -91,7 +89,6 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
             log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
     )
-    mergedSpecStringsVar.debug = true
 
 
     @onStop =>
@@ -100,3 +97,6 @@ Meteor.publish '_jdata', (dataSessionId) ->
         mergedQuerySpecsVar.stop()
         observerByQuerySpecString.forEach (querySpecString, observer) => observer.stop()
         delete dataSessions[dataSessionId]
+
+
+    @ready()

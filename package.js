@@ -47,6 +47,10 @@ Package.onUse(function(api) {
         "publish.coffee"
     ], "server");
 
+    api.addFiles([
+        "fetching.coffee"
+    ], "client");
+
     api.export("J");
     api.export("$$");
 });
