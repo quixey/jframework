@@ -75,7 +75,7 @@ class J.AutoVar
         oldValue = Tracker.nonreactive => @_deepGet()
 
         try
-            rawValue = @valueFunc.call null
+            rawValue = @valueFunc.call null, @
         catch e
             if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
                 # This must be the first time that this var

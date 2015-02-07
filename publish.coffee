@@ -1,6 +1,7 @@
 ###
     dataSessionId: J.Dict
-        querySpecs: [
+        querySpecSet: {qsString: true}
+        mergedQuerySpecs: [
             {
                 modelName:
                 selector:
@@ -15,23 +16,41 @@
 ###
 dataSessions = {}
 
+
 Meteor.methods
-    _addDataQueries: (dataSessionId, querySpecs) ->
-        console.log 'called _addDataQueries', dataSessionId, querySpecs
+    _updateDataQueries: (dataSessionId, addedQuerySpecs, deletedQuerySpecs) ->
+        log = ->
+            newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
+            console.log.apply console, newArgs
+
+        log '_updateDataQueries',
+            {added: addedQuerySpecs, deleted: deletedQuerySpecs}
 
         session = dataSessions[dataSessionId]
         if not session?
             throw new Meteor.Error "Data session not found: #{JSON.stringify dataSessionId}"
 
-        for querySpec in querySpecs
+        for querySpec in addedQuerySpecs
             unless querySpec.modelName of J.models
                 throw new Meteor.Error "Invalid modelName in querySpec:
                     #{J.util.toString querySpec}"
 
-        session.querySpecs().extend querySpecs
+        actualAdded = []
+        actualDeleted = []
+        for querySpec in deletedQuerySpecs
+            qsString = EJSON.stringify querySpec
+            if session.querySpecSet().hasKey(qsString)
+                actualDeleted.push querySpec
+                session.querySpecSet().delete qsString
+        for querySpec in addedQuerySpecs
+            qsString = EJSON.stringify querySpec
+            unless session.querySpecSet().hasKey(qsString)
+                actualAdded.push qsString
+                session.querySpecSet().setOrAdd qsString, true
 
-        J.assert not session.currentWrite?
-        session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
+        if actualAdded.length or actualDeleted.length
+            J.assert not session.currentWrite?
+            session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
@@ -43,15 +62,16 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     check dataSessionId, String
     session = dataSessions[dataSessionId] = J.Dict
-        querySpecs: J.List()
+        querySpecSet: J.Dict() # qsString: true
         mergedQuerySpecs: undefined
 
     mergedQuerySpecsVar = session.mergedQuerySpecs J.AutoVar(
         =>
             log "Recalc mergedQuerySpecsVar"
             mergedQuerySpecs = J.List()
-            session.querySpecs().forEach (rawQuerySpec) ->
+            session.querySpecSet().forEach (rawQsString) ->
                 # TODO: Fancier merge stuff
+                rawQuerySpec = EJSON.parse rawQsString
                 mergedQuerySpecs.push rawQuerySpec
             mergedQuerySpecs
     )
@@ -73,13 +93,13 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                log "ADDED: ", querySpec, id, fields
+                log "ADDED:", querySpec, id, fields
                 @added modelClass.collection._name, id, fields
             changed: (id, fields) =>
-                log "CHANGED: ", querySpec, id
+                log "CHANGED:", querySpec, id
                 @changed modelClass.collection._name, id, fields
             removed: (id) =>
-                log "REMOVED: ", querySpec, id
+                log "REMOVED:", querySpec, id
                 @removed modelClass.collection._name, id
 
         observer

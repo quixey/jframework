@@ -401,9 +401,8 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 instanceArr
 
             fetch: (selector = {}, options = {}) ->
-                cursor = @find selector, options
-
-                return cursor.fetch() if Meteor.isServer
+                if Meteor.isServer
+                    return @find(selector, options).fetch()
 
                 querySpec =
                     modelName: modelName
@@ -413,12 +412,22 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                     skip: options.skip
                     limit: options.limit
 
-                return cursor.fetch() if J.fetching.isQueryReady querySpec
+                J.fetching.requestQuery querySpec
 
-                if Tracker.active
-                    J.fetching.requestQuerySpec querySpec
-                else
+            fetchOne: (selector = {}, options = {}) ->
+                options = _.clone options
+                options.limit = 1
+                results = @fetch selector, options
+                if results is undefined
                     undefined
+                else if results.length is 0
+                    # Note that a normal Mongo cursor would
+                    # return undefined, but for us null means
+                    # "definitely doesn't exist" while undefined
+                    # means "fetching in progress".
+                    null
+                else
+                    results[0]
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
