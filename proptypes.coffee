@@ -27,3 +27,13 @@ J.PropTypes =
     # the model's key() instance function computed it
     # from other fields at db-insert time.
     key: {}
+
+    number: {}
+
+    object: {}
+
+    string: {}
+
+
+for propTypeName, propTypeFunc of J.PropTypes
+    $$[propTypeName] = propTypeFunc

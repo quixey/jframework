@@ -37,9 +37,9 @@ Package.onUse(function(api) {
         "list.coffee",
         "autodict.coffee",
         "autolist.coffee",
+        "components.coffee",
         "proptypes.coffee",
         "models.coffee",
-        "components.coffee",
         "routing.coffee"
     ]);
 

@@ -4,7 +4,9 @@
 ###
 
 J.dm 'Foo', 'foos',
-    _id: null
-    a: null
-    b: null
-    c: null
+    _id: $$.string
+
+    fields:
+        a: $$.string
+        b: $$.string
+        c: $$.string

@@ -8,7 +8,12 @@ Meteor.startup ->
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
-    FETCH_IN_PROGRESS: {name: "J.fetching.FETCH_IN_PROGRESS"}
+    FETCH_IN_PROGRESS: {
+        name: "J.fetching.FETCH_IN_PROGRESS"
+        message: "This object is thrown to get out of AutoVar
+            valueFuncs and wait for fetch operations. It will
+            crash if run in a normal Tracker.autorun."
+    }
 
     # Latest client-side state and whether it's changed since we
     # last called the server's update method
@@ -95,19 +100,13 @@ J.fetching =
                 Tracker.afterFlush =>
                     @remergeQueries()
 
-        else
-            console.warn "Because you called J.fetching.requestQuery outside
-                of a reactive computation, we'll have no way to track when
-                its data stream is no longer needed."
-
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
             options = {}
             for optionName in ['fields', 'sort', 'skip', 'limit']
                 if querySpec[optionName]? then options[optionName] = querySpec[optionName]
             return modelClass.find(querySpec.selector, options).fetch()
-
-        if not Tracker.active
+        else if not Tracker.active
             return undefined
 
         @_batchDep.depend()

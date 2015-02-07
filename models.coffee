@@ -198,7 +198,7 @@ class J.Model
 
         doc = toPrimitiveEjsonObj @_fields.toObj()
 
-        if denormalize and @modelClass.fieldSpecs._id is J.PropTypes.key
+        if denormalize and @modelClass.idSpec is J.PropTypes.key
             key = @key()
             J.assert not @_id? or @_id is key
             doc._id = key
@@ -250,16 +250,15 @@ J.m = J.models = {}
 # must be defined before all components.
 modelDefinitionQueue = []
 
-J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
+J.dm = J.defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelDefinitionQueue.push
         modelName: modelName
         collectionName: collectionName
-        fieldSpecs: fieldSpecs
         members: members,
         staticMembers: staticMembers
 
 
-J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
+J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelConstructor = (initFields = {}, @collection = @modelClass.collection) ->
         @_id = initFields._id ? null
 
@@ -284,14 +283,12 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
-        nonIdFieldSpecs = _.clone fieldSpecs
-        delete nonIdFieldSpecs._id
         @_fields = J.Dict nonIdInitFields
-        @_fields.replaceKeys _.keys nonIdFieldSpecs
+        @_fields.replaceKeys _.keys @modelClass.fieldSpecs
 
-        if @_id? and @modelClass.fieldSpecs._id is J.PropTypes.key
+        if @_id? and @modelClass.idSpec is J.PropTypes.key
             unless @_id is @key()
-                console.warn "#{@modelName}._id is #{@_id} but key() is #{@key()}"
+                console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{@key()}"
 
         null
 
@@ -308,18 +305,25 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
     _.extend modelClass, J.Model
     _.extend modelClass, staticMembers
     modelClass.collection = null
-    modelClass.fieldSpecs = fieldSpecs
+
+    memberSpecs = _.clone members
+    modelClass.idSpec = memberSpecs._id
+    delete memberSpecs._id
+    modelClass.fieldSpecs = memberSpecs.fields
+    delete memberSpecs.fields
+    reactiveSpecs = memberSpecs.reactives
+    delete memberSpecs.reactives
 
     modelClass.prototype = new J.Model()
-    _.extend modelClass.prototype, members
+    _.extend modelClass.prototype, memberSpecs
     modelClass.prototype.modelClass = modelClass
 
 
     # Wire up instance methods for getting/setting fields
 
-    throw new Meteor.Error "#{modelName} fieldSpecs missing _id" unless '_id' of fieldSpecs
+    throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
-    for fieldName, fieldSpec of fieldSpecs
+    for fieldName, fieldSpec of modelClass.fieldSpecs
         continue if fieldName is '_id'
 
         modelClass.prototype[fieldName] ?= do (fieldName) -> (value) ->
@@ -448,6 +452,6 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
 Meteor.startup ->
     for modelDef in modelDefinitionQueue
-        J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.fieldSpecs, modelDef.members, modelDef.staticMembers
+        J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.members, modelDef.staticMembers
 
     modelDefinitionQueue = null
