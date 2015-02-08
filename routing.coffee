@@ -56,12 +56,6 @@ if Meteor.isClient
             ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
                 React.render $$(Handler), document.body
 
-            Tracker.autorun (c) ->
-                if J.subscriptions.init.ready()
-                    c.stop()
-                    Tracker.nonreactive =>
-                        ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-                            React.render $$(Handler), document.body
 
         else
             console.warn "No router defined. Call J.defineRouter to define a router."

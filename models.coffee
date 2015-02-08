@@ -286,7 +286,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         @_fields = J.Dict nonIdInitFields
         @_fields.replaceKeys _.keys @modelClass.fieldSpecs
 
-        if @_id? and @modelClass.idSpec.type is J.PropTypes.key
+        if @_id? and @modelClass.idSpec is J.PropTypes.key
             unless @_id is @key()
                 console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{@key()}"
 
@@ -295,6 +295,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 => reactiveSpec.val.call @
             )
+            @reactives[reactiveName].tag = "#{modelName}.reactives.#{reactiveName}"
 
         null
 

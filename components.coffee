@@ -199,6 +199,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 )
                 reactiveSpec.same?.bind(@) ? J.util.equals
             )
+            @reactives[reactiveName].tag = "#{@toString()}.#{reactiveName}"
 
         # Set up @state
         initialState = {}
@@ -357,7 +358,18 @@ J._defineComponent = (componentName, componentSpec) ->
                 console.log _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
                 _debugDepth += 1
 
-            renderedComponent = componentSpec.render.apply @
+            try
+                renderedComponent = componentSpec.render.apply @
+            catch e
+                if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+                    renderedComponent = $$ ('div'),
+                        style:
+                            background: "#FDD"
+                            padding: 50
+                            fontWeight: 'bold'
+                        ("#{@toString()} Loading...")
+                else
+                    throw e
 
             if componentDebug
                 _debugDepth -= 1

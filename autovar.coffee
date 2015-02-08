@@ -27,6 +27,8 @@ class J.AutoVar
                 AutoVar becomes non-lazy.
         ###
 
+        @_bindEnvironment = if Meteor.isServer then Meteor.bindEnvironment else _.identity
+
         unless @ instanceof J.AutoVar
             return new J.AutoVar valueFunc, onChange, equalsFunc, wrap
 
@@ -43,12 +45,13 @@ class J.AutoVar
 
         @_var = new ReactiveVar undefined, @equalsFunc
         @_preservedValue = undefined
+        @_getting = false
 
         @active = true
         if Tracker.active then Tracker.onInvalidate => @stop()
 
         @_valueComp = null
-        if @onChange? then Tracker.afterFlush Meteor.bindEnvironment =>
+        if @onChange? then Tracker.afterFlush @_bindEnvironment =>
             if not @_valueComp?
                 @_setupValueComp()
 
@@ -85,12 +88,19 @@ class J.AutoVar
                 # or onChange or anything else.
                 J.assert oldValue is undefined
 
-                if Tracker.active
-                    return undefined
+                if @_getting is false
+                    # @_valueComp is recomputing this during
+                    # an asynchronous Tracker.flush
+                    throw e
+                else if @_getting?
+                    # An outside reactive computation wants this
+                    # synchronously
+                    throw e
                 else
-                    throw new Meteor.Error 'fetch-in-progress', "Must be in a
-                        reactive computation to use asynchronously computed
-                        AutoVar value expressions."
+                    # An outside non-reactive computation wants
+                    # this synchronously
+                    return undefined
+
             else
                 throw e
 
@@ -137,13 +147,13 @@ class J.AutoVar
             # preserved values.
 
             newPreservedValue = @_preservedValue
-            Tracker.afterFlush Meteor.bindEnvironment =>
+            Tracker.afterFlush @_bindEnvironment =>
                 @onChange.call @, oldPreservedValue, newPreservedValue
 
     _setupValueComp: ->
         @_valueComp?.stop()
         @_valueComp = Tracker.nonreactive =>
-            Tracker.autorun Meteor.bindEnvironment (valueComp) =>
+            Tracker.autorun @_bindEnvironment (valueComp) =>
                 pos = @constructor._pending.indexOf @
                 if pos >= 0
                     @constructor._pending.splice pos, 1
@@ -165,10 +175,12 @@ class J.AutoVar
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
+        @_getting = Tracker.currentComputation
         if @_valueComp?
             @constructor.flush()
         else
             @_setupValueComp()
+        @_getting = false
 
         @_deepGet()
 
