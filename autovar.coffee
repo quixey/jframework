@@ -74,7 +74,6 @@ class J.AutoVar
             v
 
     _recompute: ->
-        console.log 'Recompute ', @tag
         oldPreservedValue = @_preservedValue
         oldValue = Tracker.nonreactive => @_deepGet()
 
@@ -142,7 +141,11 @@ class J.AutoVar
 
             newPreservedValue = @_preservedValue
             Tracker.afterFlush @_bindEnvironment =>
-                @onChange.call @, oldPreservedValue, newPreservedValue
+                if @active
+                    # Only call onChange if we're still active, even though
+                    # there may be multiple onChange calls queued up from when
+                    # we were still active.
+                    @onChange.call @, oldPreservedValue, newPreservedValue
 
     _setupValueComp: ->
         @_valueComp?.stop()
@@ -164,7 +167,6 @@ class J.AutoVar
             @_getting = false
 
             valueComp.onInvalidate =>
-                console.log "#{@tag} invalidated"
                 unless valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
@@ -193,7 +195,6 @@ class J.AutoVar
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
-        console.log "#{@tag}.get()", @_valueComp?._id, @constructor._pending
         @_getting = true
         if @_valueComp?
             @constructor.flush()

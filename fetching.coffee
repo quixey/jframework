@@ -47,7 +47,7 @@ J.fetching =
         newMergedQuerySpecs = @getMerged newRequestedQuerySpecs
         newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
 
-        mergedQsStringDiff = J.Dict.diff _.keys(@_mergedQsSet), newMergedQsStrings
+        mergedQsStringDiff = J.Dict.diff _.keys(@_waitingQsSet).concat(_.keys @_mergedQsSet), newMergedQsStrings
         return unless mergedQsStringDiff.added.length or mergedQsStringDiff.deleted.length
 
         for addedQsString in mergedQsStringDiff.added
@@ -58,7 +58,20 @@ J.fetching =
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.deleted)
 
-        console.log '_updateDataQueries', @SESSION_ID, addedQuerySpecs, deletedQuerySpecs
+        debug = true
+        if debug
+            consolify = (querySpec) ->
+                obj = _.clone querySpec
+                for x in ['selector', 'fields', 'sort']
+                    if x of obj then obj[x] = J.util.stringify obj[x]
+                obj
+            if addedQuerySpecs.length
+                console.log @SESSION_ID, "add"
+                console.log "    ", consolify(qs) for qs in addedQuerySpecs
+            if deletedQuerySpecs.length
+                console.log @SESSION_ID, "delete"
+                console.log "    ", consolify(qs) for qs in deletedQuerySpecs
+
         Meteor.call '_updateDataQueries',
             @SESSION_ID,
             addedQuerySpecs,
@@ -77,7 +90,6 @@ J.fetching =
                     delete @_waitingQsSet[qsString]
 
                 computation = Tracker.currentComputation
-                console.log "BatchDep's dependents: ", @_batchDep._dep._dependentsById
                 @_batchDep.changed()
 
 
@@ -94,7 +106,6 @@ J.fetching =
             # console.log 'computation ', computation._id, 'requests a query'
             computation.onInvalidate =>
                 # console.log 'computation ', computation._id, 'cancels a query', computation.stopped
-                return # FIXME
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]
@@ -113,17 +124,9 @@ J.fetching =
             return undefined
 
         @_batchDep.depend()
-        console.log "#{Tracker.currentComputation.tag} being a dependent of @_batchDep"
-        Tracker.currentComputation.onInvalidate (c) =>
-            console.log "INVALIDATED", c.tag
 
         @_requestsChanged = true
         Tracker.afterFlush =>
             @remergeQueries()
 
         throw @FETCH_IN_PROGRESS
-
-f = Tracker.flush
-Tracker.flush = ->
-    console.log 'FLUSH'
-    f()

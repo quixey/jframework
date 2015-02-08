@@ -2,9 +2,9 @@ _.extend J,
     assert: (boolValue, errorMessage) ->
         unless boolValue
             if errorMessage
-                throw "Assertion failed: #{errorMessage}"
+                throw new Meteor.Error "Assertion failed: #{errorMessage}"
             else
-                throw "Assertion failed."
+                throw new Meteor.Error "Assertion failed."
 
 J.util =
     compare: (a, b) ->

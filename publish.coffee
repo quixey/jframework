@@ -1,3 +1,5 @@
+Future = Npm.require 'fibers/future'
+
 ###
     dataSessionId: J.Dict
         querySpecSet: {qsString: true}
@@ -24,7 +26,7 @@ Meteor.methods
             console.log.apply console, newArgs
 
         log '_updateDataQueries',
-            {added: addedQuerySpecs, deleted: deletedQuerySpecs}
+            J.util.stringify {added: addedQuerySpecs, deleted: deletedQuerySpecs}
 
         session = dataSessions[dataSessionId]
         if not session?
@@ -49,8 +51,15 @@ Meteor.methods
                 session.querySpecSet().setOrAdd qsString, true
 
         if actualAdded.length or actualDeleted.length
-            J.assert not session.currentWrite?
-            session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
+            session.currentQuery = new Future()
+            session.currentQuery.wait()
+            # This is the point of the DDP write fence. The problem is that
+            # Meteor's write fence only blocks this method from returning.
+            # It still unblocks in the sense that other methods can start
+            # running, and that's a problem for a data query.
+            # session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
+
+        log '..._updateDataQueries done'
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
@@ -152,6 +161,9 @@ Meteor.publish '_jdata', (dataSessionId) ->
     mergedSpecStringsVar = J.AutoVar(
         => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
         (oldSpecStrings, newSpecStrings) =>
+            console.log 'mergedSpec changed:'
+            console.log "      #{J.util.stringify oldSpecStrings}"
+            console.log "      #{J.util.stringify newSpecStrings}"
             diff = J.Dict.diff oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
             for qsString in diff.added
                 observerByQsString.setOrAdd qsString, makeObserver EJSON.parse qsString
@@ -189,8 +201,9 @@ Meteor.publish '_jdata', (dataSessionId) ->
             log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
 
             if diff.added.length or diff.deleted.length
-                session.currentWrite.committed()
-                delete session.currentWrite
+                session.currentQuery.return()
+                # session.currentWrite.committed()
+                # delete session.currentWrite
     )
 
 
