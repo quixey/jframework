@@ -23,7 +23,7 @@ _popDebugFlag = ->
 
 _debugDepth = 0
 _getDebugPrefix = (component = null, tabWidth = 4) ->
-    numSpaces = Math.max 0, tabWidth * _debugDepth - 1
+    numSpaces = Math.max 0, tabWidth * (_debugDepth + 1) - 1
     "#{(' 'for i in [0...numSpaces]).join('')}#{if component? and _debugDepth is 0 then component.toString() else ''}"
 
 
@@ -75,7 +75,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 ret = @state[stateFieldName].get()
 
                 if componentDebug
-                    console.log _getDebugPrefix(@), "#{stateFieldName}()", ret
+                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", ret
                 _popDebugFlag()
 
                 ret
@@ -106,7 +106,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
                 if newPath isnt URI().resource()
                     # TODO: Block the re-rendering here; it's completely unnecessary.
-                    # console.log 'PUSH', newPath
+                    # console.debug 'PUSH', newPath
                     ReactRouter.HistoryLocation.push newPath
 
         origOnChange = reactiveSpecByName.route.onChange
@@ -165,7 +165,7 @@ J._defineComponent = (componentName, componentSpec) ->
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
                 ret = @_props[propName].get()
-                if componentDebug then console.log _getDebugPrefix(@), "prop.#{propName}()", ret
+                if componentDebug then console.debug _getDebugPrefix(@), "prop.#{propName}()", ret
                 _popDebugFlag()
                 ret
 
@@ -176,24 +176,25 @@ J._defineComponent = (componentName, componentSpec) ->
                 =>
                     _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                     if componentDebug
-                        console.log _getDebugPrefix(@), "!#{reactiveName}()"
+                        console.debug _getDebugPrefix(@), "!#{reactiveName}()"
                         _debugDepth += 1
 
-                    ret = reactiveSpec.val.call @
-
-                    if componentDebug
-                        console.log _getDebugPrefix(), ret
-                        _debugDepth -= 1
-                    _popDebugFlag()
+                    try
+                        ret = reactiveSpec.val.call @
+                    finally
+                        if componentDebug
+                            console.debug _getDebugPrefix(), ret
+                            _debugDepth -= 1
+                        _popDebugFlag()
 
                     ret
                 (
                     if reactiveSpec.onChange? then (oldValue, newValue) =>
                         J.assert not Tracker.active
                         if componentDebug
-                            console.log "#{@toString()}.#{reactiveName}.onChange!"
-                            console.log "    old:", oldValue
-                            console.log "    new:", newValue
+                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
                         reactiveSpec.onChange.call @, oldValue, newValue
                     else null
                 )
@@ -216,13 +217,13 @@ J._defineComponent = (componentName, componentSpec) ->
                     # TODO: If the type is J.$function then use the other if-branch
                     _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                     if componentDebug
-                        console.log _getDebugPrefix(@), "#{stateFieldName} !default()"
+                        console.debug _getDebugPrefix(@), "#{stateFieldName} !default()"
                         _debugDepth += 1
 
                     ret = stateFieldSpec.default.apply @
 
                     if componentDebug
-                        console.log _getDebugPrefix(), ret
+                        console.debug _getDebugPrefix(), ret
                         _debugDepth -= 1
                     _popDebugFlag()
 
@@ -269,7 +270,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
             unless equalsFunc oldValue, newValue
                 if propSpec.onChange?
-                    if componentDebug then console.log _getDebugPrefix(@), "props.#{propName}.onChange!", oldValue, newValue
+                    if componentDebug then console.debug _getDebugPrefix(@), "props.#{propName}.onChange!", oldValue, newValue
                     propSpec.onChange.call @, oldValue, newValue
 
 
@@ -355,7 +356,7 @@ J._defineComponent = (componentName, componentSpec) ->
         @_renderComp = Tracker.autorun (c) =>
             _pushDebugFlag componentSpec.debug
             if componentDebug
-                console.log _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
+                console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"
                 _debugDepth += 1
 
             try
@@ -370,10 +371,10 @@ J._defineComponent = (componentName, componentSpec) ->
                         ("#{@toString()} Loading...")
                 else
                     throw e
-
-            if componentDebug
-                _debugDepth -= 1
-            _popDebugFlag()
+            finally
+                if componentDebug
+                    _debugDepth -= 1
+                _popDebugFlag()
 
         @_renderComp.onInvalidate (c) =>
             return if c.stopped

@@ -55,6 +55,21 @@ J.util =
     containsId: (objOrIdArr, objOrId) ->
         J.util.flattenId(objOrId) in J.util.flattenIds objOrIdArr
 
+    consolify: (x) ->
+        # Copy of an object that looks nicer in the console
+        if x instanceof J.Dict
+            if x instanceof J.AutoDict and not x.active
+                x
+            else
+                _.extend {_: x.constructor.name}, x.toObj()
+        else if x instanceof J.List
+            if x instanceof J.AutoList and not x.active
+                x
+            else
+                [x.constructor.name].concat x.toArr()
+        else
+            x
+
     equals: (a, b) ->
         # Go one level deep into arrays because some reactive expressions
         # seem to make good use of this.

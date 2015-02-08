@@ -2,6 +2,9 @@
 # so {a: 5, b: 6} and {b: 6, a: 5} look like different
 # querySpecs. More generally, we need a querySpec consolidation.
 
+# FIXME: Should probably track the sequence of the data-requirement
+# updates so the server can put them in order if they arrive out of order.
+
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
@@ -47,7 +50,10 @@ J.fetching =
         newMergedQuerySpecs = @getMerged newRequestedQuerySpecs
         newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
 
-        mergedQsStringDiff = J.Dict.diff _.keys(@_waitingQsSet).concat(_.keys @_mergedQsSet), newMergedQsStrings
+        oldQsStringsSet = {}
+        oldQsStringsSet[qsString] = true for qsString of @_waitingQsSet
+        oldQsStringsSet[qsString] = true for qsString of @_mergedQsSet
+        mergedQsStringDiff = J.Dict.diff _.keys(oldQsStringsSet), newMergedQsStrings
         return unless mergedQsStringDiff.added.length or mergedQsStringDiff.deleted.length
 
         for addedQsString in mergedQsStringDiff.added
@@ -58,7 +64,7 @@ J.fetching =
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.deleted)
 
-        debug = true
+        debug = false
         if debug
             consolify = (querySpec) ->
                 obj = _.clone querySpec
@@ -66,10 +72,10 @@ J.fetching =
                     if x of obj then obj[x] = J.util.stringify obj[x]
                 obj
             if addedQuerySpecs.length
-                console.log @SESSION_ID, "add"
+                console.log @SESSION_ID, "add", (if deletedQuerySpecs.length then '-' else '')
                 console.log "    ", consolify(qs) for qs in addedQuerySpecs
             if deletedQuerySpecs.length
-                console.log @SESSION_ID, "delete"
+                console.log @SESSION_ID, (if addedQuerySpecs.length then '-' else ''), "delete"
                 console.log "    ", consolify(qs) for qs in deletedQuerySpecs
 
         Meteor.call '_updateDataQueries',
