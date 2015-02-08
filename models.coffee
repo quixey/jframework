@@ -295,7 +295,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
                 => reactiveSpec.val.call @
             )
-            @reactives[reactiveName].tag = "#{modelName}.reactives.#{reactiveName}"
+            @reactives[reactiveName].tag = "<#{modelName} ##{@_id}>.!#{reactiveName}"
 
         null
 
@@ -435,6 +435,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     limit: options.limit
 
                 J.fetching.requestQuery querySpec
+
+            tryFetch: (selector = {}, options = {}) ->
+                try
+                    @fetch selector, options
+                catch e
+                    if e is J.fetching.FETCH_IN_PROGRESS
+                        undefined
+                    else
+                        throw e
 
             fetchOne: (selector = {}, options = {}) ->
                 options = _.clone options

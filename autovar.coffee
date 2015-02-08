@@ -74,6 +74,7 @@ class J.AutoVar
             v
 
     _recompute: ->
+        console.log 'Recompute ', @tag
         oldPreservedValue = @_preservedValue
         oldValue = Tracker.nonreactive => @_deepGet()
 
@@ -86,23 +87,16 @@ class J.AutoVar
                 # data is currently being fetched. So we can
                 # return here. We don't have to do @_var.set
                 # or onChange or anything else.
-                J.assert oldValue is undefined
+                J.assert oldValue is undefined, "FIXME: Actually this can happen, but we need to handle setting back to undefined."
 
-                if @_getting is false
-                    # @_valueComp is recomputing this during
-                    # an asynchronous Tracker.flush
-                    throw e
-                else if @_getting?
-                    # An outside reactive computation wants this
-                    # synchronously
+                if @_getting
+                    # This will be caught by a top-level AutoRun like @_setupValueComp
+                    # or a component's render function.
                     throw e
                 else
-                    # An outside non-reactive computation wants
-                    # this synchronously
                     return undefined
 
-            else
-                throw e
+            else throw e
 
         if rawValue is @constructor._UNDEFINED_WITHOUT_SET
             # This is used for the AutoVars of AutoDict fields
@@ -152,18 +146,42 @@ class J.AutoVar
 
     _setupValueComp: ->
         @_valueComp?.stop()
-        @_valueComp = Tracker.nonreactive =>
-            Tracker.autorun @_bindEnvironment (valueComp) =>
-                pos = @constructor._pending.indexOf @
-                if pos >= 0
-                    @constructor._pending.splice pos, 1
+        lastValueResult = undefined
+        @_valueComp = Tracker.nonreactive => Tracker.autorun @_bindEnvironment (valueComp) =>
+            valueComp.tag = "AutoVar #{@tag}"
 
-                @_recompute()
+            pos = @constructor._pending.indexOf @
+            if pos >= 0
+                @constructor._pending.splice pos, 1
 
-                valueComp.onInvalidate =>
-                    unless valueComp.stopped
-                        if @ not in @constructor._pending
-                            @constructor._pending.push @
+            try
+                lastValueResult = @_recompute()
+            catch e
+                if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+                    lastValueResult = e
+                else throw e
+
+            @_getting = false
+
+            valueComp.onInvalidate =>
+                console.log "#{@tag} invalidated"
+                unless valueComp.stopped
+                    if @ not in @constructor._pending
+                        @constructor._pending.push @
+
+            if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
+                if valueComp.firstRun
+                    # Meteor stops computations that error on
+                    # their first run, so don't throw an error
+                    # here.
+                else throw e
+
+        if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
+            # Now throw that error, after Meteor is done
+            # setting up the first run.
+            if Tracker.active
+                throw J.fetching.FETCH_IN_PROGRESS
+
 
     contains: (x) ->
         # Reactive
@@ -175,12 +193,19 @@ class J.AutoVar
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
-        @_getting = Tracker.currentComputation
+        console.log "#{@tag}.get()", @_valueComp?._id, @constructor._pending
+        @_getting = true
         if @_valueComp?
             @constructor.flush()
         else
-            @_setupValueComp()
-        @_getting = false
+            try
+                @_setupValueComp()
+            catch e
+                if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+                    # Call this just to set up the dependency
+                    # between @ and the caller.
+                    @_deepGet()
+                throw e
 
         @_deepGet()
 

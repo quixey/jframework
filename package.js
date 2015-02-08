@@ -17,6 +17,7 @@ Package.onUse(function(api) {
     ]);
 
     api.imply([
+        "reactive-var",
         "underscore",
         "quixey:react"
     ]);

@@ -49,13 +49,14 @@ if Meteor.isClient
 
     Meteor.startup ->
         Meteor.subscribe 'init'
+        Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
+            console.log 'jdata ready', arguments
 
-        if J._routeGenerator?
-            rootRoute = J._routeGenerator()
+            if J._routeGenerator?
+                rootRoute = J._routeGenerator()
 
-            ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-                React.render $$(Handler), document.body
+                ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
+                    React.render $$(Handler), document.body
 
-
-        else
-            console.warn "No router defined. Call J.defineRouter to define a router."
+            else
+                console.warn "No router defined. Call J.defineRouter to define a router."

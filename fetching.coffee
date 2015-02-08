@@ -3,14 +3,11 @@
 # querySpecs. More generally, we need a querySpec consolidation.
 
 
-Meteor.startup ->
-    Meteor.subscribe '_jdata', J.fetching.SESSION_ID
-
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
     FETCH_IN_PROGRESS: {
         name: "J.fetching.FETCH_IN_PROGRESS"
-        message: "This object is thrown to get out of AutoVar
+        message: "This error is thrown to get out of AutoVar
             valueFuncs and wait for fetch operations. It will
             crash if run in a normal Tracker.autorun."
     }
@@ -61,6 +58,7 @@ J.fetching =
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.deleted)
 
+        console.log '_updateDataQueries', @SESSION_ID, addedQuerySpecs, deletedQuerySpecs
         Meteor.call '_updateDataQueries',
             @SESSION_ID,
             addedQuerySpecs,
@@ -78,6 +76,8 @@ J.fetching =
                 for addedQsString in mergedQsStringDiff.added
                     delete @_waitingQsSet[qsString]
 
+                computation = Tracker.currentComputation
+                console.log "BatchDep's dependents: ", @_batchDep._dep._dependentsById
                 @_batchDep.changed()
 
 
@@ -91,7 +91,10 @@ J.fetching =
             computation = Tracker.currentComputation
             @_requestersByQs[qsString] ?= {}
             @_requestersByQs[qsString][computation._id] = true
+            # console.log 'computation ', computation._id, 'requests a query'
             computation.onInvalidate =>
+                # console.log 'computation ', computation._id, 'cancels a query', computation.stopped
+                return # FIXME
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]
@@ -110,9 +113,17 @@ J.fetching =
             return undefined
 
         @_batchDep.depend()
+        console.log "#{Tracker.currentComputation.tag} being a dependent of @_batchDep"
+        Tracker.currentComputation.onInvalidate (c) =>
+            console.log "INVALIDATED", c.tag
 
         @_requestsChanged = true
         Tracker.afterFlush =>
             @remergeQueries()
 
         throw @FETCH_IN_PROGRESS
+
+f = Tracker.flush
+Tracker.flush = ->
+    console.log 'FLUSH'
+    f()
