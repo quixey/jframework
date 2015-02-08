@@ -51,7 +51,7 @@ class J.AutoVar
         if Tracker.active then Tracker.onInvalidate => @stop()
 
         @_valueComp = null
-        if @onChange? then Tracker.afterFlush @_bindEnvironment =>
+        if @onChange then Tracker.afterFlush @_bindEnvironment =>
             if not @_valueComp?
                 @_setupValueComp()
 
@@ -150,8 +150,13 @@ class J.AutoVar
     _setupValueComp: ->
         @_valueComp?.stop()
         lastValueResult = undefined
-        @_valueComp = Tracker.nonreactive => Tracker.autorun @_bindEnvironment (valueComp) =>
-            valueComp.tag = "AutoVar #{@tag}"
+        Tracker.nonreactive => Tracker.autorun @_bindEnvironment (c) =>
+            if c.firstRun
+                # Important to do this here in case @stop() is called during the
+                # first run of the computation.
+                @_valueComp = c
+
+            @_valueComp.tag = "AutoVar #{@tag}"
 
             pos = @constructor._pending.indexOf @
             if pos >= 0
@@ -166,13 +171,13 @@ class J.AutoVar
 
             @_getting = false
 
-            valueComp.onInvalidate =>
-                unless valueComp.stopped
+            @_valueComp.onInvalidate =>
+                unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
 
             if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
-                if valueComp.firstRun
+                if @_valueComp.firstRun
                     # Meteor stops computations that error on
                     # their first run, so don't throw an error
                     # here.

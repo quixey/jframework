@@ -50,8 +50,6 @@ if Meteor.isClient
     Meteor.startup ->
         Meteor.subscribe 'init'
         Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
-            console.log 'jdata ready', arguments
-
             if J._routeGenerator?
                 rootRoute = J._routeGenerator()
 

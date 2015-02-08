@@ -47,10 +47,32 @@ addTest "Fetching - Don't call AutoVar.onChange until data is ready", (test, onC
             if completeCount is 2 then onComplete()
     )
 
-
 addTest "Fetching - unsubscribe from data when no computation needs it anymore", (test, onComplete) ->
-    onComplete()
-
+    a = J.AutoVar(
+        ->
+            $$.Foo.fetch()
+            test.isTrue $$.Foo.findOne()?
+            b = J.AutoVar(
+                ->
+                    $$.Foo.fetch()
+                    test.isTrue $$.Foo.findOne()?
+                    b.stop()
+                    Tracker.afterFlush ->
+                        test.isTrue $$.Foo.findOne()?
+                        a.stop()
+                        Tracker.afterFlush ->
+                            setTimeout(
+                                ->
+                                    test.isFalse $$.Foo.findOne()?
+                                    onComplete()
+                                3000
+                            )
+                    null
+                true
+            )
+            null
+        true
+    )
 
 
 addTest "Fetching - detect inserted instance", (test, onComplete) ->

@@ -786,6 +786,18 @@ Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     test.isTrue 'a' in history
     test.isTrue 'c' in history
 
+
+Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
+    a = J.AutoVar(
+        -> a.stop() ? null
+        true
+    )
+    Tracker.flush()
+    test.isFalse a.active
+    test.isTrue a._valueComp.stopped
+
+
+
 Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
     dep = null
     c1 = Tracker.autorun ->
