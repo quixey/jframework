@@ -169,8 +169,6 @@ class J.AutoVar
                     lastValueResult = e
                 else throw e
 
-            @_getting = false
-
             @_valueComp.onInvalidate =>
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
@@ -200,10 +198,14 @@ class J.AutoVar
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
-        @_getting = true
         if @_valueComp?
             @constructor.flush()
+            existingValue = @_deepGet()
+            if existingValue is undefined and Tracker.active
+                throw J.fetching.FETCH_IN_PROGRESS
+            else existingValue
         else
+            @_getting = true
             try
                 @_setupValueComp()
             catch e
@@ -212,8 +214,10 @@ class J.AutoVar
                     # between @ and the caller.
                     @_deepGet()
                 throw e
+            finally
+                @_getting = false
 
-        @_deepGet()
+            @_deepGet()
 
     indexOf: (x) ->
         # Reactive
