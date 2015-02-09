@@ -65,7 +65,7 @@ addTest "Fetching - unsubscribe from data when no computation needs it anymore",
                                 ->
                                     test.isFalse $$.Foo.findOne()?
                                     onComplete()
-                                3000
+                                1000
                             )
                     null
                 true
@@ -73,6 +73,35 @@ addTest "Fetching - unsubscribe from data when no computation needs it anymore",
             null
         true
     )
+
+addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
+    foo = new $$.Foo _id: makeId()
+    count = 0
+    foo.insert ->
+        selector = J.Dict _id: foo._id
+
+        a = J.AutoVar(
+            ->
+                console.log 'recompute a', selector.toObj()
+                ret = $$.Foo.fetchOne selector
+                console.log 'a got ', ret
+                a._valueComp.onInvalidate ->
+                    console.log 'invalidated!'
+                ret
+            (oldFoo, newFoo) ->
+                count += 1
+                if count is 1
+                    test.isUndefined oldFoo
+                    test.equal newFoo._id, foo._id
+                    selector.setOrAdd 'nonExistentField', 5
+                    test.isUndefined a.get()
+                else
+                    test.equal oldFoo._id, foo._id
+                    test.equal newFoo, null
+                    a.stop()
+                    onComplete()
+        )
+        a.tag = 'a'
 
 
 addTest "Fetching - detect inserted instance", (test, onComplete) ->
@@ -116,8 +145,3 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
 
 
 
-
-addTest "xxx", (test, onComplete) ->
-    # Do nothing but don't call onComplete
-    # so tinytest won't kill our _jdata
-    # subscription

@@ -45,6 +45,7 @@ class J.AutoVar
 
         @_var = new ReactiveVar undefined, @equalsFunc
         @_preservedValue = undefined
+        @_fetchInProgress = false
         @_getting = false
 
         @active = true
@@ -79,21 +80,25 @@ class J.AutoVar
 
         try
             rawValue = @valueFunc.call null, @
+            @_fetchInProgress = false
         catch e
             if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
-                # This must be the first time that this var
-                # is being computed, and it's premature because
-                # data is currently being fetched. So we can
-                # return here. We don't have to do @_var.set
-                # or onChange or anything else.
-                J.assert oldValue is undefined, "FIXME: Actually this can happen, but we need to handle setting back to undefined."
+                # Note: While we're either throwing an error or returning
+                # undefined, the value of @_var may still be an old
+                # value from when we previously succeeded in fetching
+                # data. When we succeed in fetching data again, the
+                # onChange triggers will act like there was never
+                # a gap during which data wasn't available.
+                @_fetchInProgress = true
 
                 if @_getting
                     # This will be caught by a top-level AutoRun like @_setupValueComp
                     # or a component's render function.
                     throw e
                 else
-                    return undefined
+                    # The variable is just trying to recompute itself
+                    # during the flush cycle
+                    return
 
             else throw e
 
@@ -184,8 +189,7 @@ class J.AutoVar
         if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
             # Now throw that error, after Meteor is done
             # setting up the first run.
-            if Tracker.active
-                throw J.fetching.FETCH_IN_PROGRESS
+            throw J.fetching.FETCH_IN_PROGRESS
 
 
     contains: (x) ->
@@ -199,25 +203,27 @@ class J.AutoVar
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
         if @_valueComp?
+            # Note that @ itself may or may not be in @constructor._pending now,
+            # and it may also find itself in @constructor._pending during the flush.
             @constructor.flush()
-            existingValue = @_deepGet()
-            if existingValue is undefined and Tracker.active
-                throw J.fetching.FETCH_IN_PROGRESS
-            else existingValue
         else
             @_getting = true
             try
                 @_setupValueComp()
             catch e
-                if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
-                    # Call this just to set up the dependency
-                    # between @ and the caller.
-                    @_deepGet()
-                throw e
-            finally
-                @_getting = false
+                throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+            @_getting = false
 
-            @_deepGet()
+        if @_fetchInProgress
+            if Tracker.active
+                # Call this just to set up the dependency
+                # between @ and the caller.
+                @_deepGet()
+                throw J.fetching.FETCH_IN_PROGRESS
+            else
+                return undefined
+
+        @_deepGet()
 
     indexOf: (x) ->
         # Reactive

@@ -423,6 +423,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 instanceArr
 
             fetch: (selector = {}, options = {}) ->
+                if selector instanceof J.Dict
+                    selector = selector.toObj()
+                if options instanceof J.Dict
+                    options = options.toObj()
+
                 if Meteor.isServer
                     return @find(selector, options).fetch()
 
@@ -446,6 +451,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         throw e
 
             fetchOne: (selector = {}, options = {}) ->
+                if selector instanceof J.Dict
+                    selector = selector.toObj()
+                if options instanceof J.Dict
+                    options = options.toObj()
+
                 options = _.clone options
                 options.limit = 1
                 results = @fetch selector, options
