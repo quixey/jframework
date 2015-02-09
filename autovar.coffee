@@ -98,20 +98,13 @@ class J.AutoVar
 
             @_fetchInProgress = true
 
-            # Note: While we're either throwing an error or returning
+            # While we're either throwing an error or returning
             # undefined, the value of @_var may still be an old
             # value from when we previously succeeded in fetching
             # data. When we succeed in fetching data again, the
             # onChange triggers will act like there was never
             # a gap during which data wasn't available.
-            if @_getting
-                # This will be caught by a top-level AutoRun like @_setupValueComp
-                # or a component's render function.
-                throw e
-            else
-                # The variable is just trying to recompute itself
-                # during the flush cycle
-                return
+            return
 
         if rawValue is @constructor._UNDEFINED_WITHOUT_SET
             # This is used for the AutoVars of AutoDict fields
@@ -165,7 +158,6 @@ class J.AutoVar
 
     _setupValueComp: ->
         @_valueComp?.stop()
-        lastValueResult = undefined
         Tracker.nonreactive => Tracker.autorun @_bindEnvironment (c) =>
             if c.firstRun
                 # Important to do this here in case @stop() is called during the
@@ -178,26 +170,19 @@ class J.AutoVar
             if pos >= 0
                 @constructor._pending.splice pos, 1
 
-            try
-                lastValueResult = @_recompute()
-            catch e
-                if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
-                    lastValueResult = e
-                else throw e
+            @_recompute()
 
             @_valueComp.onInvalidate =>
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
 
-            if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
-                if @_valueComp.firstRun
-                    # Meteor stops computations that error on
-                    # their first run, so don't throw an error
-                    # here.
-                else throw e
+            if @_getting and @_fetchInProgress
+                # Meteor stops computations that error on their
+                # first run, so don't throw an error here.
+                throw J.fetching.FETCH_IN_PROGRESS unless @_valueComp.firstRun
 
-        if Meteor.isClient and lastValueResult is J.fetching.FETCH_IN_PROGRESS
+        if @_getting and @_fetchInProgress
             # Now throw that error, after Meteor is done
             # setting up the first run.
             throw J.fetching.FETCH_IN_PROGRESS
@@ -212,6 +197,11 @@ class J.AutoVar
             throw new Meteor.Error "#{@constructor.name} is stopped: #{@}"
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
+
+        if Meteor.isServer and J.inMethod?.get()
+            value = @valueFunc.call null, @
+            if value instanceof J.AutoVar then value = value.get()
+            return value
 
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
