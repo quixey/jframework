@@ -6,14 +6,16 @@ class J.Dict
         @equalsFunc = equalsFunc
 
         if fieldsOrKeys?
-            if _.isArray fieldsOrKeys
+            if fieldsOrKeys instanceof J.Dict
+                fields = fieldsOrKeys.getFields()
+            else if _.isArray fieldsOrKeys
                 fields = {}
                 for key in fieldsOrKeys
                     fields[key] = undefined
             else if J.util.isPlainObject fieldsOrKeys
                 fields = fieldsOrKeys
             else
-                throw new Meteor.Error "Invalid fieldsOrKeys"
+                throw "Invalid fieldsOrKeys: #{fieldsOrKeys}"
         else
             fields = {}
 

@@ -9,6 +9,9 @@ class J.List
         unless @ instanceof J.List
             return new J.List arr, equalsFunc
 
+        if arr instanceof J.List
+            arr = arr.getValues()
+
         unless _.isArray arr
             throw new Meteor.Error "Not an array: #{arr}"
 
