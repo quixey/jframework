@@ -1,5 +1,19 @@
 Future = Npm.require 'fibers/future'
 
+J._inMethod = new Meteor.EnvironmentVariable
+
+J.methods = (methods) ->
+    wrappedMethods = {}
+    for methodName, methodFunc of methods
+        do (methodName, methodFunc) ->
+            wrappedMethods[methodName] = ->
+                args = arguments
+                J._inMethod.withValue true, =>
+                    methodFunc.apply @, args
+
+    Meteor.methods wrappedMethods
+
+
 ###
     dataSessionId: J.Dict
         querySpecSet: {qsString: true}

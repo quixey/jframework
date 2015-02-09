@@ -198,9 +198,12 @@ class J.AutoVar
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
-        if Meteor.isServer and J.inMethod?.get()
+        if Meteor.isServer and J._inMethod.get()
             value = @valueFunc.call null, @
-            if value instanceof J.AutoVar then value = value.get()
+            if @wrap
+                value = J.Dict._deepReactify value
+            if value instanceof J.AutoVar
+                value = value.get()
             return value
 
         if @_valueComp?
