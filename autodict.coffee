@@ -23,8 +23,8 @@ class J.AutoDict extends J.Dict
 
         @_pendingNewKeys = null
 
-        @_keysVar = J.AutoVar(
-            =>
+        @_keysVar = J.AutoVar "AutoDict(#{@tag ? ''})._keysVar",
+            (=>
                 newKeys = @keysFunc.apply null
 
                 if newKeys instanceof J.List
@@ -46,8 +46,8 @@ class J.AutoDict extends J.Dict
                 @_pendingNewKeys = newKeys
 
                 newKeys
-
-            (oldKeys, newKeys) =>
+            ),
+            ((oldKeys, newKeys) =>
                 ###
                     The naive implementation is @_replaceKeys(newKeys), but this has
                     two problems:
@@ -62,11 +62,9 @@ class J.AutoDict extends J.Dict
                 if @_pendingNewKeys?
                     @_replaceKeys @_pendingNewKeys
                     @_pendingNewKeys = null
-
-            J.util.equals
+            ),
+            J.util.equals,
             false
-        )
-        @_keysVar.tag = "AutoDict._keysVar"
 
         @active = true
         if Tracker.active then Tracker.onInvalidate => @stop()
@@ -90,7 +88,7 @@ class J.AutoDict extends J.Dict
             undefined
 
     _initField: (key) ->
-        @_fields[key] = Tracker.nonreactive => J.AutoVar(
+        @_fields[key] = Tracker.nonreactive => J.AutoVar "AutoDict._fields[#{J.util.stringify key}]",
             =>
                 # In the AutoVar graph, set up the dependency
                 # @_keysVar -> @_fields[key]
@@ -100,15 +98,14 @@ class J.AutoDict extends J.Dict
                     # @_delete(key) should be called during
                     # @_keysVar.onChange after flush
                     J.AutoVar._UNDEFINED_WITHOUT_SET
-            (
+            ,
                 if _.isFunction @onChange then (oldValue, newValue) =>
                     @onChange?.call @, key, oldValue, newValue
                 else
                     @onChange
-            )
+            ,
             @equalsFunc
-        )
-        @_fields[key].tag = "AutoDict._fields[#{J.util.stringify key}]"
+
         super
 
     clear: ->

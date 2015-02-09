@@ -74,7 +74,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         querySpecSet: J.Dict() # qsString: true
         mergedQuerySpecs: undefined
 
-    mergedQuerySpecsVar = session.mergedQuerySpecs J.AutoVar(
+    mergedQuerySpecsVar = session.mergedQuerySpecs J.AutoVar 'mergedQuerySpecs',
         =>
             log "Recalc mergedQuerySpecsVar"
             mergedQuerySpecs = J.List()
@@ -83,7 +83,6 @@ Meteor.publish '_jdata', (dataSessionId) ->
                 rawQuerySpec = EJSON.parse rawQsString
                 mergedQuerySpecs.push rawQuerySpec
             mergedQuerySpecs
-    )
 
     observerByQsString = J.Dict()
     fieldsByModelIdQuery = {} # modelName: docId: fieldName: querySpecString: value
@@ -158,9 +157,11 @@ Meteor.publish '_jdata', (dataSessionId) ->
         observer
 
 
-    mergedSpecStringsVar = J.AutoVar(
-        => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
-        (oldSpecStrings, newSpecStrings) =>
+    mergedSpecStringsVar = J.AutoVar 'mergedSpecStrings',
+        (=>
+            session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
+        ),
+        ((oldSpecStrings, newSpecStrings) =>
             console.log 'mergedSpec changed:'
             console.log "      #{J.util.stringify oldSpecStrings}"
             console.log "      #{J.util.stringify newSpecStrings}"
@@ -204,7 +205,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
                 session.currentQuery.return()
                 # session.currentWrite.committed()
                 # delete session.currentWrite
-    )
+        )
 
 
     @onStop =>

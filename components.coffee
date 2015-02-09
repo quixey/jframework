@@ -172,35 +172,35 @@ J._defineComponent = (componentName, componentSpec) ->
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of reactiveSpecByName
-            @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
-                =>
-                    _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
-                    if componentDebug
-                        console.debug _getDebugPrefix(@), "!#{reactiveName}()"
-                        _debugDepth += 1
-
-                    try
-                        ret = reactiveSpec.val.call @
-                    finally
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
+                J.AutoVar "#{@toString()}.#{reactiveName}",
+                    (=>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
-                            console.debug _getDebugPrefix(), ret
-                            _debugDepth -= 1
-                        _popDebugFlag()
+                            console.debug _getDebugPrefix(@), "!#{reactiveName}()"
+                            _debugDepth += 1
 
-                    ret
-                (
-                    if reactiveSpec.onChange? then (oldValue, newValue) =>
-                        J.assert not Tracker.active
-                        if componentDebug
-                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
-                            console.debug "        old:", J.util.consolify oldValue
-                            console.debug "        new:", J.util.consolify newValue
-                        reactiveSpec.onChange.call @, oldValue, newValue
-                    else null
-                )
-                reactiveSpec.same?.bind(@) ? J.util.equals
-            )
-            @reactives[reactiveName].tag = "#{@toString()}.#{reactiveName}"
+                        try
+                            ret = reactiveSpec.val.call @
+                        finally
+                            if componentDebug
+                                console.debug _getDebugPrefix(), ret
+                                _debugDepth -= 1
+                            _popDebugFlag()
+
+                        ret
+                    ),
+                    (
+                        if reactiveSpec.onChange? then (oldValue, newValue) =>
+                            J.assert not Tracker.active
+                            if componentDebug
+                                console.debug "    #{@toString()}.#{reactiveName}.onChange!"
+                                console.debug "        old:", J.util.consolify oldValue
+                                console.debug "        new:", J.util.consolify newValue
+                            reactiveSpec.onChange.call @, oldValue, newValue
+                        else null
+                    ),
+                    reactiveSpec.same?.bind(@) ? J.util.equals
 
         # Set up @state
         initialState = {}
@@ -229,7 +229,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
                     ret
                 else
-                    stateFieldSpec.default
+                    stateFieldSpec.default ? null
             initialState[stateFieldName] = new ReactiveVar initialValue,
                 stateFieldSpec.same ? J.util.equals
 
@@ -354,6 +354,8 @@ J._defineComponent = (componentName, componentSpec) ->
             @_renderComp.stop()
 
         @_renderComp = Tracker.autorun (c) =>
+            c.tag = "#{@toString()}"
+
             _pushDebugFlag componentSpec.debug
             if componentDebug
                 console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") + "#{@toString()} render!#{if c.firstRun then '' else ' - from AutoRun'}"

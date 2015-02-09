@@ -80,28 +80,22 @@ addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
     foo.insert ->
         selector = J.Dict _id: foo._id
 
-        a = J.AutoVar(
-            ->
-                console.log 'recompute a', selector.toObj()
-                ret = $$.Foo.fetchOne selector
-                console.log 'a got ', ret
-                a._valueComp.onInvalidate ->
-                    console.log 'invalidated!'
-                ret
+        a = J.AutoVar 'a',
+            -> $$.Foo.fetchOne selector
+        ,
             (oldFoo, newFoo) ->
                 count += 1
                 if count is 1
                     test.isUndefined oldFoo
                     test.equal newFoo._id, foo._id
                     selector.setOrAdd 'nonExistentField', 5
-                    test.isUndefined a.get()
+                    aVal = a.get()
+                    test.isUndefined aVal, "a should be undefined because fetch in progress"
                 else
-                    test.equal oldFoo._id, foo._id
-                    test.equal newFoo, null
+                    test.equal oldFoo._id, foo._id, "should have continuity since before a was undefined"
+                    test.equal newFoo, null, "newFoo should be null after fetching nothing"
                     a.stop()
                     onComplete()
-        )
-        a.tag = 'a'
 
 
 addTest "Fetching - detect inserted instance", (test, onComplete) ->

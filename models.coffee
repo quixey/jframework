@@ -292,10 +292,9 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
-            @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
-                => reactiveSpec.val.call @
-            )
-            @reactives[reactiveName].tag = "<#{modelName} ##{@_id}>.!#{reactiveName}"
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
+                J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
+                    => reactiveSpec.val.call @
 
         null
 

@@ -758,8 +758,6 @@ Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
     test.equal e.get(), 12
     test.equal history, ['a', 'e', 'b', 'c']
 
-
-
 Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     history = []
     x = new ReactiveVar 5

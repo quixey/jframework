@@ -14,7 +14,7 @@
 ###
 
 class J.AutoVar
-    constructor: (valueFunc, onChange = null, equalsFunc = J.util.equals, wrap = true) ->
+    constructor: (tag, valueFunc, onChange, equalsFunc, wrap) ->
         ###
             AutoVars default to being "lazy", i.e. not calculated
             until .get().
@@ -30,18 +30,27 @@ class J.AutoVar
         @_bindEnvironment = if Meteor.isServer then Meteor.bindEnvironment else _.identity
 
         unless @ instanceof J.AutoVar
-            return new J.AutoVar valueFunc, onChange, equalsFunc, wrap
+            return new J.AutoVar tag, valueFunc, onChange, equalsFunc, wrap
+
+        if _.isFunction tag
+            # Alternate signature: J.AutoVar(valueFunc, onChange, equalsFunc, wrap)
+            wrap = equalsFunc
+            equalsFunc = onChange
+            onChange = valueFunc
+            valueFunc = tag
+            tag = null
 
         unless _.isFunction(valueFunc)
             throw new Meteor.Error "AutoVar must be constructed with valueFunc"
 
-        unless onChange is null or _.isFunction(onChange) or onChange is true
+        unless not onChange? or _.isFunction(onChange) or onChange is true
             throw new Meteor.Error "Invalid onChange argument: #{onChange}"
 
+        @tag = tag
         @valueFunc = valueFunc
-        @onChange = onChange
-        @equalsFunc = equalsFunc
-        @wrap = wrap
+        @onChange = onChange ? null
+        @equalsFunc = equalsFunc ? J.util.equals
+        @wrap = wrap ? true
 
         @_var = new ReactiveVar undefined, @equalsFunc
         @_preservedValue = undefined
@@ -59,7 +68,6 @@ class J.AutoVar
         @_arrIndexOfDeps = {} # value: dep
 
     _deepGet: ->
-        # Reactive
         ###
             Unwrap any nested AutoVars during get(). This is because
             @valueFunc may get a performance benefit from isolating
@@ -79,28 +87,31 @@ class J.AutoVar
         oldValue = Tracker.nonreactive => @_deepGet()
 
         try
+            # Pass a @ just like autorun does. This will help in case
+            # we ever decide to compute @valueFunc the first time
+            # synchronously.
             rawValue = @valueFunc.call null, @
             @_fetchInProgress = false
+
         catch e
-            if Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
-                # Note: While we're either throwing an error or returning
-                # undefined, the value of @_var may still be an old
-                # value from when we previously succeeded in fetching
-                # data. When we succeed in fetching data again, the
-                # onChange triggers will act like there was never
-                # a gap during which data wasn't available.
-                @_fetchInProgress = true
+            throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
 
-                if @_getting
-                    # This will be caught by a top-level AutoRun like @_setupValueComp
-                    # or a component's render function.
-                    throw e
-                else
-                    # The variable is just trying to recompute itself
-                    # during the flush cycle
-                    return
+            @_fetchInProgress = true
 
-            else throw e
+            # Note: While we're either throwing an error or returning
+            # undefined, the value of @_var may still be an old
+            # value from when we previously succeeded in fetching
+            # data. When we succeed in fetching data again, the
+            # onChange triggers will act like there was never
+            # a gap during which data wasn't available.
+            if @_getting
+                # This will be caught by a top-level AutoRun like @_setupValueComp
+                # or a component's render function.
+                throw e
+            else
+                # The variable is just trying to recompute itself
+                # during the flush cycle
+                return
 
         if rawValue is @constructor._UNDEFINED_WITHOUT_SET
             # This is used for the AutoVars of AutoDict fields
