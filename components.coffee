@@ -371,10 +371,10 @@ J._defineComponent = (componentName, componentSpec) ->
         if element is undefined then element =
             $$ ('div'),
                 style:
-                    background: "#FDD"
-                    padding: 50
-                    fontWeight: 'bold'
-                ("#{@toString()} Loading...")
+                    textAlign: 'center'
+                    opacity: 0.5
+                $$ ('Loader')
+
 
         element
 
