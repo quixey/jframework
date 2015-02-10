@@ -2,9 +2,6 @@
 # so {a: 5, b: 6} and {b: 6, a: 5} look like different
 # querySpecs. More generally, we need a querySpec consolidation.
 
-# FIXME: Should probably track the sequence of the data-requirement
-# updates so the server can put them in order if they arrive out of order.
-
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
@@ -19,7 +16,7 @@ J.fetching =
 
     # Latest client-side state and whether it's changed since we
     # last called the server's update method
-    _requestersByQs: {} # querySpecString: {computationId: true}
+    _requestersByQs: {} # querySpecString: {computationId: computation}
     _requestsChanged: false
 
     # Snapshot of what the cursors will be after the next _updateDataQueries returns
@@ -30,12 +27,10 @@ J.fetching =
     _unmergedQsSet: {} # mergedQuerySpecString: true
     _mergedQsSet: {} # mergedQuerySpecString: true
 
-    _batchDep: new J.Dependency()
-
 
     isQueryReady: (querySpec) ->
         ###
-            TODO:
+            TODO: Smart isQueryReady
             Synchronously figure out if it's implied by both @_mergedQuerySet
             and @_nexMergedQuerySet. If so, return true.
             Once this is done, we can probably get rid of the @_unmergedQsSet
@@ -46,10 +41,8 @@ J.fetching =
 
 
     getMerged: (querySpecs) ->
-        # TODO
+        # TODO: Client-side query merging
         _.clone querySpecs
-
-    # TODO: Make batchDep granular
 
     remergeQueries: ->
         return if @_requestInProgress or not @_requestsChanged
@@ -100,7 +93,9 @@ J.fetching =
                 @_unmergedQsSet = _.clone @_nextUnmergedQsSet
                 @_mergedQsSet = _.clone @_nextMergedQsSet
 
-                @_batchDep.changed()
+                for addedQsString in mergedQsStringsDiff.added
+                    for computationId in _.keys @_requestersByQs[addedQsString] ? {}
+                        @_requestersByQs[addedQsString][computationId].invalidate()
 
                 # There may be changes to @_requestersByQs that we couldn't act on
                 # until this request was done.
@@ -117,10 +112,10 @@ J.fetching =
             # which computations need this querySpec.
             computation = Tracker.currentComputation
             @_requestersByQs[qsString] ?= {}
-            @_requestersByQs[qsString][computation._id] = true
-            # console.log 'computation ', computation._id, 'requests a query', querySpec
+            @_requestersByQs[qsString][computation._id] = computation
+            console.log 'computation ', computation._id, computation.tag, 'requests a query', querySpec.modelName, querySpec.selector
             computation.onInvalidate =>
-                # console.log 'computation ', computation._id, 'cancels a query', computation.stopped, querySpec
+                console.log 'computation ', computation._id, computation.tag, 'cancels a query', computation.stopped, querySpec.modelName, querySpec.selector
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]
@@ -137,8 +132,6 @@ J.fetching =
             return modelClass.find(querySpec.selector, options).fetch()
         else if not Tracker.active
             return undefined
-
-        @_batchDep.depend()
 
         @_requestsChanged = true
         Tracker.afterFlush =>
