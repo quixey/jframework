@@ -1,3 +1,35 @@
+###
+    TODO:
+    1.
+        this
+            J.AutoDict(
+                J.List [1, 2, 3] *or* [1, 2, 3]
+                (key) -> f()
+            )
+        should be like this
+            J.AutoDict(
+                -> J.List [1, 2, 3]
+                (key) -> f()
+            )
+
+
+    2.
+        this
+            J.AutoDict(
+                a: -> 3
+                b: -> 4
+                onChange
+            )
+        should turn into this
+            J.AutoDict(
+                -> ['a', 'b']
+                (k) -> {a: (-> 3), b: (-> 4)}[k]()
+                onChange
+            )
+###
+
+
+
 class J.AutoDict extends J.Dict
     constructor: (keysFunc, valueFunc, onChange = null, equalsFunc = J.util.equals) ->
         unless @ instanceof J.AutoDict

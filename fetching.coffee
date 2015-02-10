@@ -2,7 +2,6 @@
 # so {a: 5, b: 6} and {b: 6, a: 5} look like different
 # querySpecs. More generally, we need a querySpec consolidation.
 
-
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
     FETCH_IN_PROGRESS: {
@@ -52,12 +51,12 @@ J.fetching =
         newUnmergedQuerySpecs = (EJSON.parse qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
+        unmergedQsStringsDiff = J.Dict.diff _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
         newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
         newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
-
         mergedQsStringsDiff = J.Dict.diff _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
@@ -74,11 +73,15 @@ J.fetching =
                 obj
 
             if addedQuerySpecs.length
-                console.debug "    +"
-                console.debug "        ", consolify(qs) for qs in addedQuerySpecs
+                console.groupCollapsed("+")
+                for qsString in unmergedQsStringsDiff.added
+                    for computationId, computation of @_requestersByQs[qsString]
+                        console.log computation.tag
+                console.groupEnd()
+                console.debug "    ", consolify(qs) for qs in addedQuerySpecs
             if deletedQuerySpecs.length
-                console.debug "    -"
-                console.debug "        ", consolify(qs) for qs in deletedQuerySpecs
+                console.debug "-"
+                console.debug "    ", consolify(qs) for qs in deletedQuerySpecs
 
         @_requestInProgress = true
         Meteor.call '_updateDataQueries',
@@ -94,9 +97,9 @@ J.fetching =
                 @_unmergedQsSet = _.clone @_nextUnmergedQsSet
                 @_mergedQsSet = _.clone @_nextMergedQsSet
 
-                for addedQsString in mergedQsStringsDiff.added
-                    for computationId in _.keys @_requestersByQs[addedQsString] ? {}
-                        @_requestersByQs[addedQsString][computationId].invalidate()
+                for addedUnmergedQsString in unmergedQsStringsDiff.added
+                    for computationId in _.keys @_requestersByQs[addedUnmergedQsString] ? {}
+                        @_requestersByQs[addedUnmergedQsString][computationId].invalidate()
 
                 # There may be changes to @_requestersByQs that we couldn't act on
                 # until this request was done.
@@ -114,9 +117,11 @@ J.fetching =
             computation = Tracker.currentComputation
             @_requestersByQs[qsString] ?= {}
             @_requestersByQs[qsString][computation._id] = computation
-            # console.log computation.tag, 'requests a query', querySpec.modelName, querySpec.selector, @isQueryReady querySpec
+            # console.log computation.tag, 'requests a query', querySpec.modelName,
+            #     querySpec.selector, @isQueryReady querySpec
             computation.onInvalidate =>
-                # console.log computation.tag, 'cancels a query', computation.stopped, querySpec.modelName, querySpec.selector, @isQueryReady querySpec
+                # console.log computation.tag, 'cancels a query', computation.stopped,
+                #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]

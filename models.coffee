@@ -405,7 +405,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         _id: $in: docIdsOrQuery
                     else
                         docIdsOrQuery
-                instances = @find(query).fetch()
+                instances = @fetch query
                 instanceById = {}
                 for instance in instances
                     instanceById[instance._id] = instance

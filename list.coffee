@@ -73,8 +73,20 @@ class J.List
 
     forEach: (f) ->
         # Reactive
-        # Like map but returns an array
-        f value, i for value, i in @getValues()
+        ###
+            Like @map but:
+            1. Returns an array
+            2. Not lazy
+            3. Can run fetches in parallel
+        ###
+        if Tracker.active
+            J.AutoList(
+                => @size()
+                (i) => f @get(i), i
+                true
+            ).getValues()
+        else
+            @getValues().map f
 
     get: (index) ->
         # Reactive
@@ -115,15 +127,15 @@ class J.List
         # Reactive
         @getValues().join separator
 
-    map: (mapFunc) ->
+    map: (f) ->
         # Reactive
         if Tracker.active
             J.AutoList(
                 => @size()
-                (i) => mapFunc @get(i), i
+                (i) => f @get(i), i
             )
         else
-            J.List @getValues().map mapFunc
+            J.List @getValues().map f
 
     push: (value) ->
         @extend [value]
