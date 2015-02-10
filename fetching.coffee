@@ -72,12 +72,13 @@ J.fetching =
                 for x in ['selector', 'fields', 'sort']
                     if x of obj then obj[x] = J.util.stringify obj[x]
                 obj
+
             if addedQuerySpecs.length
-                console.log @SESSION_ID, "add", (if deletedQuerySpecs.length then '-' else '')
-                console.log "    ", consolify(qs) for qs in addedQuerySpecs
+                console.debug "    +"
+                console.debug "        ", consolify(qs) for qs in addedQuerySpecs
             if deletedQuerySpecs.length
-                console.log @SESSION_ID, (if addedQuerySpecs.length then '-' else ''), "delete"
-                console.log "    ", consolify(qs) for qs in deletedQuerySpecs
+                console.debug "    -"
+                console.debug "        ", consolify(qs) for qs in deletedQuerySpecs
 
         @_requestInProgress = true
         Meteor.call '_updateDataQueries',
@@ -113,9 +114,9 @@ J.fetching =
             computation = Tracker.currentComputation
             @_requestersByQs[qsString] ?= {}
             @_requestersByQs[qsString][computation._id] = computation
-            console.log 'computation ', computation._id, computation.tag, 'requests a query', querySpec.modelName, querySpec.selector
+            # console.log computation.tag, 'requests a query', querySpec.modelName, querySpec.selector, @isQueryReady querySpec
             computation.onInvalidate =>
-                console.log 'computation ', computation._id, computation.tag, 'cancels a query', computation.stopped, querySpec.modelName, querySpec.selector
+                # console.log computation.tag, 'cancels a query', computation.stopped, querySpec.modelName, querySpec.selector, @isQueryReady querySpec
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]
