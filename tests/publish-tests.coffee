@@ -14,6 +14,7 @@ addTest "Fetching - throw out of AutoVar valueFunc when missing fetch data", (te
     a = J.AutoVar(
         ->
             count1 += 1
+            if count1 is 5 then crash
             smallFoos = $$.Foo.fetch b: $lte: 3
             count2 += 1
             mediumFoos = $$.Foo.fetch b: $lte: 7
@@ -137,5 +138,9 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
     )
 
 
-
+addTest "_lastTest", (test, onComplete) ->
+    setTimeout(
+        -> onComplete()
+        1000
+    )
 

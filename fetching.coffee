@@ -15,14 +15,16 @@ J.fetching =
             crash if run in a normal Tracker.autorun."
     }
 
+    _requestInProgress: false
+
     # Latest client-side state and whether it's changed since we
     # last called the server's update method
     _requestersByQs: {} # querySpecString: {computationId: true}
     _requestsChanged: false
 
-    # New requests that the server hasn't acknowledged yet.
-    # Only useful for debugging right now.
-    _waitingQsSet: {} # querySpecString: true
+    # Snapshot of what the cursors will be after the next _updateDataQueries returns
+    _nextUnmergedQsSet: {} # querySpecString: true
+    _nextMergedQsSet: {}
 
     # Snapshot of what we last successfully asked the server for
     _unmergedQsSet: {} # mergedQuerySpecString: true
@@ -32,37 +34,43 @@ J.fetching =
 
 
     isQueryReady: (querySpec) ->
+        ###
+            TODO:
+            Synchronously figure out if it's implied by both @_mergedQuerySet
+            and @_nexMergedQuerySet. If so, return true.
+            Once this is done, we can probably get rid of the @_unmergedQsSet
+            and @_nextUnmergedQuerySet variables.
+        ###
         qsString = EJSON.stringify querySpec
-        qsString of @_unmergedQsSet
+        qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
 
 
     getMerged: (querySpecs) ->
         # TODO
         _.clone querySpecs
 
+    # TODO: Make batchDep granular
 
     remergeQueries: ->
-        return if not @_requestsChanged
+        return if @_requestInProgress or not @_requestsChanged
         @_requestsChanged = false
 
-        newRequestedQsStrings = _.keys @_requestersByQs
-        newRequestedQuerySpecs = (EJSON.parse qsString for qsString in newRequestedQsStrings)
-        newMergedQuerySpecs = @getMerged newRequestedQuerySpecs
+        newUnmergedQsStrings = _.keys @_requestersByQs
+        newUnmergedQuerySpecs = (EJSON.parse qsString for qsString in newUnmergedQsStrings)
+        @_nextUnmergedQsSet = {}
+        @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
+
+        newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
         newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
+        @_nextMergedQsSet = {}
+        @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
 
-        oldQsStringsSet = {}
-        oldQsStringsSet[qsString] = true for qsString of @_waitingQsSet
-        oldQsStringsSet[qsString] = true for qsString of @_mergedQsSet
-        mergedQsStringDiff = J.Dict.diff _.keys(oldQsStringsSet), newMergedQsStrings
-        return unless mergedQsStringDiff.added.length or mergedQsStringDiff.deleted.length
+        mergedQsStringsDiff = J.Dict.diff _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
-        for addedQsString in mergedQsStringDiff.added
-            @_waitingQsSet[addedQsString] = true
-        for deletedQsString in mergedQsStringDiff.deleted
-            delete @_waitingQsSet[deletedQsString]
+        addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
+        deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.deleted)
 
-        addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.added)
-        deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.deleted)
+        return unless addedQuerySpecs.length or deletedQuerySpecs.length
 
         debug = true
         if debug
@@ -78,24 +86,26 @@ J.fetching =
                 console.log @SESSION_ID, (if addedQuerySpecs.length then '-' else ''), "delete"
                 console.log "    ", consolify(qs) for qs in deletedQuerySpecs
 
+        @_requestInProgress = true
         Meteor.call '_updateDataQueries',
             @SESSION_ID,
             addedQuerySpecs,
             deletedQuerySpecs,
             (error, result) =>
+                @_requestInProgress = false
                 if error
-                    console.log "Fetching error:", error
+                    console.error "Fetching error:", error
                     return
 
-                @_unmergedQsSet = {}
-                @_unmergedQsSet[qsString] = true for qsString in newRequestedQsStrings
-                @_mergedQsSet = {}
-                @_mergedQsSet[qsString] = true for qsString in newMergedQsStrings
-
-                for addedQsString in mergedQsStringDiff.added
-                    delete @_waitingQsSet[addedQsString]
+                @_unmergedQsSet = _.clone @_nextUnmergedQsSet
+                @_mergedQsSet = _.clone @_nextMergedQsSet
 
                 @_batchDep.changed()
+
+                # There may be changes to @_requestersByQs that we couldn't act on
+                # until this request was done.
+                Tracker.afterFlush =>
+                    @remergeQueries()
 
 
     requestQuery: (querySpec) ->
@@ -108,9 +118,9 @@ J.fetching =
             computation = Tracker.currentComputation
             @_requestersByQs[qsString] ?= {}
             @_requestersByQs[qsString][computation._id] = true
-            # console.log 'computation ', computation._id, 'requests a query'
+            # console.log 'computation ', computation._id, 'requests a query', querySpec
             computation.onInvalidate =>
-                # console.log 'computation ', computation._id, 'cancels a query', computation.stopped
+                # console.log 'computation ', computation._id, 'cancels a query', computation.stopped, querySpec
                 if qsString of @_requestersByQs
                     delete @_requestersByQs[qsString][computation._id]
                     if _.isEmpty @_requestersByQs[qsString]
