@@ -64,7 +64,7 @@ J.fetching =
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringDiff.deleted)
 
-        debug = false
+        debug = true
         if debug
             consolify = (querySpec) ->
                 obj = _.clone querySpec
@@ -93,9 +93,8 @@ J.fetching =
                 @_mergedQsSet[qsString] = true for qsString in newMergedQsStrings
 
                 for addedQsString in mergedQsStringDiff.added
-                    delete @_waitingQsSet[qsString]
+                    delete @_waitingQsSet[addedQsString]
 
-                computation = Tracker.currentComputation
                 @_batchDep.changed()
 
 

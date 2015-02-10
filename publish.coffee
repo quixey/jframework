@@ -27,8 +27,7 @@ J.methods = (methods) ->
                 limit:
             }
         ]
-        currentWrite: <WriteFenceWrite>?
-
+        currentQuery: <Future>
 ###
 dataSessions = {}
 
@@ -39,8 +38,11 @@ Meteor.methods
             newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
             console.log.apply console, newArgs
 
-        log '_updateDataQueries',
-            J.util.stringify {added: addedQuerySpecs, deleted: deletedQuerySpecs}
+        log '_updateDataQueries'
+        if addedQuerySpecs.length
+            log '    added:', J.util.stringify addedQuerySpecs
+        if deletedQuerySpecs.length
+            log '    deleted:', J.util.stringify deletedQuerySpecs
 
         session = dataSessions[dataSessionId]
         if not session?
@@ -71,7 +73,6 @@ Meteor.methods
             # Meteor's write fence only blocks this method from returning.
             # It still unblocks in the sense that other methods can start
             # running, and that's a problem for a data query.
-            # session.currentWrite = DDPServer._CurrentWriteFence.get().beginWrite()
 
         log '..._updateDataQueries done'
 
@@ -90,7 +91,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     mergedQuerySpecsVar = session.mergedQuerySpecs J.AutoVar 'mergedQuerySpecs',
         =>
-            log "Recalc mergedQuerySpecsVar"
+            # log "Recalc mergedQuerySpecsVar"
             mergedQuerySpecs = J.List()
             session.querySpecSet().forEach (rawQsString) ->
                 # TODO: Fancier merge stuff
@@ -101,7 +102,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
     observerByQsString = J.Dict()
     fieldsByModelIdQuery = {} # modelName: docId: fieldName: querySpecString: value
     makeObserver = (querySpec) =>
-        log "Make observer for: ", querySpec
+        # log "Make observer for: ", querySpec
         modelClass = J.models[querySpec.modelName]
 
         options = {}
@@ -117,10 +118,10 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                log querySpec, "server says ADDED:", id, fields
+                # log querySpec, "server says ADDED:", id, fields
 
                 if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
-                    log querySpec, "passing on ADDED:", id, fields
+                    # log querySpec, "sending ADDED:", id, fields
                     @added modelClass.collection._name, id, fields
 
                 fieldsByModelIdQuery[querySpec.modelName] ?= {}
@@ -130,7 +131,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
                     fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
 
             changed: (id, fields) =>
-                log querySpec, "server says CHANGED:", id, fields
+                # log querySpec, "server says CHANGED:", id, fields
 
                 changedFields = {}
 
@@ -143,11 +144,11 @@ Meteor.publish '_jdata', (dataSessionId) ->
                         changedFields[fieldName] = value
 
                 if not _.isEmpty changedFields
-                    log querySpec, "passing along CHANGED:", id, changedFields
+                    # log querySpec, "sending CHANGED:", id, changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                log querySpec, "server says REMOVED:", id
+                # log querySpec, "server says REMOVED:", id
 
                 changedFields = {}
 
@@ -162,10 +163,10 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    log querySpec, "passing along REMOVED:", id
+                    # log querySpec, "sending REMOVED:", id
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    log querySpec, "passing along CHANGED:", id
+                    # log querySpec, "sending CHANGED:", id
                     @changed modelClass.collection._name, id, changedFields
 
         observer
@@ -176,9 +177,9 @@ Meteor.publish '_jdata', (dataSessionId) ->
             session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
         ),
         ((oldSpecStrings, newSpecStrings) =>
-            console.log 'mergedSpec changed:'
-            console.log "      #{J.util.stringify oldSpecStrings}"
-            console.log "      #{J.util.stringify newSpecStrings}"
+            # console.log 'mergedSpec changed:'
+            # console.log "      #{J.util.stringify oldSpecStrings}"
+            # console.log "      #{J.util.stringify newSpecStrings}"
             diff = J.Dict.diff oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
             for qsString in diff.added
                 observerByQsString.setOrAdd qsString, makeObserver EJSON.parse qsString
@@ -206,19 +207,17 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
                     if _.isEmpty cursorValues
                         delete fieldsByModelIdQuery[querySpec.modelName][docId]
-                        log querySpec, "passing along REMOVED", docId
+                        # log querySpec, "sending REMOVED", docId
                         @removed modelClass.collection._name, docId
                     else if not _.isEmpty changedFields
-                        log querySpec, "passing along CHANGED", docId, changedFields
+                        # log querySpec, "passing along CHANGED", docId, changedFields
                         @changed modelClass.collection._name, id, changedFields
 
 
-            log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
+            # log "Observers: #{EJSON.stringify (EJSON.parse spec for spec in newSpecStrings.toArr())}"
 
             if diff.added.length or diff.deleted.length
                 session.currentQuery.return()
-                # session.currentWrite.committed()
-                # delete session.currentWrite
         )
 
 
