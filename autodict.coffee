@@ -179,7 +179,11 @@ class J.AutoDict extends J.Dict
         throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"
 
     snapshot: ->
-        J.Dict Tracker.nonreactive => @getFields()
+        keys = Tracker.nonreactive => @getKeys()
+        if keys is undefined
+            undefined
+        else
+            J.Dict Tracker.nonreactive => @getFields()
 
     stop: ->
         if @active

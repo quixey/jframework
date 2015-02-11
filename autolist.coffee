@@ -57,13 +57,17 @@ class J.AutoList extends J.List
         @_dict.setDebug debug
 
     snapshot: ->
-        J.List Tracker.nonreactive => @getValues()
+        keys = Tracker.nonreactive => @_dict.getKeys()
+        if keys is undefined
+            undefined
+        else
+            J.List Tracker.nonreactive => @getValues()
 
     sort: ->
         throw new Meteor.Error "There is no AutoList.sort"
 
     stop: ->
-        @_dict.stop()
+        @_dict?.stop() # Could be stopped at construct time
         @active = false
 
     toString: ->

@@ -330,6 +330,21 @@ J._defineComponent = (componentName, componentSpec) ->
 
         element = undefined
 
+        # Transform J.List to array anywhere in the element children hierarchy
+        transformedElement = (elem) =>
+            if React.isValidElement elem
+                if _.isArray elem.props.children
+                    elem.props.children = (transformedElement e for e in elem.props.children)
+                else if elem.props.children?
+                    elem.props.children = transformedElement elem.props.children
+                elem
+            else if elem instanceof J.List
+                transformedElement e for e in elem.toArr()
+            else if _.isArray elem
+                transformedElement e for e in elem
+            else
+                elem
+
         Tracker.autorun (c) =>
             if c.firstRun
                 @_renderComp = c
@@ -359,7 +374,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 _debugDepth += 1
 
             try
-                element = componentSpec.render.apply @
+                element = transformedElement componentSpec.render.apply @
             catch e
                 throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
             finally
@@ -374,7 +389,6 @@ J._defineComponent = (componentName, componentSpec) ->
                     textAlign: 'center'
                     opacity: 0.5
                 $$ ('Loader')
-
 
         element
 
