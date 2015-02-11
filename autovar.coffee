@@ -13,6 +13,9 @@
 
 ###
 
+## NOTE: When I throw out of a computation, it doesn't have teh same effect on the pending queue
+## CRAP we need a global lock during fetches
+
 class J.AutoVar
     constructor: (tag, valueFunc, onChange, equalsFunc, wrap) ->
         ###
@@ -38,7 +41,7 @@ class J.AutoVar
             equalsFunc = onChange
             onChange = valueFunc
             valueFunc = tag
-            tag = null
+            tag = undefined
 
         unless _.isFunction(valueFunc)
             throw new Meteor.Error "AutoVar must be constructed with valueFunc"
@@ -74,13 +77,6 @@ class J.AutoVar
             @valueFunc may get a performance benefit from isolating
             part of its reactive logic in an AutoVar.
         ###
-        if Tracker.active
-            # Track _gettersById for debugging
-            computation = Tracker.currentComputation
-            @_gettersById[computation._id] = computation
-            computation.onInvalidate =>
-                delete @_gettersById[computation._id]
-
         value = @_var.get()
         if value instanceof J.AutoVar then value.get() else value
 
@@ -168,15 +164,15 @@ class J.AutoVar
                     @onChange.call @, oldPreservedValue, newPreservedValue
 
     _setupValueComp: ->
+        console.log "SETUPVALUECOMP", @tag
         @_valueComp?.stop()
         Tracker.nonreactive => Tracker.autorun @_bindEnvironment (c) =>
             if c.firstRun
                 # Important to do this here in case @stop() is called during the
                 # first run of the computation.
                 @_valueComp = c
-
-            @_valueComp.tag = "AutoVar #{@tag}"
-            @_valueComp.autoVar = @
+                @_valueComp.tag = "AutoVar #{@tag}"
+                @_valueComp.autoVar = @
 
             pos = @constructor._pending.indexOf @
             if pos >= 0
@@ -218,6 +214,14 @@ class J.AutoVar
                 value = value.get()
             return value
 
+        if Tracker.active
+            # Track _gettersById for debugging
+            computation = Tracker.currentComputation
+            @_gettersById[computation._id] = computation
+            computation.onInvalidate =>
+                delete @_gettersById[computation._id]
+
+        console.log "GET", @tag, @_valueComp?, (v.tag ? v._valueComp.tag for v in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.

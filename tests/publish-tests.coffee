@@ -7,6 +7,83 @@ makeId = ->
     "#{Math.floor 10000 * Math.random()}"
 
 
+addTest "AutoVar - set fetchInProgress when a dependency is setting fetchInProgress", (test, onComplete) ->
+    randomId = new ReactiveVar makeId()
+
+    a = J.AutoVar(
+        'a'
+        ->
+            console.log 'compute a'
+            foo = $$.Foo.fetchOne randomId.get()
+            console.log 'a got', foo
+            randomId.get()
+    )
+    b = J.AutoVar(
+        'b'
+        ->
+            console.log 'run b'
+            ret = a.get()
+            console.log 'b got', ret
+            ret
+    )
+    c = J.AutoVar(
+        'c'
+        ->
+            console.log 'run c'
+            ret = b.get()
+            console.log 'c got', ret
+            ret
+    )
+
+    dRunCount = new ReactiveVar 0
+    d = J.AutoVar(
+        'd'
+        ->
+            console.log 'run d'
+            drc = Tracker.nonreactive -> dRunCount.get() + 1
+            dRunCount.set drc
+            console.log 'd2', drc
+            test.isTrue c.get()?
+            console.log 'd3'
+            null
+        true
+    )
+    eRunCount = new ReactiveVar 0
+    e = J.AutoVar(
+        'e'
+        ->
+            console.log 'run e'
+            eRunCount.set Tracker.nonreactive -> eRunCount.get() + 1
+            console.log 'e2'
+            test.isTrue c.get()?
+            console.log 'e3'
+            null
+        true
+    )
+
+    watcher = J.AutoVar(
+        'watcher'
+        -> [dRunCount.get(), eRunCount.get()]
+        ->
+            console.log 'run watcher', dRunCount.get(), eRunCount.get()
+            if dRunCount.get() is 2 and eRunCount.get() is 2
+                randomId.set makeId()
+                console.log "e is", e.get()
+                test.isTrue false, "Shouldn't be at this point"
+            else if dRunCount.get() is 3 and eRunCount.get() is 3
+                a.stop()
+                b.stop()
+                c.stop()
+                d.stop()
+                e.stop()
+                watcher.stop()
+                onComplete()
+            null
+    )
+
+
+
+
 addTest "Fetching - throw out of AutoVar valueFunc when missing fetch data", (test, onComplete) ->
     count1 = 0
     count2 = 0
@@ -138,7 +215,7 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
     )
 
 
-addTest "_lastTest", (test, onComplete) ->
+addTest "_lastTest2", (test, onComplete) ->
     setTimeout(
         -> onComplete()
         1000

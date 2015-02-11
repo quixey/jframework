@@ -79,10 +79,10 @@ Package.onTest(function(api) {
     ]);
 
     api.addFiles([
-        "tests/jframework-client-tests.coffee"
-    ], "client");
+        "tests/publish-tests.coffee"
+    ]);
 
     api.addFiles([
-        // "tests/publish-tests.coffee"
-    ]);
+        "tests/jframework-client-tests.coffee"
+    ], "client");
 });
