@@ -191,6 +191,12 @@ class J.AutoDict extends J.Dict
             @_fields[key].stop() for key of @_fields
             @active = false
 
+    logDebugInfo: ->
+        console.groupCollapsed @toString()
+        for key, fieldVar of @_fields
+            fieldVar.logDebugInfo()
+        console.groupEnd()
+
     toString: ->
         # Reactive
         "AutoDict#{J.util.stringify @toObj()}"

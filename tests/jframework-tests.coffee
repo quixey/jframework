@@ -852,13 +852,69 @@ Tinytest.add "Dict - don't invalidate creator computation", (test) ->
     c2.stop()
 
 
+Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
+    ###
+        If an AutoVar's value is running its own computation,
+        then the AutoVar's computation is the only one
+        whose invalidation can invalidate that child's
+        computation.
+    ###
+
+    al = null
+    av = J.AutoVar "av",
+        ->
+            al = J.AutoList(
+                -> 3
+                (i) -> 5
+            )
+            al.tag = "av.al"
+            al
+
+    av2 = J.AutoVar "av2",
+        -> av.get()
+
+    test.isTrue av.active
+    test.isTrue av2.active
+    test.isNull al
+    Meteor.defer =>
+        test.isNull al
+
+        Tracker.autorun (c) =>
+            myAl = av2.get()
+            test.isTrue al.active, "al stopped prematurely"
+            test.isTrue myAl.active, "myAl stopped prematurely"
+            av2.stop()
+
+            test.isTrue myAl.active
+            test.isTrue av.active
+            test.isTrue al.active
+            av.stop()
+            test.isFalse al.active
+            test.isFalse myAl.active
+
+            c.stop()
+
+            onComplete()
 
 
+Tinytest.addAsync "AutoList - Maps don't stop prematurely", (test, onComplete) ->
+    coef = new ReactiveVar 2
+    lst = J.List [3, 4, 5]
+    mappedLst = lst.map (v) -> coef.get() * v
+    test.equal mappedLst.getValues(), [6, 8, 10]
+    coef.set 3
+    test.equal mappedLst.getValues(), [6, 8, 10]
 
+    av = J.AutoVar 'av',
+        -> lst.map (v) -> coef.get() * v
 
+    test.equal av.get().getValues(), [9, 12, 15]
+    coef.set 4
+    test.equal av.get().getValues(), [12, 16, 20]
+    av.stop()
+    test.throws -> av.get().getValues()
 
-
-
+    onComplete()
 
 
 

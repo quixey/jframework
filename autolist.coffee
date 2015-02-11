@@ -13,8 +13,19 @@ class J.AutoList extends J.List
         @onChange = onChange
         @equalsFunc = equalsFunc
 
+        @_creatorComp = Tracker.currentComputation
         @active = true
-        if Tracker.active then Tracker.onInvalidate => @stop()
+
+        init = true
+        if Tracker.active then Tracker.onInvalidate (c) =>
+            if init
+                console.log "Invalidated computation is creating an AutoList", c.tag
+                console.trace()
+                # We have a J.Dict from calling super
+                @_dict = null
+            @stop()
+        init = false
+        return unless @active
 
         @_dict = Tracker.nonreactive => J.AutoDict(
             =>
@@ -42,6 +53,11 @@ class J.AutoList extends J.List
 
     get: ->
         unless @active
+            console.log "AutoList", @tag
+            if @_dict?
+                @_dict.logDebugInfo()
+            else
+                console.log "@_dict is null"
             throw new Meteor.Error "AutoList is stopped"
         super
 
@@ -71,9 +87,13 @@ class J.AutoList extends J.List
         throw new Meteor.Error "There is no AutoList.sort"
 
     stop: ->
+        console.log "STOPPING #{@tag}", @_creatorComp.tag
         @_dict?.stop() # Could be stopped at construct time
         @active = false
 
     toString: ->
         # Reactive
-        "AutoList#{J.util.stringify @toArr()}"
+        if @tag
+            "AutoList(#{@tag}=#{J.util.stringify @toArr()})"
+        else
+            "AutoList#{J.util.stringify @toArr()}"

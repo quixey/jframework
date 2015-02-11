@@ -10,6 +10,7 @@ class J.List
             return new J.List arr, equalsFunc
 
         if arr instanceof J.List
+            @tag ?= "constructor copy of (#{arr.tag})"
             arr = arr.getValues()
 
         unless _.isArray arr
@@ -45,7 +46,7 @@ class J.List
         # (one per value argument), but it would be
         # tricky to handle calls to @contains(v)
         # when v isn't J.Dict.encodeKey-able.
-        value in @getValues()
+        @indexOf(value) >= 0
 
     deepEquals: (x) ->
         # Reactive
@@ -71,15 +72,21 @@ class J.List
 
     filter: (f = _.identity) ->
         # Reactive
-        J.List _.filter @map().getValues(), f
+        filtered = J.List _.filter @map().getValues(), f
+        filtered.tag = "filtered #{@tag}"
+        filtered
 
     forEach: (f) ->
         # Reactive
         # Like @map but:
-        # - Not parallel
         # - Lets you return undefined
         # - Returns an array, not an AutoList
-        f(v, i) for v, i in @getValues()
+        UNDEFINED = {}
+        mappedList = @map (v, i) ->
+            ret = f v, i
+            if ret is undefined then UNDEFINED else ret
+        for value in mappedList.getValues()
+            if value is UNDEFINED then undefined else value
 
     get: (index) ->
         # Reactive
@@ -112,7 +119,7 @@ class J.List
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
         # Reactive
-        sortKeys = @map J.util._makeSortKeyFunc keySpec # Good to do this in parallel
+        sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues() # Good to do this in parallel
         items = _.map @getValues(), (v, i) -> index: i, value: v
         J.List _.map(
             J.util.sortByKey items, (item) -> sortKeys[item.index]
@@ -151,11 +158,13 @@ class J.List
             if f is _.identity and @ instanceof J.AutoList and @onChange
                 @
             else
-                J.AutoList(
+                mappedAl = J.AutoList(
                     => @size()
                     (i) => f @get(i), i
                     true # This makes it not lazy
                 )
+                mappedAl.tag = "mapped #{@tag}"
+                mappedAl
         else
             J.List @getValues().map f
 

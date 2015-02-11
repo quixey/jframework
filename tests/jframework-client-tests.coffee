@@ -147,7 +147,6 @@ Tinytest.add "Component with map", (test) ->
                                         6
                                         7
                                     ]).map (bVal) ->
-                                        console.log 'mapAl computing', bVal
                                         $$ ('div'),
                                             style:
                                                 background: 'lightBlue'
@@ -156,7 +155,6 @@ Tinytest.add "Component with map", (test) ->
                                                 marginBottom: 8
                                             ("A foo with b=#{bVal} is #{$$.Foo.fetchOne(b: bVal)?._id ? "[none]"}")
 
-                                    console.log 'got mapAl', mapAl
                                     mapAl
 
 

@@ -33,7 +33,7 @@ Tinytest.add 'util - matchesUrlPattern', (test) ->
         'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
         'func://yelp.com/search?cflt=pizza&q=best+restaurants&loc={mountain+view,ca|}'
     )
-    test.isFalse J.util.matchesUrlPattern(
+    test.isTrue J.util.matchesUrlPattern(
         'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements=',
         'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements={a||b}'
     )

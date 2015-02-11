@@ -101,6 +101,9 @@ class J.AutoVar
             rawValue = @valueFunc.call null, @
             @_fetchInProgress = false
 
+            if rawValue instanceof J.Dict or rawValue instanceof J.List
+                rawValue.tag ?= "contents of #{@tag}"
+
         catch e
             throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
 
