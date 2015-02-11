@@ -8,15 +8,17 @@ makeId = ->
 
 
 addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
-    randomId = new ReactiveVar makeId()
+    firstId = makeId()
+    currentId = firstId
+    idVar = new ReactiveVar currentId
 
     a = J.AutoVar(
         'a'
         ->
             console.log 'compute a'
-            foo = $$.Foo.fetchOne randomId.get()
+            foo = $$.Foo.fetchOne idVar.get()
             console.log 'a got', foo
-            randomId.get()
+            idVar.get()
     )
     b = J.AutoVar(
         'b'
@@ -46,100 +48,30 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
             if runCount1 is 1
                 test.isTrue false, "w1 should have thrown (1)"
             else if runCount1 is 2
-                test.isTrue cVal?
-                randomId.set makeId()
+                test.equal cVal, currentId
+                idVar.set currentId = makeId()
                 console.log 'Should throw here'
                 newCVal = c.get()
                 test.isTrue false, "Should have thrown"
                 console.log 'newCVal is', newCVal
             else if runCount1 is 3
-                test.isTrue cVal?
+                test.isTrue false, "w1 should have thrown (2)"
+            else if runCount1 is 4
+                test.equal cVal, currentId
                 a.stop()
                 b.stop()
                 c.stop()
+            cVal
+        (oldCVal, newCVal) ->
+            console.log 'watcher1.onChange', runCount1, oldCVal, newCVal
+            if runCount1 is 4
+                test.equal oldCVal, undefined
+                test.equal newCVal, currentId
                 watcher1.stop()
                 onComplete()
-            null
-        true
+            else
+                test.isTrue false, "Invalid watcher onChange: #{runCount1}, #{oldCVal}, #{newCVal}"
     )
-
-
-if false then addTest "AutoVar - set fetchInProgress when a dependency is setting fetchInProgress", (test, onComplete) ->
-    randomId = new ReactiveVar makeId()
-
-    a = J.AutoVar(
-        'a'
-        ->
-            console.log 'compute a'
-            foo = $$.Foo.fetchOne randomId.get()
-            console.log 'a got', foo
-            randomId.get()
-    )
-    b = J.AutoVar(
-        'b'
-        ->
-            console.log 'run b'
-            ret = a.get()
-            console.log 'b got', ret
-            ret
-    )
-    c = J.AutoVar(
-        'c'
-        ->
-            console.log 'run c'
-            ret = b.get()
-            console.log 'c got', ret
-            ret
-    )
-
-    dRunCount = new ReactiveVar 0
-    d = J.AutoVar(
-        'd'
-        ->
-            console.log 'run d'
-            drc = Tracker.nonreactive -> dRunCount.get() + 1
-            dRunCount.set drc
-            console.log 'd2', drc
-            test.isTrue c.get()?
-            console.log 'd3'
-            null
-        true
-    )
-    eRunCount = new ReactiveVar 0
-    e = J.AutoVar(
-        'e'
-        ->
-            console.log 'run e'
-            eRunCount.set Tracker.nonreactive -> eRunCount.get() + 1
-            console.log 'e2'
-            test.isTrue c.get()?
-            console.log 'e3'
-            null
-        true
-    )
-
-    watcher = J.AutoVar(
-        'watcher'
-        -> [dRunCount.get(), eRunCount.get()]
-        ->
-            console.log 'run watcher', dRunCount.get(), eRunCount.get()
-            if dRunCount.get() is 2 and eRunCount.get() is 2
-                randomId.set makeId()
-                console.log "e is", e.get()
-                test.isTrue false, "Shouldn't be at this point"
-            else if dRunCount.get() is 3 and eRunCount.get() is 3
-                a.stop()
-                b.stop()
-                c.stop()
-                d.stop()
-                e.stop()
-                watcher.stop()
-                onComplete()
-            null
-    )
-
-
-
 
 addTest "Fetching - throw out of AutoVar valueFunc when missing fetch data", (test, onComplete) ->
     count1 = 0

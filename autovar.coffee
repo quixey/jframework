@@ -13,9 +13,6 @@
 
 ###
 
-## NOTE: When I throw out of a computation, it doesn't have teh same effect on the pending queue
-## CRAP we need a global lock during fetches
-
 class J.AutoVar
     constructor: (tag, valueFunc, onChange, equalsFunc, wrap) ->
         ###
@@ -95,22 +92,37 @@ class J.AutoVar
             # we ever decide to compute @valueFunc the first time
             # synchronously.
             rawValue = @valueFunc.call null, @
-            @_fetchInProgress = false
+
+            if @_fetchInProgress
+                @_fetchInProgress = false
+
+                # We already make a @_var.set call later. These invalidations
+                # are just necessary if the new value is the same as the
+                # pre-fetch value.
+                for computationId, computation of @_var.dep._dependentsById
+                    computation.invalidate()
 
             if rawValue instanceof J.Dict or rawValue instanceof J.List
-                rawValue.tag ?= "contents of #{@tag}"
+                rawValue.tag ?= "contents of (#{@tag})"
 
         catch e
             throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
 
-            @_fetchInProgress = true
+            if not @_fetchInProgress
+                @_fetchInProgress = true
 
-            # While we're either throwing an error or returning
-            # undefined, the value of @_var may still be an old
-            # value from when we previously succeeded in fetching
-            # data. When we succeed in fetching data again, the
-            # onChange triggers will act like there was never
-            # a gap during which data wasn't available.
+                # While we're either throwing an error or returning
+                # undefined, the value of @_var may still be an old
+                # value from when we previously succeeded in fetching
+                # data. When we succeed in fetching data again, the
+                # onChange triggers will act like there was never
+                # a gap during which data wasn't available.
+                # But we want our dependents to think it's changed
+                # so we can achieve the same propagation effect
+                # as during a normal client-side value invalidation.
+                for computationId, computation of @_var.dep._dependentsById
+                    computation.invalidate()
+
             return
 
         if rawValue is @constructor._UNDEFINED_WITHOUT_SET
@@ -222,6 +234,7 @@ class J.AutoVar
                 delete @_gettersById[computation._id]
 
         console.log "GET", @tag, @_valueComp?, (v.tag ? v._valueComp.tag for v in @constructor._pending)
+
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.

@@ -133,20 +133,21 @@ J.fetching =
             # never stop once it's started. But we still want to track
             # which computations need this querySpec.
             computation = Tracker.currentComputation
-            @_requestersByQs[qsString] ?= {}
-            @_requestersByQs[qsString][computation._id] = computation
             # console.log computation.tag, 'requests a query', querySpec.modelName,
             #     querySpec.selector, @isQueryReady querySpec
-            computation.onInvalidate =>
-                # console.log computation.tag, 'cancels a query', computation.stopped,
-                #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
-                if qsString of @_requestersByQs
-                    delete @_requestersByQs[qsString][computation._id]
-                    if _.isEmpty @_requestersByQs[qsString]
-                        delete @_requestersByQs[qsString]
-                @_requestsChanged = true
-                J.afterStuff =>
-                    @remergeQueries()
+            @_requestersByQs[qsString] ?= {}
+            if computation._id not of @_requestersByQs[qsString]
+                @_requestersByQs[qsString][computation._id] = computation
+                computation.onInvalidate =>
+                    # console.log computation.tag, 'cancels a query', computation.stopped,
+                    #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
+                    if qsString of @_requestersByQs
+                        delete @_requestersByQs[qsString][computation._id]
+                        if _.isEmpty @_requestersByQs[qsString]
+                            delete @_requestersByQs[qsString]
+                    @_requestsChanged = true
+                    J.afterStuff =>
+                        @remergeQueries()
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
