@@ -7,7 +7,64 @@ makeId = ->
     "#{Math.floor 10000 * Math.random()}"
 
 
-addTest "AutoVar - set fetchInProgress when a dependency is setting fetchInProgress", (test, onComplete) ->
+addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
+    randomId = new ReactiveVar makeId()
+
+    a = J.AutoVar(
+        'a'
+        ->
+            console.log 'compute a'
+            foo = $$.Foo.fetchOne randomId.get()
+            console.log 'a got', foo
+            randomId.get()
+    )
+    b = J.AutoVar(
+        'b'
+        ->
+            console.log 'compute b'
+            ret = a.get()
+            console.log 'b got', ret
+            ret
+    )
+    c = J.AutoVar(
+        'c'
+        ->
+            console.log 'compute c'
+            ret = b.get()
+            console.log 'c got', ret
+            ret
+    )
+
+    runCount1 = 0
+    watcher1 = J.AutoVar(
+        'watcher1'
+        ->
+            runCount1 += 1
+            console.log 'compute watcher1', runCount1
+            cVal = c.get()
+            console.log 'watcher1 got', cVal
+            if runCount1 is 1
+                test.isTrue false, "w1 should have thrown (1)"
+            else if runCount1 is 2
+                test.isTrue cVal?
+                randomId.set makeId()
+                console.log 'Should throw here'
+                newCVal = c.get()
+                test.isTrue false, "Should have thrown"
+                console.log 'newCVal is', newCVal
+            else if runCount1 is 3
+                test.isTrue cVal?
+                a.stop()
+                b.stop()
+                c.stop()
+                watcher1.stop()
+                onComplete()
+            null
+        true
+    )
+
+
+if false then addTest "AutoVar - set fetchInProgress when a dependency is setting fetchInProgress", (test, onComplete) ->
     randomId = new ReactiveVar makeId()
 
     a = J.AutoVar(
