@@ -65,7 +65,9 @@ class J.List
 
     find: (f = _.identity) ->
         # Reactive
-        _.find @getValues(), f
+        for i in [0...@size()]
+            x = @get i
+            return x if f x
 
     filter: (f = _.identity) ->
         # Reactive
@@ -85,8 +87,9 @@ class J.List
             throw new Meteor.Error "Index must be a number"
         try
             @_dict.forceGet "#{index}"
-        catch
-            throw new Meteor.Error "List index out of range"
+        catch e
+            throw e
+            # TODO: look for missing-key and throw new Meteor.Error "List index out of range"
 
     getConcat: (lst) ->
         # Reactive
@@ -108,7 +111,12 @@ class J.List
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
         # Reactive
-        J.List J.util.sortByKey @getValues(), keySpec
+        sortKeys = @map J.util._makeSortKeyFunc keySpec # Good to do this in parallel
+        items = _.map @getValues(), (v, i) -> index: i, value: v
+        J.List _.map(
+            J.util.sortByKey items, (item) -> sortKeys[item.index]
+            (item) -> item.value
+        )
 
     getValues: ->
         # Reactive
@@ -118,6 +126,23 @@ class J.List
         # Reactive
         @getValues().join separator
 
+    indexOf: (x, equalsFunc = J.util.equals) ->
+        for i in [0...@size()]
+            y = @get i
+            return i if equalsFunc y, x
+        -1
+
+    lazyMap: (f) ->
+        # Reactive
+        if Tracker.active
+            J.AutoList(
+                => @size()
+                (i) => f @get(i), i
+                null # This makes it lazy
+            )
+        else
+            J.List @getValues().map f
+
     map: (f) ->
         # Reactive
         # Enables parallel fetching
@@ -125,7 +150,7 @@ class J.List
             J.AutoList(
                 => @size()
                 (i) => f @get(i), i
-                # true
+                true # This makes it not lazy
             )
         else
             J.List @getValues().map f

@@ -18,6 +18,12 @@ J.util =
         if arguments.length isnt 2
             throw 'Compare needs 2 arguments'
 
+        if a instanceof J.List
+            a = a.getValues()
+        if b instanceof J.List
+            b = b.getValues()
+
+
         if a is undefined or b is undefined
             if a is undefined and b is undefined then 0
             else if a is undefined then -1
@@ -243,15 +249,16 @@ J.util =
 
         obj[fieldSpecParts[fieldSpecParts.length - 1]] = value
 
-    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
-        keyFunc =
-            if _.isString keySpec
-                (x) -> J.util.getField x, keySpec
-            else if _.isFunction keySpec
-                keySpec
-            else
-                throw new Meteor.Error "Invalid keySpec: #{keySpec}"
+    _makeSortKeyFunc: (keySpec) ->
+        if _.isString keySpec
+            (x) -> J.util.getField x, keySpec
+        else if _.isFunction keySpec
+            keySpec
+        else
+            throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
+    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
+        keyFunc = @_makeSortKeyFunc keySpec
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
     sortKeyFunc: (x) ->
@@ -284,49 +291,3 @@ J.util =
             "{#{("#{J.util.stringify k}:#{J.util.stringify v}" for k, v of obj).join ', '}}"
         else
             obj.toString()
-
-
-
-J.utilTests =
-    sorting: ->
-        J.assert J.util.compare(
-            [false, -2]
-            [1, -5, 6]
-        ) is -1
-        J.assert J.util.compare(
-            [1, 2, 3, 'test', 5]
-            [1, 2.0, 3, 'TeSt', 5.0]
-        ) is 0
-        J.assert J.util.compare(
-            {key: 6}
-            5
-        ) is 1
-        J.assert J.util.deepEquals(
-            ['G', 'f'].sort(J.util.compare)
-            ['f', 'G']
-        )
-
-    matchesUrlPattern: ->
-        J.assert J.util.matchesUrlPattern(
-            "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time=",
-            "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time="
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?q=best+restaurants&loc={mountain+view,ca|}'
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?q=best+restaurants&loc={mountain\+view,ca|}'
-        )
-        J.assert not J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?cflt=pizza&q=best+restaurants&loc={mountain+view,ca|}'
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements=',
-            'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements={a||b}'
-        )
-
-for funcName, testFunc of J.utilTests
-    testFunc()

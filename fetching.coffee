@@ -2,6 +2,21 @@
 # so {a: 5, b: 6} and {b: 6, a: 5} look like different
 # querySpecs. More generally, we need a querySpec consolidation.
 
+J._asQueue = []
+J.afterStuff = (f) ->
+    J._asQueue.push f
+    if J._asQueue.length is 1
+        setTimeout(
+            ->
+                console.log 'AfterStuff'
+                asQueue = J._asQueue
+                J._asQueue = []
+                queuedFunc() for queuedFunc in asQueue
+            1
+        )
+
+
+
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
     FETCH_IN_PROGRESS: {
@@ -76,7 +91,10 @@ J.fetching =
                 console.groupCollapsed("+")
                 for qsString in unmergedQsStringsDiff.added
                     for computationId, computation of @_requestersByQs[qsString]
-                        console.log computation.tag
+                        if computation.autoVar?
+                            computation.autoVar.logDebugInfo()
+                        else
+                            console.log computation.tag
                 console.groupEnd()
                 console.debug "    ", consolify(qs) for qs in addedQuerySpecs
             if deletedQuerySpecs.length
@@ -103,7 +121,7 @@ J.fetching =
 
                 # There may be changes to @_requestersByQs that we couldn't act on
                 # until this request was done.
-                Tracker.afterFlush =>
+                J.afterStuff =>
                     @remergeQueries()
 
 
@@ -127,7 +145,7 @@ J.fetching =
                     if _.isEmpty @_requestersByQs[qsString]
                         delete @_requestersByQs[qsString]
                 @_requestsChanged = true
-                Tracker.afterFlush =>
+                J.afterStuff =>
                     @remergeQueries()
 
         if @isQueryReady querySpec
@@ -140,7 +158,7 @@ J.fetching =
             return undefined
 
         @_requestsChanged = true
-        Tracker.afterFlush =>
+        J.afterStuff =>
             @remergeQueries()
 
         throw @FETCH_IN_PROGRESS

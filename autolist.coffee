@@ -17,7 +17,11 @@ class J.AutoList extends J.List
         if Tracker.active then Tracker.onInvalidate => @stop()
 
         @_dict = Tracker.nonreactive => J.AutoDict(
-            => "#{i}" for i in [0...@sizeFunc()]
+            =>
+                size = @sizeFunc()
+                unless _.isNumber(size) and parseInt(size) is size and size >= 0
+                    throw "Invalid AutoList sizeFunc output: #{size}"
+                "#{i}" for i in [0...size]
             (key) => @valueFunc parseInt(key)
             (
                 if _.isFunction @onChange then (key, oldValue, newValue) =>

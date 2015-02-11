@@ -388,7 +388,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 style:
                     textAlign: 'center'
                     opacity: 0.5
-                $$ ('Loader')
+                ("#{@toString()} loading...")
 
         element
 

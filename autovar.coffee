@@ -56,6 +56,7 @@ class J.AutoVar
         @_preservedValue = undefined
         @_fetchInProgress = false
         @_getting = false
+        @_gettersById = {} # computationId: computation
 
         @active = true
         if Tracker.active then Tracker.onInvalidate => @stop()
@@ -73,6 +74,13 @@ class J.AutoVar
             @valueFunc may get a performance benefit from isolating
             part of its reactive logic in an AutoVar.
         ###
+        if Tracker.active
+            # Track _gettersById for debugging
+            computation = Tracker.currentComputation
+            @_gettersById[computation._id] = computation
+            computation.onInvalidate =>
+                delete @_gettersById[computation._id]
+
         value = @_var.get()
         if value instanceof J.AutoVar then value.get() else value
 
@@ -165,6 +173,7 @@ class J.AutoVar
                 @_valueComp = c
 
             @_valueComp.tag = "AutoVar #{@tag}"
+            @_valueComp.autoVar = @
 
             pos = @constructor._pending.indexOf @
             if pos >= 0
@@ -258,6 +267,16 @@ class J.AutoVar
             pos = @constructor._pending.indexOf @
             if pos >= 0
                 @constructor._pending.splice pos, 1
+
+    logDebugInfo: ->
+        getters = _.values @_gettersById
+        console.groupCollapsed @toString()
+        for c in getters
+            if c.autoVar?
+                c.autoVar.logDebugInfo()
+            else
+                console.log c.tag
+        console.groupEnd()
 
     toString: ->
         if @tag?

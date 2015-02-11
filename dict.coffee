@@ -61,7 +61,7 @@ class J.Dict
             value = @_fields[key].get()
             if value instanceof J.AutoVar then value.get() else value
         else if force
-            throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
+            throw new Meteor.Error "missing-key", "#{@constructor.name} missing key: #{J.util.stringify key}"
         else
             undefined
 
