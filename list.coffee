@@ -71,7 +71,7 @@ class J.List
 
     filter: (f = _.identity) ->
         # Reactive
-        J.List _.filter @getValues(), f
+        J.List _.filter @map().getValues(), f
 
     forEach: (f) ->
         # Reactive
@@ -101,6 +101,7 @@ class J.List
                         @get i
                     else
                         lst.get i - @size()
+                true
             )
         else
             J.List @getValues().concat lst.getValues()
@@ -124,7 +125,7 @@ class J.List
 
     join: (separator) ->
         # Reactive
-        @getValues().join separator
+        @map().getValues().join separator
 
     indexOf: (x, equalsFunc = J.util.equals) ->
         for i in [0...@size()]
@@ -132,7 +133,7 @@ class J.List
             return i if equalsFunc y, x
         -1
 
-    lazyMap: (f) ->
+    lazyMap: (f = _.identity) ->
         # Reactive
         if Tracker.active
             J.AutoList(
@@ -143,15 +144,18 @@ class J.List
         else
             J.List @getValues().map f
 
-    map: (f) ->
+    map: (f = _.identity) ->
         # Reactive
         # Enables parallel fetching
         if Tracker.active
-            J.AutoList(
-                => @size()
-                (i) => f @get(i), i
-                true # This makes it not lazy
-            )
+            if f is _.identity and @ instanceof J.AutoList and @onChange
+                @
+            else
+                J.AutoList(
+                    => @size()
+                    (i) => f @get(i), i
+                    true # This makes it not lazy
+                )
         else
             J.List @getValues().map f
 
