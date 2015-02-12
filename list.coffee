@@ -100,15 +100,16 @@ class J.List
 
     getConcat: (lst) ->
         # Reactive
+        if _.isArray lst then lst = J.List lst
         if Tracker.active
             J.AutoList(
-                => @size() + lst.size()
+                =>
+                    @size() + lst.size()
                 (i) =>
                     if i < @size()
                         @get i
                     else
                         lst.get i - @size()
-                true
             )
         else
             J.List @getValues().concat lst.getValues()

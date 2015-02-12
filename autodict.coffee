@@ -39,6 +39,10 @@ class J.AutoDict extends J.Dict
         unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
+        @_id = J.AutoVar._nextId
+        J.AutoVar._nextId += 1
+        J.AutoVar._byId[@_id] = @
+
         super {}, equalsFunc
 
         @keysFunc = keysFunc
@@ -57,8 +61,13 @@ class J.AutoDict extends J.Dict
 
         @_pendingNewKeys = null
 
-        @_keysVar = Tracker.nonreactive => J.AutoVar "AutoDict(#{@tag ? ''})._keysVar",
-            (=>
+        @_keysVar = Tracker.nonreactive => J.AutoVar "AutoDict(#{@tag ? ''},#{@_id})._keysVar",
+            ((kv) =>
+                kv._valueComp.onInvalidate ->
+                    console.groupCollapsed("INVALIDATED KEYSVAR: ", kv.tag, kv._id)
+                    console.trace()
+                    console.groupEnd()
+
                 newKeys = @keysFunc.apply null
 
                 if newKeys instanceof J.List
@@ -173,7 +182,7 @@ class J.AutoDict extends J.Dict
         @_keysVar.get()
 
     hasKey: (key) ->
-        @_keysVar.contains key
+        key in @getKeys() # FIXME: Use separate deps per key
 
     replaceKeys: ->
         throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
@@ -201,12 +210,10 @@ class J.AutoDict extends J.Dict
             @active = false
 
     logDebugInfo: ->
-        console.groupCollapsed(
-            if @active
-                @toString()
-            else
-                @_fields
-        )
+        if @active
+            console.groupCollapsed @toString()
+        else
+            console.groupCollapsed "AutoDict(#{@_id}) fields=", @_fields
         @_keysVar.logDebugInfo()
         for key, fieldVar of @_fields
             fieldVar.logDebugInfo()
@@ -219,4 +226,4 @@ class J.AutoDict extends J.Dict
                 J.util.stringify @toObj()
             else
                 "STOPPED"
-        "AutoDict(#{@tag ? ''})=#{objString}"
+        "AutoDict(#{@tag ? ''},#{@_id})=#{objString}"

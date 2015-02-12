@@ -1,4 +1,5 @@
 addTest = (testName, testFunc) ->
+    return
     return if Meteor.isServer
     Tinytest.addAsync testName, (test, onComplete) ->
         testFunc test, onComplete
@@ -10,6 +11,109 @@ debug = false
 log = ->
     if debug
         console.log.apply console, arguments
+
+Tinytest.addAsync "weird problem", (test, onComplete) ->
+    if Meteor.isServer
+        onComplete()
+        return
+
+    console.info "begin weird problem"
+
+    a = J.AutoVar 'a',
+        ->
+            console.info 1
+
+            tagLists = J.AutoVar 'tagLists',
+                ->
+                    console.info 2
+                    x = $$.Foo.fetchOne()
+                    console.info 3
+                    al = J.AutoList(
+                        ->
+                            console.info 4
+                            2
+                        (key) ->
+                            console.trace()
+                            console.info 5
+                            'three'
+                    )
+                    console.info 6
+                    al.tag = 'al'
+                    al
+
+            outerTester = J.AutoVar 'outerTester',
+                (ot) ->
+                    console.info 7
+                    ret = tagLists.get()
+                    console.info 8
+                    ret
+
+            console.info 9
+            outerTester.get()
+
+            ['fake1', 'fake2']
+
+
+    aVal = a.get()
+    test.isUndefined aVal
+    console.log 'waiting...'
+    setTimeout(
+        ->
+            console.log 'getting aVal2'
+            aVal2 = a.get()
+            console.log "got: ", aVal2
+            onComplete()
+        2000
+    )
+
+
+addTest "AutoVar - AutoList fetching inside", (test, onComplete) ->
+    debug = true
+
+    changeCount = 0
+    randomId1 = new ReactiveVar makeId()
+    randomId2 = new ReactiveVar makeId()
+    r = new ReactiveVar 5
+
+    fetcher = J.AutoVar 'fetcher',
+        ->
+            $$.Foo.fetchOne randomId2.get()
+            ['a', 'b', randomId2.get()]
+
+
+    av = J.AutoVar 'av',
+        ->
+            $$.Foo.fetch randomId1.get()
+
+            al = fetcher.get().map (x) ->
+                innerAl = J.AutoList(
+                    -> r.get()
+                    (j) ->
+                        "#{r.get()}#{x},#{j}"
+                )
+                innerAl.tag = "innerAl"
+                innerAl
+
+            av3 = null
+            av2 = J.AutoVar 'av2',
+                ->
+                    av3 = J.AutoVar 'av3',
+                        -> al.get(0).getValues()
+
+            J.List(['x', 'y'])
+    ,
+        (oldAv, newAv) ->
+            changeCount += 1
+            console.log 'av onChange', changeCount, oldAv, newAv
+            if changeCount is 1
+                r.set 8
+                randomId1.set makeId()
+            else
+                fetcher.stop()
+                av.stop()
+                onComplete()
+
+
 
 
 addTest "AutoVar - AutoDict fetching inside", (test, onComplete) ->

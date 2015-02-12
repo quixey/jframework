@@ -2,6 +2,10 @@ J = {}
 J.stores = {}
 
 if Meteor.isServer
+    console.groupCollapsed = console.log
+    console.groupEnd = console.log
+    console.group = console.log
+
     Meteor.startup ->
         # The point of "init" is to let the client wait
         # until the initial subscription is ready.

@@ -579,60 +579,6 @@ Tinytest.add "List - .contains reactivity", (test) ->
     Tracker.flush()
     test.isFalse lastContains
 
-Tinytest.add "AutoVar - indexOf", (test) ->
-    size = new ReactiveVar 3
-    valueFuncRunCount = 0
-    a = J.AutoVar(
-        ->
-            valueFuncRunCount += 1
-            [0...size.get()]
-    )
-    test.equal valueFuncRunCount, 0
-    test.isTrue a.contains 2
-    test.equal valueFuncRunCount, 1
-    test.isTrue a.contains 1
-    test.equal valueFuncRunCount, 1
-    size.set 2
-    test.isTrue a.contains 1
-    test.equal valueFuncRunCount, 2
-    test.isFalse a.contains 2
-    test.equal valueFuncRunCount, 2
-    a.stop()
-
-Tinytest.add "AutoVar - indexOf reactivity", (test) ->
-    size = new ReactiveVar 3
-    aRunCount = 0
-    aContains2RunCount = 0
-    a = J.AutoVar(
-        ->
-            aRunCount += 1
-            [0...size.get()]
-    )
-    aContains2 = J.AutoVar(
-        ->
-            aContains2RunCount += 1
-            a.contains 2
-    )
-    Tracker.flush()
-    test.equal aRunCount, 0
-    test.equal aContains2RunCount, 0
-    test.isTrue aContains2.get()
-    test.equal aRunCount, 1
-    test.equal aContains2RunCount, 1
-    test.isTrue a.contains(1)
-    test.equal aRunCount, 1
-    test.equal aContains2RunCount, 1
-    size.set 4
-    test.isTrue aContains2.get()
-    test.equal aRunCount, 2
-    test.equal aContains2RunCount, 1
-    size.set 2
-    test.isFalse aContains2.get()
-    test.equal aRunCount, 3
-    test.equal aContains2RunCount, 2
-    a.stop()
-    aContains2.stop()
-
 
 Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
     size = new ReactiveVar 3

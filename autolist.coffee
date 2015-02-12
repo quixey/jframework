@@ -6,6 +6,10 @@ class J.AutoList extends J.List
         unless _.isFunction(sizeFunc) and _.isFunction(valueFunc)
             throw new Meteor.Error "AutoList must be constructed with sizeFunc and valueFunc"
 
+        @_id = J.AutoVar._nextId
+        J.AutoVar._nextId += 1
+        J.AutoVar._byId[@_id] = @
+
         super [], equalsFunc
 
         @sizeFunc = sizeFunc
@@ -99,4 +103,4 @@ class J.AutoList extends J.List
                 J.util.stringify @toArr()
             else
                 "STOPPED"
-        "AutoList(#{@tag ? ''}=#{objString})"
+        "AutoList(#{@tag ? ''},#{@_id}=#{objString})"

@@ -14,6 +14,10 @@
 ###
 
 class J.AutoVar
+    @_nextId = 0
+    @_byId = {}
+    J.a = @_byId
+
     constructor: (tag, valueFunc, onChange, equalsFunc, wrap) ->
         ###
             AutoVars default to being "lazy", i.e. not calculated
@@ -46,6 +50,10 @@ class J.AutoVar
         unless not onChange? or _.isFunction(onChange) or onChange is true
             throw new Meteor.Error "Invalid onChange argument: #{onChange}"
 
+        @_id = @constructor._nextId
+        @constructor._nextId += 1
+        @constructor._byId[@_id] = @
+
         @tag = tag
         @valueFunc = valueFunc
         @onChange = onChange ? null
@@ -64,8 +72,6 @@ class J.AutoVar
         if @onChange then Tracker.afterFlush @_bindEnvironment =>
             if @active and not @_valueComp?
                 @_setupValueComp()
-
-        @_arrIndexOfDeps = {} # value: dep
 
     _deepGet: ->
         ###
@@ -97,7 +103,7 @@ class J.AutoVar
                     computation.invalidate()
 
             if rawValue instanceof J.Dict or rawValue instanceof J.List
-                rawValue.tag ?= "contents of (#{@tag})"
+                rawValue.tag ?= "contents of (#{@tag}-#{@_id})"
 
         catch e
             throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
@@ -132,28 +138,7 @@ class J.AutoVar
         newValue = if @wrap then J.Dict._deepReactify rawValue else rawValue
 
         @_var.set newValue
-        console.log @tag, "recomputed new value of", newValue, newValue?.active
-
-        # Check if we should fire @_arr* deps (if oldValue and newValue are arrays)
-        # TODO: This fine-grained dependency stuff should be part of a J.ReactiveVar
-        # class that J.AutoVar inherits from
-        oldArr = null
-        if oldValue instanceof J.List and oldValue.active isnt false
-            oldArr = Tracker.nonreactive => oldValue.getValues()
-        else if _.isArray oldValue
-            oldArr = oldValue
-        newArr = null
-        if newValue instanceof J.List and newValue.active isnt false
-            newArr = Tracker.nonreactive => newValue.getValues()
-        else if _.isArray newValue
-            newArr = newValue
-        if oldArr? and newArr?
-            for x, i in oldArr
-                if newArr[i] isnt x
-                    @_arrIndexOfDeps[i]?.changed()
-            for y, i in newArr
-                if oldArr[i] isnt y
-                    @_arrIndexOfDeps[i]?.changed()
+        console.log @tag, @_id, "recomputed new value of", newValue, newValue?.active
 
         if _.isFunction(@onChange) and not @equalsFunc oldValue, newValue
             Tracker.afterFlush @_bindEnvironment =>
@@ -164,7 +149,7 @@ class J.AutoVar
                     @onChange.call @, oldValue, newValue
 
     _setupValueComp: ->
-        console.log "_setupValueComp", @tag, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "_setupValueComp", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
         J.assert @active
 
         @_valueComp?.stop()
@@ -173,7 +158,7 @@ class J.AutoVar
                 # Important to do this here in case @stop() is called during the
                 # first run of the computation.
                 @_valueComp = c
-                @_valueComp.tag = "AutoVar #{@tag}"
+                @_valueComp.tag = "AutoVar #{@tag}-#{@_id}"
                 @_valueComp.autoVar = @
 
             pos = @constructor._pending.indexOf @
@@ -183,7 +168,7 @@ class J.AutoVar
             @_recompute()
 
             @_valueComp.onInvalidate =>
-                console.log "INVALIDATED", @tag
+                console.log "INVALIDATED", @tag, @_id
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
@@ -199,13 +184,11 @@ class J.AutoVar
             throw J.fetching.FETCH_IN_PROGRESS
 
 
-    contains: (x) ->
-        # Reactive
-        @indexOf(x) >= 0
-
     get: ->
         unless @active
-            throw new Meteor.Error "#{@constructor.name} is stopped: #{@}"
+            console.error()
+            throw "#{@constructor.name} ##{@_id} is stopped: #{@}.
+                Getter: #{Tracker.currentComputation?.tag} ###{Tracker.currentComputation?._id}"
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
@@ -224,7 +207,7 @@ class J.AutoVar
             computation.onInvalidate =>
                 delete @_gettersById[computation._id]
 
-        console.log "GET", @tag, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "GET", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.
@@ -247,23 +230,6 @@ class J.AutoVar
                 return undefined
 
         @_deepGet()
-
-    indexOf: (x) ->
-        # Reactive
-        value = Tracker.nonreactive =>
-            v = @get()
-            if v instanceof J.List then v.getValues() else v
-
-        if not _.isArray(value)
-            throw new Meteor.Error "Can't call .contains() on AutoVar with
-                non-list value: #{J.util.stringify value}"
-
-        i = value.indexOf x
-
-        @_arrIndexOfDeps[x] ?= new Tracker.Dependency()
-        @_arrIndexOfDeps[x].depend()
-
-        i
 
     set: ->
         throw new Meteor.Error "There is no AutoVar.set"
@@ -290,9 +256,9 @@ class J.AutoVar
 
     toString: ->
         if @tag?
-            "AutoVar(#{@tag}=#{J.util.stringify @_var.get()})"
+            "AutoVar(#{@tag}-#{@_id}=#{J.util.stringify @_var.get()})"
         else
-            "AutoVar(#{J.util.stringify @_var.get()})"
+            "AutoVar(#{@_id=J.util.stringify @_var.get()})"
 
 
     @_pending: []
