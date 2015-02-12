@@ -29,6 +29,7 @@ class J.AutoList extends J.List
 
         @_dict = Tracker.nonreactive => J.AutoDict(
             =>
+                @_dict.tag = @tag #FIXME: awkward place for this
                 size = @sizeFunc()
                 unless _.isNumber(size) and parseInt(size) is size and size >= 0
                     throw "Invalid AutoList sizeFunc output: #{size}"
@@ -87,13 +88,15 @@ class J.AutoList extends J.List
         throw new Meteor.Error "There is no AutoList.sort"
 
     stop: ->
-        console.log "STOPPING #{@tag}", @_creatorComp.tag
+        # console.log "STOPPING (#{@tag}) created by (#{@_creatorComp?.tag})"
         @_dict?.stop() # Could be stopped at construct time
         @active = false
 
     toString: ->
         # Reactive
-        if @tag
-            "AutoList(#{@tag}=#{J.util.stringify @toArr()})"
-        else
-            "AutoList#{J.util.stringify @toArr()}"
+        objString =
+            if @active
+                J.util.stringify @toArr()
+            else
+                "STOPPED"
+        "AutoList(#{@tag ? ''}=#{objString})"

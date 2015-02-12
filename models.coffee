@@ -220,7 +220,10 @@ class J.Model
 
 
     toString: ->
-        EJSON.stringify @
+        if @alive
+            EJSON.stringify @
+        else
+            "<#{@modelClass.name} ##{@_id} DEAD>"
 
 
     typeName: ->

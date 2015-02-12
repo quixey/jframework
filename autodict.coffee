@@ -11,6 +11,7 @@
                 -> J.List [1, 2, 3]
                 (key) -> f()
             )
+        and have a bonus of initializing the functions .1(), .2(), .3() at construct time
 
 
     2.
@@ -31,9 +32,9 @@
 
 
 class J.AutoDict extends J.Dict
-    constructor: (keysFunc, valueFunc, onChange = null, equalsFunc = J.util.equals) ->
+    constructor: (keysFunc, valueFunc, onChange = null, equalsFunc = J.util.equals, tag) ->
         unless @ instanceof J.AutoDict
-            return new J.AutoDict keysFunc, valueFunc, onChange, equalsFunc
+            return new J.AutoDict keysFunc, valueFunc, onChange, equalsFunc, tag
 
         unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
@@ -42,6 +43,7 @@ class J.AutoDict extends J.Dict
 
         @keysFunc = keysFunc
         @valueFunc = valueFunc
+        @tag = tag
 
         ###
             onChange:
@@ -55,7 +57,7 @@ class J.AutoDict extends J.Dict
 
         @_pendingNewKeys = null
 
-        @_keysVar = J.AutoVar "AutoDict(#{@tag ? ''})._keysVar",
+        @_keysVar = Tracker.nonreactive => J.AutoVar "AutoDict(#{@tag ? ''})._keysVar",
             (=>
                 newKeys = @keysFunc.apply null
 
@@ -99,7 +101,9 @@ class J.AutoDict extends J.Dict
             false
 
         @active = true
-        if Tracker.active then Tracker.onInvalidate => @stop()
+        if Tracker.active then Tracker.onInvalidate =>
+            console.log @tag, "GONNA STOP thanks to", @_creatorComp.tag
+            @stop()
 
     _delete: (key) ->
         oldValue = Tracker.nonreactive => @_fields[key].get()
@@ -120,7 +124,7 @@ class J.AutoDict extends J.Dict
             undefined
 
     _initField: (key) ->
-        @_fields[key] = Tracker.nonreactive => J.AutoVar "AutoDict._fields[#{J.util.stringify key}]",
+        @_fields[key] = Tracker.nonreactive => J.AutoVar "AutoDict(#{@tag ? ''})._fields[#{J.util.stringify key}]",
             =>
                 # In the AutoVar graph, set up the dependency
                 # @_keysVar -> @_fields[key]
@@ -151,14 +155,18 @@ class J.AutoDict extends J.Dict
     delete: ->
         throw new Meteor.Error "There is no AutoDict.delete"
 
-    forceGet: ->
+    forceGet: (key) ->
         unless @active
-            throw new Meteor.Error "AutoDict is stopped"
+            @logDebugInfo()
+            throw new Meteor.Error "AutoDict(#{@tag ? ''}) is stopped.
+                Current computation: #{Tracker.currentComputation?.tag}"
         super
 
-    get: ->
+    get: (key) ->
         unless @active
-            throw new Meteor.Error "AutoDict is stopped"
+            @logDebugInfo()
+            throw new Meteor.Error "AutoDict(#{@tag ? ''}) is stopped.
+                Current computation: #{Tracker.currentComputation?.tag}"
         super
 
     getKeys: ->
@@ -186,17 +194,29 @@ class J.AutoDict extends J.Dict
             J.Dict Tracker.nonreactive => @getFields()
 
     stop: ->
+        # console.log "STOPPING (#{@tag}) created by (#{@_creatorComp?.tag})"
         if @active
             @_keysVar.stop()
             @_fields[key].stop() for key of @_fields
             @active = false
 
     logDebugInfo: ->
-        console.groupCollapsed @toString()
+        console.groupCollapsed(
+            if @active
+                @toString()
+            else
+                @_fields
+        )
+        @_keysVar.logDebugInfo()
         for key, fieldVar of @_fields
             fieldVar.logDebugInfo()
         console.groupEnd()
 
     toString: ->
         # Reactive
-        "AutoDict#{J.util.stringify @toObj()}"
+        objString =
+            if @active
+                J.util.stringify @toObj()
+            else
+                "STOPPED"
+        "AutoDict(#{@tag ? ''})=#{objString}"

@@ -163,7 +163,7 @@ class J.List
                     (i) => f @get(i), i
                     true # This makes it not lazy
                 )
-                mappedAl.tag = "mapped #{@tag}"
+                mappedAl.tag = "mapped (#{@tag})"
                 mappedAl
         else
             J.List @getValues().map f

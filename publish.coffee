@@ -174,7 +174,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     mergedSpecStringsVar = J.AutoVar 'mergedSpecStrings',
         (=>
-            session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
+            J.List session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
         ),
         ((oldSpecStrings, newSpecStrings) =>
             # console.log 'mergedSpec changed:'

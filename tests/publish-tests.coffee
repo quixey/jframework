@@ -6,6 +6,127 @@ addTest = (testName, testFunc) ->
 makeId = ->
     "#{Math.floor 10000 * Math.random()}"
 
+debug = false
+log = ->
+    if debug
+        console.log.apply console, arguments
+
+
+addTest "AutoVar - AutoDict fetching inside", (test, onComplete) ->
+    debug = true
+    changeCount = 0
+
+    randomId1 = new ReactiveVar makeId()
+    randomId2 = new ReactiveVar makeId()
+    randomId3 = new ReactiveVar makeId()
+
+    fetcher = J.AutoVar 'fetcher',
+        -> $$.Foo.fetch _id: $ne: randomId2.get()
+    fetcher3 = J.AutoVar 'fetcher',
+        -> $$.Foo.fetch _id: $ne: randomId3.get()
+
+    a = J.AutoVar 'a',
+        ->
+            console.groupCollapsed("compute a")
+            console.trace()
+            console.groupEnd()
+            ad = J.AutoDict(
+                ->
+                    console.groupCollapsed('compute ad keys')
+                    console.trace()
+                    console.groupEnd()
+
+                    ['k0', 'k1', 'k2']
+                (key) ->
+                    console.groupCollapsed("compute ad.field", key)
+                    console.trace()
+                    console.groupEnd()
+                    ret = $$.Foo.fetch _id: $ne: randomId1.get()
+                    log "ad got", ret
+                    null
+                true
+            )
+            ad.tag = 'ad'
+            log 'a made ad'
+
+            ad.getFields()
+
+            log 'a got fields'
+
+            lst = fetcher.get().map (v) ->
+                console.log 'calculate list element', v
+                fetcher3.get()
+                ret = [v]
+                console.log 'ret', ret
+                ret
+            log 'a made lst'
+
+            lst
+
+    foos = for x in [5, 6, 7]
+        new $$.Foo(
+            b: x
+        )
+    foo.insert() for foo in foos
+
+    b = J.AutoVar 'b',
+        ->
+            console.groupCollapsed("compute b")
+            console.trace()
+            console.groupEnd()
+            ret = a.get()
+            console.log 'got a', ret
+            console.log 'ret[0] is', ret.get(0)
+            Math.random()
+    ,
+        (oldB, newB) ->
+            changeCount += 1
+            console.log 'b onChange', changeCount, oldB, newB
+            randomId1.set makeId()
+            console.log 1
+            randomId2.set makeId()
+            console.log 2
+            if changeCount is 5
+                a.stop()
+                b.stop()
+                fetcher.stop()
+                fetcher3.stop()
+                deleteCount = 0
+                for foo in foos
+                    foo.remove  ->
+                        deleteCount += 1
+                        if deleteCount is 3
+                            onComplete()
+
+
+addTest "AutoVar - invalidation of contents", (test, onComplete) ->
+    randomId = makeId()
+
+    a = J.AutoVar 'a',
+        ->
+            log 'compute a'
+            $$.Foo.fetch randomId
+            log 'a after fetch'
+            J.AutoDict(
+                -> ['k']
+                -> 5
+            )
+
+    b = J.AutoVar 'b',
+        ->
+            log 'compute b'
+            a.get()
+            log 'b got a'
+            aObj = a.get().toObj()
+            log 'b got a obj:', aObj
+            a.stop()
+            b.stop()
+            onComplete()
+            null
+    ,
+        true
+
+
 
 addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
     firstId = makeId()
@@ -15,25 +136,25 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
     a = J.AutoVar(
         'a'
         ->
-            console.log 'compute a'
+            log 'compute a'
             foo = $$.Foo.fetchOne idVar.get()
-            console.log 'a got', foo
+            log 'a got', foo
             idVar.get()
     )
     b = J.AutoVar(
         'b'
         ->
-            console.log 'compute b'
+            log 'compute b'
             ret = a.get()
-            console.log 'b got', ret
+            log 'b got', ret
             ret
     )
     c = J.AutoVar(
         'c'
         ->
-            console.log 'compute c'
+            log 'compute c'
             ret = b.get()
-            console.log 'c got', ret
+            log 'c got', ret
             ret
     )
 
@@ -42,18 +163,18 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
         'watcher1'
         ->
             runCount1 += 1
-            console.log 'compute watcher1', runCount1
+            log 'compute watcher1', runCount1
             cVal = c.get()
-            console.log 'watcher1 got', cVal
+            log 'watcher1 got', cVal
             if runCount1 is 1
                 test.isTrue false, "w1 should have thrown (1)"
             else if runCount1 is 2
                 test.equal cVal, currentId
                 idVar.set currentId = makeId()
-                console.log 'Should throw here'
+                log 'Should throw here'
                 newCVal = c.get()
                 test.isTrue false, "Should have thrown"
-                console.log 'newCVal is', newCVal
+                log 'newCVal is', newCVal
             else if runCount1 is 3
                 test.isTrue false, "w1 should have thrown (2)"
             else if runCount1 is 4
@@ -63,7 +184,7 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
                 c.stop()
             cVal
         (oldCVal, newCVal) ->
-            console.log 'watcher1.onChange', runCount1, oldCVal, newCVal
+            log 'watcher1.onChange', runCount1, oldCVal, newCVal
             if runCount1 is 4
                 test.equal oldCVal, undefined
                 test.equal newCVal, currentId

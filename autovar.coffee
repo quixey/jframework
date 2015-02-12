@@ -53,7 +53,6 @@ class J.AutoVar
         @wrap = wrap ? true
 
         @_var = new ReactiveVar undefined, @equalsFunc
-        @_preservedValue = undefined
         @_fetchInProgress = false
         @_getting = false
         @_gettersById = {} # computationId: computation
@@ -63,7 +62,7 @@ class J.AutoVar
 
         @_valueComp = null
         if @onChange then Tracker.afterFlush @_bindEnvironment =>
-            if not @_valueComp?
+            if @active and not @_valueComp?
                 @_setupValueComp()
 
         @_arrIndexOfDeps = {} # value: dep
@@ -77,14 +76,9 @@ class J.AutoVar
         value = @_var.get()
         if value instanceof J.AutoVar then value.get() else value
 
-    _preserve: (v) ->
-        if v instanceof J.AutoDict or v instanceof J.AutoList
-            v.snapshot()
-        else
-            v
-
     _recompute: ->
-        oldPreservedValue = @_preservedValue
+        J.assert @active
+
         oldValue = Tracker.nonreactive => @_deepGet()
 
         try
@@ -138,7 +132,7 @@ class J.AutoVar
         newValue = if @wrap then J.Dict._deepReactify rawValue else rawValue
 
         @_var.set newValue
-        @_preservedValue = @_preserve newValue
+        console.log @tag, "recomputed new value of", newValue, newValue?.active
 
         # Check if we should fire @_arr* deps (if oldValue and newValue are arrays)
         # TODO: This fine-grained dependency stuff should be part of a J.ReactiveVar
@@ -162,21 +156,17 @@ class J.AutoVar
                     @_arrIndexOfDeps[i]?.changed()
 
         if _.isFunction(@onChange) and not @equalsFunc oldValue, newValue
-            # AutoDicts and AutoLists might get stopped before
-            # onChange is called, but as long as they're not stopped
-            # now, it makes sense to let onChange read their
-            # preserved values.
-
-            newPreservedValue = @_preservedValue
             Tracker.afterFlush @_bindEnvironment =>
                 if @active
                     # Only call onChange if we're still active, even though
                     # there may be multiple onChange calls queued up from when
                     # we were still active.
-                    @onChange.call @, oldPreservedValue, newPreservedValue
+                    @onChange.call @, oldValue, newValue
 
     _setupValueComp: ->
-        console.log "SETUPVALUECOMP", @tag
+        console.log "_setupValueComp", @tag, @_valueComp?, (a.tag for a in @constructor._pending)
+        J.assert @active
+
         @_valueComp?.stop()
         Tracker.nonreactive => Tracker.autorun @_bindEnvironment (c) =>
             if c.firstRun
@@ -193,6 +183,7 @@ class J.AutoVar
             @_recompute()
 
             @_valueComp.onInvalidate =>
+                console.log "INVALIDATED", @tag
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
@@ -233,8 +224,7 @@ class J.AutoVar
             computation.onInvalidate =>
                 delete @_gettersById[computation._id]
 
-        console.log "GET", @tag, @_valueComp?, (v.tag ? v._valueComp.tag for v in @constructor._pending)
-
+        console.log "GET", @tag, @_valueComp?, (a.tag for a in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.
