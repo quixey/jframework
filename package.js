@@ -8,6 +8,11 @@ Npm.depends({
 });
 
 Package.onUse(function(api) {
+    // Sets up window.ReactRouter
+    api.addFiles(
+        '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
+    );
+
     api.use([
         "underscore",
         "coffeescript",
@@ -22,17 +27,13 @@ Package.onUse(function(api) {
         "quixey:react"
     ]);
 
-    // Sets up window.ReactRouter
-    api.addFiles(
-        '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
-    );
-
     api.addFiles([
         "lib/date.js",
         "lib/URI.js",
         "j.coffee",
         "util.coffee",
         "dependency.coffee",
+        "var.coffee",
         "autovar.coffee",
         "dict.coffee",
         "list.coffee",

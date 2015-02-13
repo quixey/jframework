@@ -444,20 +444,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                 J.fetching.requestQuery querySpec
 
-            tryFetch: (selector = {}, options = {}) ->
-                if selector instanceof J.Dict
-                    selector = selector.toObj()
-                else if J.util.isPlainObject selector
-                    selector = J.Dict(selector).toObj()
-                options = J.Dict(options).toObj()
-                try
-                    @fetch selector, options
-                catch e
-                    if e is J.fetching.FETCH_IN_PROGRESS
-                        undefined
-                    else
-                        throw e
-
             fetchOne: (selector = {}, options = {}) ->
                 if selector instanceof J.Dict
                     selector = selector.toObj()
@@ -479,20 +465,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 else
                     results[0]
 
-            tryFetchOne: (selector = {}, options = {}) ->
-                if selector instanceof J.Dict
-                    selector = selector.toObj()
-                else if J.util.isPlainObject selector
-                    selector = J.Dict(selector).toObj()
-                options = J.Dict(options).toObj()
-                try
-                    @fetchOne selector, options
-                catch e
-                    if e is J.fetching.FETCH_IN_PROGRESS
-                        undefined
-                    else
-                        throw e
-
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
             insert: (instance, callback) ->
@@ -503,6 +475,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             update: collection.update.bind collection
             upsert: collection.upsert.bind collection
             remove: collection.remove.bind collection
+            tryFetch: (selector = {}, options = {}) ->
+                J.util.tryGet => @fetch selector, options
+            tryFetchOne: (selector = {}, options = {}) ->
+                J.util.tryGet => @fetchOne selector, options
+
 
     J.models[modelName] = modelClass
     $$[modelName] = modelClass

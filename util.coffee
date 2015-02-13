@@ -104,6 +104,15 @@ J.util =
         else
             false
 
+    diffStrings: (arrA, arrB) ->
+        unless _.all(_.isString(x) for x in arrA) and _.all(_.isString(x) for x in arrB)
+            throw new Meteor.Error "Diff only works on arrays of strings."
+
+        setA = J.util.makeDictSet arrA
+        setB = J.util.makeDictSet arrB
+        added: _.filter arrB, (x) -> x not of setA
+        deleted: _.filter arrA, (x) -> x not of setB
+
     filter: (list, predicate = _.identity, context) ->
         _.filter list, predicate, context
 
@@ -291,3 +300,9 @@ J.util =
             "{#{("#{J.util.stringify k}:#{J.util.stringify v}" for k, v of obj).join ', '}}"
         else
             obj.toString()
+
+    tryGet: (getFunc) ->
+        try
+            getFunc()
+        catch e
+            throw e unless e is J.AutoVar.NOT_READY

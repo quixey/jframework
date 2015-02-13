@@ -4,6 +4,104 @@ Tinytest.add "_init", (test) ->
     # tests' times aren't artificially high
     return
 
+
+Tinytest.add "AutoList - throw out when invalidated", (test) ->
+    # When you invalidate an Auto, all the Autos it spawned
+    # should get instantly stopped. If an Auto is in the
+    # process of computing and gets hit by a stop from
+    # an upstream invalidation, it should throw out of its
+    # computation.
+    # The only computation that gets re-run is the non-stopped one.
+
+    # Simplest algorithm - don't worry about throwing, just
+    # tell lists/dicts not to recompute fields that were
+    # *stopped*.
+
+    return
+
+
+Tinytest.add "AutoVar - Topological invalidation order", (test) ->
+    hist = []
+
+    x = new ReactiveVar 5
+
+    a = null
+
+    b = null
+
+    c = J.AutoVar('c'
+        ->
+            hist.push 'c'
+            a = J.AutoVar('a'
+                ->
+                    hist.push 'a'
+                    x.get()
+                true
+            )
+            a.get()
+        true
+    )
+
+    d = J.AutoVar('d'
+        ->
+            hist.push 'd'
+
+            b = J.AutoVar('b'
+                ->
+                    hist.push 'b'
+                    x.get()
+                true
+            )
+
+            b.get() + c.get()
+        true
+    )
+
+    e = J.AutoVar('e'
+        ->
+            hist.push 'e'
+            a.get() + d.get()
+        true
+    )
+
+    Tracker.flush()
+
+    test.equal hist, ['c', 'a', 'd', 'b', 'e']
+    hist = []
+
+    x.set 6
+
+    c.get()
+
+
+
+Tinytest.add "AutoDict - deleting a key", (test) ->
+    keys = J.List ['zero', 'one', 'two']
+    x = J.Var 5
+    hist = []
+
+    ad = J.AutoDict(
+        'ad'
+        -> keys
+        (key) ->
+            hist.push key
+            "v-#{key}, #{x}"
+    )
+
+    test.equal ad.get('two'), 'v-two, 5'
+    test.equal ad.get('one'), 'v-one, 5'
+    hist = []
+    x.set 6
+    test.equal ad.get('one'), 'v-one, 6'
+    keys.pop()
+    test.isUndefined ad.get('two')
+    test.equal hist, ['one'] # Recomputing two would be particularly bad
+    hist = []
+    test.equal ad.getFields(), {'zero': 'v-zero, 6', one: 'v-one, 6'}
+    test.equal hist, ['zero']
+
+
+
 Tinytest.add "AutoDict - delete element onChange", (test) ->
     size = new ReactiveVar 3
     changeHistory = []

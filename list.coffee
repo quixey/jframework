@@ -5,40 +5,83 @@
 
 
 class J.List
-    constructor: (arr = [], equalsFunc = J.util.equals) ->
+    constructor: (values, options) ->
+        ###
+            Options:
+                creator: The computation which "created"
+                    this Dict, which makes it inactive
+                    when it invalidates.
+                tag: A toString-able object for debugging
+                onChange: function(key, oldValue, newValue) or null
+        ###
+
         unless @ instanceof J.List
-            return new J.List arr, equalsFunc
+            return new J.List values, options
 
-        if arr instanceof J.List
-            @tag ?= "constructor copy of (#{arr.tag})"
+        @_id = J.getNextId()
+        if J.debugGraph then J.graph[@_id] = @
+
+        @tag = options?.tag
+
+        if values instanceof J.List
+            @tag ?=
+                constructorCloneOf: values
+                tag: "#{@constructor.name} clone of (#{values.toString()})"
             arr = arr.getValues()
+        else if _.isArray values
+            arr = values
+        else if not values?
+            arr = []
+        else
+            throw "#{@constructor} values argument must be a List or
+                array. Got: #{values}"
 
-        unless _.isArray arr
-            throw new Meteor.Error "Not an array: #{arr}"
+        if options?.creator is undefined
+            @creator = Tracker.currentComputation
+        else
+            @creator = options.creator
+        @onChange = options?.onChange ? null
 
-        @equalsFunc = equalsFunc
+        @readOnly = false
 
         fields = {}
         for x, i in arr
             fields[i] = x
 
-        @readOnly = false
+        @_dict = J.Dict fields,
+            creator: @creator
+            tag:
+                list: @
+                tag: "#{@toString()}._dict"
+            onChange: if @onChange?
+                (key, oldValue, newValue) =>
+                    @onChange.call @, parseInt(key), oldValue, newValue
 
-        @_dict = J.Dict fields
 
     _resize: (size) ->
         @_dict.replaceKeys ("#{i}" for i in [0...size])
 
+
     clear: ->
         @resize 0
+
 
     clone: ->
         # Nonreactive because a clone's fields are their
         # own new piece of application state
-        @constructor Tracker.nonreactive => @getValues()
+        valuesSnapshot = Tracker.nonreactive => @getValues()
+        @constructor valuesSnapshot, _.extend(
+            {
+                creator: Tracker.currentComputation
+                tag:
+                    clonedFrom: @
+                    tag: "clone of #{@toString}"
+                onChange: null
+            }
+        )
+
 
     contains: (value) ->
-        # Reactive.
         # The current implementation invalidates somewhat
         # too much.
         # We could make the reactivity more efficient by
@@ -48,59 +91,51 @@ class J.List
         # when v isn't J.Dict.encodeKey-able.
         @indexOf(value) >= 0
 
-    deepEquals: (x) ->
-        # Reactive
-        return false unless x instanceof @constructor
-        J.util.deepEquals @toArr(), x.toArr()
 
     extend: (values) ->
-        valuesArr =
-            if values instanceof J.List
-                values.getValues()
-            else values
-
         adder = {}
-        for value, i in valuesArr
+        for value, i in constructor.unwrap values
             adder["#{@size() + i}"] = value
         @_dict.setOrAdd adder
 
+
     find: (f = _.identity) ->
-        # Reactive
         for i in [0...@size()]
             x = @get i
             return x if f x
 
+
     filter: (f = _.identity) ->
-        # Reactive
-        filtered = J.List _.filter @map().getValues(), f
-        filtered.tag = "filtered #{@tag}"
-        filtered
+        J.List(
+            _.filter @map().getValues(), f
+            tag:
+                filteredFrom: @
+                filterFunc: f
+                tag: "filtering of #{@toString()}"
+        )
+
 
     forEach: (f) ->
-        # Reactive
         # Like @map but:
         # - Lets you return undefined
         # - Returns an array, not an AutoList
-        UNDEFINED = {}
+        UNDEFINED = new J.Dict()
         mappedList = @map (v, i) ->
             ret = f v, i
             if ret is undefined then UNDEFINED else ret
         for value in mappedList.getValues()
             if value is UNDEFINED then undefined else value
 
+
     get: (index) ->
-        # Reactive
         unless _.isNumber(index)
             throw new Meteor.Error "Index must be a number"
-        try
-            @_dict.forceGet "#{index}"
-        catch e
-            throw e
-            # TODO: look for missing-key and throw new Meteor.Error "List index out of range"
+
+        @_dict.forceGet "#{index}"
+
 
     getConcat: (lst) ->
-        # Reactive
-        if _.isArray lst then lst = J.List lst
+        lst = @constructor.wrap lst
         if Tracker.active
             J.AutoList(
                 =>
@@ -112,14 +147,14 @@ class J.List
                         lst.get i - @size()
             )
         else
-            J.List @getValues().concat lst.getValues()
+            J.List @getValues().concat lst
+
 
     getReversed: ->
-        # Reactive
         @map (value, i) => @get @size() - 1 - i
 
+
     getSorted: (keySpec = J.util.sortKeyFunc) ->
-        # Reactive
         sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues() # Good to do this in parallel
         items = _.map @getValues(), (v, i) -> index: i, value: v
         J.List _.map(
@@ -127,13 +162,14 @@ class J.List
             (item) -> item.value
         )
 
+
     getValues: ->
-        # Reactive
         @_dict.get "#{i}" for i in [0...@size()]
 
+
     join: (separator) ->
-        # Reactive
         @map().getValues().join separator
+
 
     indexOf: (x, equalsFunc = J.util.equals) ->
         for i in [0...@size()]
@@ -141,8 +177,12 @@ class J.List
             return i if equalsFunc y, x
         -1
 
+
+    isActive: ->
+        @_dict.isActive()
+
+
     lazyMap: (f = _.identity) ->
-        # Reactive
         if Tracker.active
             J.AutoList(
                 => @size()
@@ -152,8 +192,8 @@ class J.List
         else
             J.List @getValues().map f
 
+
     map: (f = _.identity) ->
-        # Reactive
         # Enables parallel fetching
         if Tracker.active
             if f is _.identity and @ instanceof J.AutoList and @onChange
@@ -169,16 +209,29 @@ class J.List
         else
             J.List @getValues().map f
 
+
     push: (value) ->
         @extend [value]
 
+
+    pop: ->
+        if @size() is 0
+            undefined
+        else
+            lastValue = @get @size() - 1
+            @_dict.delete "#{@size() - 1}"
+            lastValue
+
+
     resize: (size) ->
         @_resize size
+
 
     reverse: ->
         reversedArr = Tracker.nonreactive => @getReversed().toArr()
         @set i, reversedArr[i] for i in [0...reversedArr.length]
         null
+
 
     set: (index, value) ->
         if @readOnly
@@ -190,21 +243,23 @@ class J.List
         setter[index] = value
         @_dict.set setter
 
+
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
             @_dict.setReadOnly @readOnly, deep
+
 
     sort: (keySpec = J.util.sortKeyFunc) ->
         sortedArr = Tracker.nonreactive => @getSorted(keySpec).toArr()
         @set i, sortedArr[i] for i in [0...sortedArr.length]
         null
 
+
     size: ->
-        # Reactive
         @_dict.size()
 
+
     toArr: ->
-        # Reactive
         values = @getValues()
 
         arr = []
@@ -217,18 +272,31 @@ class J.List
                 arr.push value
         arr
 
+
     toString: ->
         "List#{J.util.stringify @getValues()}"
 
+
     tryGet: (index) ->
-        # Reactive
         if @_dict.hasKey "#{index}"
-            @get index
+            J.util.tryGet => @get index
         else
             undefined
 
-    @fromDeepArr: (arr) ->
-        unless _.isArray arr
-            throw new Meteor.Error "Expected an array"
 
-        J.Dict.fromDeepObjOrArr arr
+    @unwrap: (listOrArr) ->
+        if listOrArr instanceof J.List
+            listOrArr.getValues()
+        else if _.isArray listOrArr
+            listOrArr
+        else
+            throw "#{@constructor.name} can't unwrap #{listOrArr}"
+
+
+    @wrap: (listOrArr) ->
+        if listOrArr instanceof @
+            listOrArr
+        else if _.isArray listOrArr
+            @ listOrArr
+        else
+            throw "#{@constructor.name} can't wrap #{listOrArr}"

@@ -180,7 +180,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
             # console.log 'mergedSpec changed:'
             # console.log "      #{J.util.stringify oldSpecStrings}"
             # console.log "      #{J.util.stringify newSpecStrings}"
-            diff = J.Dict.diff oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
+            diff = J.util.diffStrings oldSpecStrings?.toArr() ? [], newSpecStrings.toArr()
             for qsString in diff.added
                 observerByQsString.setOrAdd qsString, makeObserver EJSON.parse qsString
             for qsString in diff.deleted

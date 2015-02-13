@@ -4,11 +4,11 @@ class J.Dependency
         i.e. a reactive data source, should be able to freely read
         its own reactive values as it's mutating them without
         invalidating itself.
-        But the creatorComp should still invalidate if it reads
+        But the creator should still invalidate if it reads
         its own values which other objects then mutate.
     ###
 
-    constructor: (@creatorComp = Tracker.currentComputation) ->
+    constructor: (@creator = Tracker.currentComputation) ->
         @_dep = new Tracker.Dependency()
 
     depend: (computation) ->
@@ -16,13 +16,13 @@ class J.Dependency
 
     changed: ->
         if (
-            @creatorComp? and Tracker.currentComputation is @creatorComp and
-                @creatorComp._id of @_dep._dependentsById
+            @creator? and Tracker.currentComputation is @creator and
+                @creator._id of @_dep._dependentsById
         )
             # The creator computation is changing a dep that it's also
             # watching. So just un-depend and re-depend after this change.
-            delete @_dep._dependentsById[@creatorComp._id]
+            delete @_dep._dependentsById[@creator._id]
             @_dep.changed()
-            @_dep.depend @creatorComp
+            @_dep.depend @creator
         else
             @_dep.changed()

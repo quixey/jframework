@@ -4,6 +4,9 @@
 
 J._asQueue = []
 J.afterStuff = (f) ->
+    ###
+        A time after afterFlush
+    ###
     J._asQueue.push f
     if J._asQueue.length is 1
         setTimeout(
@@ -19,12 +22,6 @@ J.afterStuff = (f) ->
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
-    FETCH_IN_PROGRESS: {
-        name: "J.fetching.FETCH_IN_PROGRESS"
-        message: "This error is thrown to get out of AutoVar
-            valueFuncs and wait for fetch operations. It will
-            crash if run in a normal Tracker.autorun."
-    }
 
     _requestInProgress: false
 
@@ -66,13 +63,13 @@ J.fetching =
         newUnmergedQuerySpecs = (EJSON.parse qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
-        unmergedQsStringsDiff = J.Dict.diff _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
+        unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
         newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
         newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
-        mergedQsStringsDiff = J.Dict.diff _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
+        mergedQsStringsDiff = J.util.diffStrings _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.deleted)
@@ -155,11 +152,11 @@ J.fetching =
             for optionName in ['fields', 'sort', 'skip', 'limit']
                 if querySpec[optionName]? then options[optionName] = querySpec[optionName]
             return modelClass.find(querySpec.selector, options).fetch()
-        else if not Tracker.active
-            return undefined
 
-        @_requestsChanged = true
-        J.afterStuff =>
-            @remergeQueries()
-
-        throw @FETCH_IN_PROGRESS
+        if Tracker.active
+            @_requestsChanged = true
+            J.afterStuff =>
+                @remergeQueries()
+            throw J.AutoVar.NOT_READY
+        else
+            undefined

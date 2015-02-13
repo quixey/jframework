@@ -1,13 +1,28 @@
 class J.Dict
-    constructor: (fieldsOrKeys, equalsFunc = J.util.equals) ->
-        unless @ instanceof J.Dict
-            return new J.Dict fieldsOrKeys, equalsFunc
+    constructor: (fieldsOrKeys, options) ->
+        ###
+            Options:
+                creator: The computation which "created"
+                    this Dict, which makes it inactive
+                    when it invalidates.
+                tag: A toString-able object for debugging
+                onChange: function(key, oldValue, newValue) or null
+        ###
 
-        @equalsFunc = equalsFunc
+        unless @ instanceof J.Dict
+            return new J.Dict fieldsOrKeys, options
+
+        @_id = J.getNextId()
+        if J.debugGraph then J.graph[@_id] = @
+
+        @tag = options?.tag
 
         if fieldsOrKeys?
             if fieldsOrKeys instanceof J.Dict
                 fields = fieldsOrKeys.getFields()
+                @tag ?=
+                    constructorCloneOf: values
+                    tag: "#{@constructor.name} clone of (#{values.toString()})"
             else if _.isArray fieldsOrKeys
                 fields = {}
                 for key in fieldsOrKeys
@@ -19,19 +34,26 @@ class J.Dict
         else
             fields = {}
 
-        @_creatorComp = Tracker.currentComputation
+        if options?.creator is undefined
+            @creator = Tracker.currentComputation
+        else
+            @creator = options.creator
+        @onChange = options?.onChange ? null
 
         @_fields = {}
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
-        @_keysDep = new J.Dependency @_creatorComp
+        @_keysDep = new J.Dependency @creator
 
         @readOnly = false
 
-        @setOrAdd fields unless _.isEmpty fields
+        if not _.isEmpty fields
+            @setOrAdd fields
+
 
     _clear: ->
         @_delete key for key of @_fields
         null
+
 
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
@@ -44,12 +66,14 @@ class J.Dict
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
 
+
     _forceSet: (fields) ->
         for key, value of fields
             if key not of @_fields
                 throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set @constructor._deepReactify value
+            @_fields[key].set value
         null
+
 
     _get: (key, force) ->
         # The @hasKey call is necessary to reactively invalidate
@@ -58,24 +82,25 @@ class J.Dict
         # invalidates the computation if and when this field gets
         # changed.
         if @hasKey key
-            value = @_fields[key].get()
-            if value instanceof J.AutoVar then value.get() else value
+            @_fields[key].get()
         else if force
-            throw new Meteor.Error "missing-key", "#{@constructor.name} missing key: #{J.util.stringify key}"
+            throw "#{@constructor.name} missing key: #{J.util.stringify key}"
         else
             undefined
+
 
     _initField: (key, value) ->
         # This question mark is because a child class may have
         # already initted this.
-        @_fields[key] ?= new ReactiveVar(
-            @constructor._deepReactify value
-            @equalsFunc
-        )
-
-        # FIXME: We really need our own J.ReactiveVar class, instead
-        # of hacking the .dep field of Meteor's ReactiveVar
-        @_fields[key].dep = new J.Dependency @_creatorComp
+        @_fields[key] ?= J.Var value,
+            creator: @creator
+            tag:
+                dict: @
+                fieldKey: key
+                tag: "#{@toString()}._fields[#{J.util.stringify key}]"
+            onChange: if @onChange?
+                (oldValue, newValue) =>
+                    @onChange.call @, key, oldValue, newValue
 
         # This question mark is to avoid overshadowing reserved
         # members like "set".
@@ -90,66 +115,101 @@ class J.Dict
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
 
+
     _replaceKeys: (newKeys) ->
-        keysDiff = @constructor.diff _.keys(@_fields), newKeys
+        keysDiff = J.util.diffStrings _.keys(@_fields), J.List(newKeys).getValues()
         @_delete key for key in keysDiff.deleted
         @_initField key, undefined for key in keysDiff.added
         keysDiff
 
+
     clear: ->
         @_clear()
 
-    clone: ->
+
+    clone: (options = {}) ->
         # Nonreactive because a clone is its own
         # new piece of application state.
-        @constructor Tracker.nonreactive => @getFields()
+        fieldsSnapshot = Tracker.nonreactive => @getFields()
+        @constructor fieldsSnapshot, _.extend(
+            {
+                creator: Tracker.currentComputation
+                tag:
+                    clonedFrom: @
+                    tag: "clone of #{@toString}"
+                onChange: null
+            }
+            options
+        )
+
 
     delete: (key) ->
         if key of @_fields
             @_delete key
         null
 
+
     forceGet: (key) ->
-        # Reactive
         @_get key, true
 
+
     forEach: (f) ->
-        # Reactive
+        # TODO: Parallelize
         f key, value for key, value of @getFields()
         null
 
+
     get: (key) ->
-        # Reactive
+        getter = Tracker.currentComputation
+        canGet = @isActive() or (getter? and getter is @creator)
+        if not canGet
+            throw "Can't get field of inactive #{@constructor.name}: #{@}"
         @_get key, false
 
+
     getFields: (keys = @getKeys()) ->
-        # Reactive
         fields = {}
         for key in keys
             fields[key] = @get key
         fields
 
+
     getKeys: ->
-        # Reactive
+        getter = Tracker.currentComputation
+        canGet = @isActive() or (getter? and getter is @creator)
+        if not canGet
+            throw "Can't get keys of inactive #{@constructor.name}: #{@}"
+
         @_keysDep.depend()
         _.keys @_fields
 
+
     getValues: ->
-        # Reactive
         _.values @getFields()
 
+
     hasKey: (key) ->
-        # Reactive
         if Tracker.active
-            @_hasKeyDeps[key] ?= new J.Dependency @_creatorComp
+            @_hasKeyDeps[key] ?= new J.Dependency @creator
             @_hasKeyDeps[key].depend()
 
         key of @_fields
 
+
+    isActive: ->
+        not @creator?.invalidated
+
+
     replaceKeys: (newKeys) ->
         @_replaceKeys newKeys
 
+
     set: (fields) ->
+        setter = Tracker.currentComputation
+        canSet = @isActive() or (setter? and setter is @creator)
+        if not canSet
+            throw "Can't set value of inactive #{@constructor.name}: #{@}"
+
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
             # Support set(fieldName, value) syntax
@@ -157,7 +217,7 @@ class J.Dict
             value = arguments[1]
             fields = {}
             fields[fieldName] = value
-            ret = value # This type of setter returns the value too
+            ret = value # This type of setter returns the value
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
@@ -166,7 +226,13 @@ class J.Dict
         @_forceSet fields
         ret
 
+
     setOrAdd: (fields) ->
+        setter = Tracker.currentComputation
+        canSet = @isActive() or (setter? and setter is @creator)
+        if not canSet
+            throw "Can't set value of inactive #{@constructor.name}: #{@}"
+
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
             # Support set(fieldName, value) syntax
@@ -174,7 +240,7 @@ class J.Dict
             value = arguments[1]
             fields = {}
             fields[fieldName] = value
-            ret = value # This type of setter returns the value too
+            ret = value # This type of setter returns the value
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid setter: #{fields}"
         if @readOnly
@@ -189,13 +255,22 @@ class J.Dict
         @set setters
         ret
 
+
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
             @constructor._deepSetReadOnly Tracker.nonreactive => @getFields()
 
+
     size: ->
-        # Reactive
+        # TODO: Finer-grained reactivity
+
+        getter = Tracker.currentComputation
+        canGet = @isActive() or (getter? and getter is @creator)
+        if not canGet
+            throw "Can't get size of inactive #{@constructor.name}: #{@}"
+
         @getKeys().length
+
 
     toObj: ->
         fields = @getFields()
@@ -210,8 +285,12 @@ class J.Dict
                 obj[key] = value
         obj
 
+
+    tryGet: (key) ->
+        J.util.tryGet => @get key
+
+
     toString: ->
-        # Reactive
         "Dict#{J.util.stringify @getFields()}"
 
 
@@ -222,36 +301,3 @@ class J.Dict
             @_deepSetReadOnly(v, readOnly) for v in x
         else if J.util.isPlainObject x
             @_deepSetReadOnly(v, readOnly) for k, v of x
-
-
-    @diff: (arrA, arrB) ->
-        unless _.all(_.isString(x) for x in arrA) and _.all(_.isString(x) for x in arrB)
-            throw new Meteor.Error "Dict.diff only works on arrays of strings."
-
-        setA = J.util.makeDictSet arrA
-        setB = J.util.makeDictSet arrB
-        added: _.filter arrB, (x) -> x not of setA
-        deleted: _.filter arrA, (x) -> x not of setB
-
-    @fromDeepObj: (obj) ->
-        unless J.util.isPlainObject obj
-            throw new Meteor.Error "Expected a plain object"
-
-        @fromDeepObjOrArr obj
-
-    @fromDeepObjOrArr: (x) ->
-        unless _.isArray(x) or J.util.isPlainObject(x)
-            throw new Meteor.Error "Expected an array or plain object"
-
-        @_deepReactify x
-
-    @_deepReactify: (x) ->
-        if _.isArray x
-            J.List (@_deepReactify v for v in x)
-        else if J.util.isPlainObject x
-            fields = {}
-            for key, value of x
-                fields[key] = @_deepReactify value
-            J.Dict fields
-        else
-            x
