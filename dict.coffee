@@ -117,7 +117,7 @@ class J.Dict
 
 
     _replaceKeys: (newKeys) ->
-        keysDiff = J.util.diffStrings _.keys(@_fields), J.List(newKeys).getValues()
+        keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
         @_delete key for key in keysDiff.deleted
         @_initField key, undefined for key in keysDiff.added
         keysDiff
@@ -291,7 +291,9 @@ class J.Dict
 
 
     toString: ->
-        "Dict#{J.util.stringify @getFields()}"
+        s = "Dict[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        if not @isActive() then s += " (inactive)"
+        s
 
 
     @_deepSetReadOnly = (x, readOnly = true) ->
@@ -301,3 +303,21 @@ class J.Dict
             @_deepSetReadOnly(v, readOnly) for v in x
         else if J.util.isPlainObject x
             @_deepSetReadOnly(v, readOnly) for k, v of x
+
+
+    @unwrap: (dictOrObj) ->
+        if dictOrObj instanceof J.Dict
+            dictOrObj.getFields()
+        else if J.util.isPlainObject dictOrObj
+            dictOrObj
+        else
+            throw "#{@constructor.name} can't unwrap #{dictOrObj}"
+
+
+    @wrap: (dictOrObj) ->
+        if dictOrObj instanceof @
+            dictOrObj
+        else if J.util.isPlainObject dictOrObj
+            @ dictOrObj
+        else
+            throw "#{@constructor.name} can't wrap #{dictOrObj}"

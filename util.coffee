@@ -106,7 +106,8 @@ J.util =
 
     diffStrings: (arrA, arrB) ->
         unless _.all(_.isString(x) for x in arrA) and _.all(_.isString(x) for x in arrB)
-            throw new Meteor.Error "Diff only works on arrays of strings."
+            throw new Meteor.Error "Diff only works on arrays of strings. Got:
+                #{arrA}, #{arrB}"
 
         setA = J.util.makeDictSet arrA
         setB = J.util.makeDictSet arrB
@@ -287,7 +288,9 @@ J.util =
         arr.reverse()
 
     stringify: (obj) ->
-        if obj is undefined
+        if obj is J.Var.NOT_READY
+            '<NOT_READY>'
+        else if obj is undefined
             'undefined'
         else if (
             _.isString(obj) or _.isNumber(obj) or _.isBoolean(obj) or
@@ -300,6 +303,14 @@ J.util =
             "{#{("#{J.util.stringify k}:#{J.util.stringify v}" for k, v of obj).join ', '}}"
         else
             obj.toString()
+
+    stringifyTag: (tag) ->
+        if _.isObject(tag) and "tag" of tag
+            @stringifyTag tag.tag
+        else if _.isString tag
+            tag
+        else
+            @stringify tag
 
     tryGet: (getFunc) ->
         try

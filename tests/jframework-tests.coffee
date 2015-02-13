@@ -23,7 +23,7 @@ Tinytest.add "AutoList - throw out when invalidated", (test) ->
 Tinytest.add "AutoVar - Topological invalidation order", (test) ->
     hist = []
 
-    x = new ReactiveVar 5
+    x = new J.Var 5
 
     a = null
 
@@ -103,7 +103,7 @@ Tinytest.add "AutoDict - deleting a key", (test) ->
 
 
 Tinytest.add "AutoDict - delete element onChange", (test) ->
-    size = new ReactiveVar 3
+    size = new J.Var 3
     changeHistory = []
     al = J.AutoDict(
         -> "#{x}" for x in [0...size.get()]
@@ -131,6 +131,54 @@ Tinytest.add "AutoDict - delete element onChange", (test) ->
     ]
 
 
+Tinytest.add "AutoVar - onchange", (test) ->
+    vHist = []
+    v = J.Var 5,
+        onChange: (oldV, newV) ->
+            vHist.push [oldV, newV]
+
+    aHist = []
+    a = J.AutoVar('a'
+        -> v
+        (oldV, newV) ->
+            aHist.push [oldV, newV]
+    )
+    v.set 6
+    v.set 'x'
+    v.set J.Var.NOT_READY
+    test.isUndefined v.get()
+    test.isUndefined a.get()
+    v.set 'x'
+    v.set J.Var.NOT_READY
+    v.set 6
+    test.equal a.get(), 6
+    v.set J.Var.NOT_READY
+    v.set 7
+    test.equal a.get(), 7
+    v.set 7
+    v.set 3
+    test.equal vHist, []
+    test.equal aHist, []
+    Tracker.flush()
+    goodVHist = [
+        [5, 6]
+        [6, 'x']
+        ['x', 6]
+        [6, 7]
+        [7, 3]
+    ]
+    goodAHist = [
+        [undefined, 6]
+        [6, 7]
+        [7, 3]
+    ]
+    test.equal vHist, goodVHist
+    test.equal aHist, goodAHist
+    a.stop()
+    test.equal aHist, goodAHist
+
+
+
 Tinytest.add "Dict - basics", (test) ->
     d = J.Dict()
     d.setOrAdd x: 5
@@ -147,7 +195,7 @@ Tinytest.add "Dict - basics", (test) ->
 
 Tinytest.add "AutoDict - onChange", (test) ->
     changeHistory = []
-    keysVar = new ReactiveVar ['a', 'b']
+    keysVar = new J.Var ['a', 'b']
     ad = J.AutoDict(
         -> keysVar.get()
         (key) -> 5
@@ -191,11 +239,9 @@ Tinytest.add "List - basics", (test) ->
     test.equal lst.toArr(), [6, 4, 5]
     lst.sort()
     test.equal lst.toArr(), [4, 5, 6]
-    test.isTrue lst.deepEquals J.List [4, 5, 6]
 
     lst = J.List([5, 3, [1], 4])
     test.notEqual lst.get(2), [1]
-    test.isTrue lst.get(2).deepEquals J.List [1]
 
 Tinytest.add "List - extend", (test) ->
     lst = J.List ['zero', 'one']
@@ -271,14 +317,11 @@ Tinytest.add "Dict and List reactivity 4", (test) ->
     sortedLst = []
     c = Tracker.autorun ->
         sortedLst = lst.getSorted()
-    test.equal lst.toArr(), [4, 3, 2, 1, 0]
-    test.equal sortedLst.toArr(), [0, 1, 2, 3, 4]
-    lst.set 1, 5
-    test.equal lst.toArr(), [4, 5, 2, 1, 0]
-    test.equal sortedLst.toArr(), [0, 1, 2, 3, 4]
-    Tracker.flush()
-    test.equal sortedLst.toArr(), [0, 1, 2, 4, 5]
-
+        test.equal lst.toArr(), [4, 3, 2, 1, 0]
+        test.equal sortedLst.toArr(), [0, 1, 2, 3, 4]
+        lst.set 1, 5
+        test.equal lst.toArr(), [4, 5, 2, 1, 0]
+        test.equal sortedLst.toArr(), [0, 1, 2, 4, 5]
     c.stop()
 
 
@@ -297,7 +340,7 @@ Tinytest.add "List - resize", (test) ->
     c.stop()
 
 Tinytest.add "AutoVar - basics 1", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     xPlusOne = J.AutoVar -> x.get() + 1
     test.equal xPlusOne.get(), 6
     x.set 10
@@ -306,12 +349,11 @@ Tinytest.add "AutoVar - basics 1", (test) ->
     test.equal xPlusOne.get(), 11
 
 Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     runCount = 0
     xPlusOne = J.AutoVar ->
         runCount += 1
         x.get() + 1
-    xPlusOne.tag = 'xPlusOne'
     test.equal runCount, 0
     x.set 10
     test.equal runCount, 0
@@ -321,7 +363,6 @@ Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
     test.equal runCount, 1, "fail 1"
     test.equal xPlusOne.get(), 11
     test.equal runCount, 1, "fail 2"
-    test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (1)"
     x.set 20
     test.equal runCount, 1, "fail 3"
     Tracker.flush()
@@ -336,11 +377,10 @@ Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
     test.equal runCount, 4
     test.equal xPlusOne.get(), 41
     test.equal runCount, 4
-    test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (2)"
 
 
 Tinytest.add "AutoVar - don't be lazy if someone is looking", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     runCount = 0
     xPlusOne = J.AutoVar ->
         runCount += 1
@@ -364,20 +404,17 @@ Tinytest.add "AutoVar - don't be lazy if someone is looking", (test) ->
     Tracker.flush()
     test.equal runCount, 2
     x.set 20
-    test.isTrue xPlusOne._var.dep.hasDependents(), "Why don't you have dependents?"
     test.equal runCount, 2
     Tracker.flush()
     test.equal runCount, 3
     watchMany.stop()
     x.set 30
-    test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (1)"
     Tracker.flush()
-    test.isFalse xPlusOne._var.dep.hasDependents(), "Why do you have dependents? (2)"
     watchOnce.stop()
 
 
 Tinytest.add "AutoDict - Basics", (test) ->
-    size = new ReactiveVar 3
+    size = new J.Var 3
     d = J.AutoDict(
         -> ['zero', 'one', 'two', 'three', 'four', 'five'][0...size.get()]
         (key) -> "#{key} is a number"
@@ -396,8 +433,8 @@ Tinytest.add "AutoDict - Basics", (test) ->
 
 
 Tinytest.add "AutoDict - reactivity", (test) ->
-    coef = new ReactiveVar 2
-    size = new ReactiveVar 3
+    coef = new J.Var 2
+    size = new J.Var 3
     d = J.AutoDict(
         -> ['3', '5', '9', '7'][0...size.get()]
         (key) -> if key is '7' then 'xxx' else coef.get() * parseInt(key)
@@ -437,8 +474,8 @@ Tinytest.add "AutoDict - reactivity", (test) ->
 
 
 Tinytest.add "AutoDict - laziness", (test) ->
-    coef = new ReactiveVar 2
-    size = new ReactiveVar 3
+    coef = new J.Var 2
+    size = new J.Var 3
     keyFuncRunCount = 0
     valueFuncRunCount = 0
     d = J.AutoDict(
@@ -469,8 +506,8 @@ Tinytest.add "AutoDict - laziness", (test) ->
 
 
 Tinytest.add "AutoList - reactivity 1", (test) ->
-    coef = new ReactiveVar 10
-    size = new ReactiveVar 3
+    coef = new J.Var 10
+    size = new J.Var 3
     sizeFuncRunCount = 0
     valueFuncRunCount = 0
     al = J.AutoList(
@@ -497,8 +534,8 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
 
 
 Tinytest.add "AutoList - onChange", (test) ->
-    coef = new ReactiveVar 10
-    size = new ReactiveVar 3
+    coef = new J.Var 10
+    size = new J.Var 3
     sizeFuncRunCount = 0
     valueFuncRunCount = 0
     onChangeHistory = []
@@ -555,8 +592,8 @@ Tinytest.add "AutoList - onChange", (test) ->
 
 
 Tinytest.add "List - onChange 2", (test) ->
-    coef = new ReactiveVar 10
-    size = new ReactiveVar 5
+    coef = new J.Var 10
+    size = new J.Var 5
     sizeFuncRunCount = 0
     valueFuncRunCount = 0
     onChangeHistory = []
@@ -601,7 +638,7 @@ Tinytest.add "List - reverse", (test) ->
     test.equal lst.toArr(), [0, 1, 2, 3]
 
 Tinytest.add "AutoVar - unpack nested AutoVars in .get", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     a = J.AutoVar -> J.AutoVar -> J.AutoVar -> x.get()
     test.equal a.get(), 5
     dict = J.Dict a: a
@@ -679,8 +716,8 @@ Tinytest.add "List - .contains reactivity", (test) ->
 
 
 Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
-    size = new ReactiveVar 3
-    val = new ReactiveVar 100
+    size = new J.Var 3
+    val = new J.Var 100
     keyFuncRunCount = 0
     valueFuncRunCount = 0
     d = J.AutoDict(
@@ -717,8 +754,8 @@ Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
 
 
 Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
-    size = new ReactiveVar 3
-    val = new ReactiveVar 100
+    size = new J.Var 3
+    val = new J.Var 100
     keysFuncRunCount = 0
     valueFuncRunCount = 0
     d = J.AutoDict(
@@ -744,7 +781,7 @@ Tinytest.add "AutoDict - Make sure key still exists when expediting value recalc
 
 
 Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     a = J.AutoVar -> x.get()
     b = J.AutoVar -> a.get()
     c = J.AutoVar -> b.get()
@@ -757,7 +794,7 @@ Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
     test.equal e.get(), 6
 
 Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
-    x = new ReactiveVar 5
+    x = new J.Var 5
     a = J.AutoVar -> x.get()
     b = J.AutoVar -> a.get()
     c = J.AutoVar -> b.get()
@@ -771,7 +808,7 @@ Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
 
 Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
     history = []
-    x = new ReactiveVar 5
+    x = new J.Var 5
     a = J.AutoVar ->
         history.push 'a'
         x.get()
@@ -804,7 +841,7 @@ Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
 
 Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     history = []
-    x = new ReactiveVar 5
+    x = new J.Var 5
     a = J.AutoVar ->
         history.push 'a'
         x.get()
@@ -942,7 +979,7 @@ Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplet
 
 
 Tinytest.addAsync "AutoList - Maps don't stop prematurely", (test, onComplete) ->
-    coef = new ReactiveVar 2
+    coef = new J.Var 2
     lst = J.List [3, 4, 5]
     mappedLst = lst.map (v) -> coef.get() * v
     test.equal mappedLst.getValues(), [6, 8, 10]

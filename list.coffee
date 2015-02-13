@@ -94,7 +94,7 @@ class J.List
 
     extend: (values) ->
         adder = {}
-        for value, i in constructor.unwrap values
+        for value, i in @constructor.unwrap values
             adder["#{@size() + i}"] = value
         @_dict.setOrAdd adder
 
@@ -274,7 +274,9 @@ class J.List
 
 
     toString: ->
-        "List#{J.util.stringify @getValues()}"
+        s = "List[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        if @_dict? and not @isActive() then s += " (inactive)"
+        s
 
 
     tryGet: (index) ->

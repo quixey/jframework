@@ -158,10 +158,10 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "#{componentName} has no prop #{JSON.stringify propName}.
                     Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
-        @_props = {} # ReactiveVars for the props
+        @_props = {} # Vars for the props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
-            @_props[propName] = new ReactiveVar @props[propName],
+            @_props[propName] = new J.Var @props[propName],
                 propSpec.same ? J.util.equals
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
@@ -200,7 +200,7 @@ J._defineComponent = (componentName, componentSpec) ->
             else
                 initialValue = stateFieldSpec.default ? null
 
-            initialState[stateFieldName] = new ReactiveVar initialValue,
+            initialState[stateFieldName] = new J.Var initialValue,
                 stateFieldSpec.same ? J.util.equals
 
         # Set up @reactives

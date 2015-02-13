@@ -23,7 +23,10 @@ class J.AutoList extends J.List
         @onChange = onChange
 
         @_dict = J.AutoDict(
-            @tag
+            (
+                autoList: @
+                tag: "#{@toString()}._dict"
+            )
 
             =>
                 size = @sizeFunc()
@@ -40,9 +43,6 @@ class J.AutoList extends J.List
                     @onChange
             )
         )
-
-        if Tracker.active
-            Tracker.onInvalidate (c) => @stop()
 
 
     clone: ->
@@ -106,10 +106,6 @@ class J.AutoList extends J.List
 
 
     toString: ->
-        # Reactive
-        objString =
-            if @active
-                J.util.stringify @toArr()
-            else
-                "STOPPED"
-        "AutoList(#{@tag ? ''},#{@_id}=#{objString})"
+        s = "AutoList[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        if @_dict? and not @isActive() then s += " (inactive)"
+        s

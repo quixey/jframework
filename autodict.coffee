@@ -79,7 +79,7 @@ class J.AutoDict extends J.Dict
                     throw "AutoDict.keysFunc must return an array or List.
                         Got #{J.util.stringify keys}"
 
-                keysArr = J.List(keys).getValues()
+                keysArr = J.List.unwrap(keys)
 
                 unless _.all (_.isString(key) for key in keysArr)
                     throw new Meteor.Error "AutoDict keys must all be type string.
@@ -189,7 +189,7 @@ class J.AutoDict extends J.Dict
 
 
     hasKey: (key) ->
-        @getKeys().contains key # FIXME: Use separate deps per key
+        @_keysVar.get().contains key
 
 
     isActive: ->
@@ -223,25 +223,10 @@ class J.AutoDict extends J.Dict
         if @_active
             @_keysVar.stop()
             @_fields[key].stop() for key of @_fields
-            @active = false
-
-
-    logDebugInfo: ->
-        if @active
-            console.groupCollapsed @toString()
-        else
-            console.groupCollapsed "AutoDict(#{@_id}) fields=", @_fields
-        @_keysVar.logDebugInfo()
-        for key, fieldVar of @_fields
-            fieldVar.logDebugInfo()
-        console.groupEnd()
+            @_active = false
 
 
     toString: ->
-        # Reactive
-        objString =
-            if @active
-                J.util.stringify @toObj()
-            else
-                "STOPPED"
-        "AutoDict(#{@tag ? ''},#{@_id})=#{objString}"
+        s = "AutoDict[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        if not @isActive() then s += " (inactive)"
+        s

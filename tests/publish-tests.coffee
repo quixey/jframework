@@ -71,9 +71,9 @@ addTest "AutoVar - AutoList fetching inside", (test, onComplete) ->
     debug = true
 
     changeCount = 0
-    randomId1 = new ReactiveVar makeId()
-    randomId2 = new ReactiveVar makeId()
-    r = new ReactiveVar 5
+    randomId1 = new J.Var makeId()
+    randomId2 = new J.Var makeId()
+    r = new J.Var 5
 
     fetcher = J.AutoVar 'fetcher',
         ->
@@ -120,9 +120,9 @@ addTest "AutoVar - AutoDict fetching inside", (test, onComplete) ->
     debug = true
     changeCount = 0
 
-    randomId1 = new ReactiveVar makeId()
-    randomId2 = new ReactiveVar makeId()
-    randomId3 = new ReactiveVar makeId()
+    randomId1 = new J.Var makeId()
+    randomId2 = new J.Var makeId()
+    randomId3 = new J.Var makeId()
 
     fetcher = J.AutoVar 'fetcher',
         -> $$.Foo.fetch _id: $ne: randomId2.get()
@@ -235,7 +235,7 @@ addTest "AutoVar - invalidation of contents", (test, onComplete) ->
 addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
     firstId = makeId()
     currentId = firstId
-    idVar = new ReactiveVar currentId
+    idVar = new J.Var currentId
 
     a = J.AutoVar(
         'a'

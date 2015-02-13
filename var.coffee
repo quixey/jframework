@@ -21,11 +21,11 @@ class J.Var
                     invalidates.
         ###
 
+        if arguments.length is 0
+            value = J.Var.NOT_READY
+
         unless @ instanceof J.Var
             return new J.Var value, options
-
-        if arguments.length is 0
-            value = @constructor.NOT_READY
 
         @_id = J.getNextId()
         if J.debugGraph then J.graph[@_id] = @
@@ -38,7 +38,7 @@ class J.Var
             throw "Invalid J.Var creator: #{options.creator}"
 
         @tag = options?.tag
-        if _.isFunction options?.onChange?
+        if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?
             throw "Invalid J.Var onChange: #{options.onChange}"
@@ -53,9 +53,7 @@ class J.Var
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
-        @_value = @constructor.NOT_READY
-
-        @set value
+        @_value = @constructor.wrap value
 
 
     get: ->
@@ -85,41 +83,24 @@ class J.Var
 
 
     set: (value) ->
-        if value is undefined
-            throw "Can't set Var value to undefined. Use
-                null or J.Var.NOT_READY instead."
-        else if not @constructor.isValidValue value
-            throw "Invalid value for Var: #{value}"
-
         setter = Tracker.currentComputation
         canSet = @isActive() or (setter? and setter is @creator)
         if not canSet
             throw "Can't set value of inactive Var: #{@}"
 
         previousValue = @_value
-        if @_value isnt @constructor.NOT_READY
-            @_previousReadyValue = @_value
+        @_value = @constructor.wrap value
 
-        @_value =
-            if @constructor.NOT_READY
-                @constructor.NOT_READY
-            else if J.util.isPlainObject value
-                J.Dict value
-            else if _.isArray(value)
-                J.List value
-            else if value instanceof J.Var
-                # Prevent any nested J.Var situation
-                value.get()
-            else
-                value
+        if previousValue isnt @constructor.NOT_READY
+            @_previousReadyValue = previousValue
 
-        if not J.util.equals previousValue, @_value
+        if not J.util.equals previousValue, newValue
             for getterId, getter of @_getters
                 getter.invalidate()
 
         if (
             @onChange? and
-            @_value isnt J.NOT_READY and
+            @_value isnt @constructor.NOT_READY and
             not J.util.equals @_previousReadyValue, @_value
         )
             # Need lexically scoped oldValue and newValue because the
@@ -141,14 +122,43 @@ class J.Var
         @_value
 
 
+    toString: ->
+        s = "Var[#{@_id}](#{J.util.stringifyTag @tag ? ''}=#{J.util.stringify @_value})"
+        if not @isActive() then s += " (inactive)"
+        s
+
+
     tryGet: ->
         J.util.tryGet => @get()
 
 
-    @isValidValue (value) ->
+    @isValidValue: (value) ->
         not (
             value is undefined or
             value instanceof J.AutoVar or
             value instanceof J.AutoDict or
             value instanceof J.AutoList
         )
+
+    @wrap: (value) ->
+        if value is undefined
+            throw "Can't set Var value to undefined. Use
+                null or J.Var.NOT_READY instead."
+        else if not @isValidValue value
+            throw "Invalid value for Var: #{value}"
+
+        if value is @NOT_READY
+            @NOT_READY
+        else if J.util.isPlainObject value
+            J.Dict value
+        else if _.isArray(value)
+            J.List value
+        else if value instanceof J.Var
+            # Prevent any nested J.Var situation
+            try
+                value.get()
+            catch e
+                throw e unless e is @NOT_READY
+                @NOT_READY
+        else
+            value

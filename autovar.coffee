@@ -38,7 +38,7 @@ class J.AutoVar
         @tag = tag
         @valueFunc = valueFunc
         @onChange = onChange ? null
-        if options?.creator? is undefined
+        if options?.creator is undefined
             @creator = Tracker.currentComputation
         else
             @creator = options.creator
@@ -48,9 +48,8 @@ class J.AutoVar
             onChange: if _.isFunction @onChange then @onChange
 
         @_active = true
-        if Tracker.active
-            Tracker.onInvalidate =>
-                @stop()
+        @creator?.onInvalidate =>
+            @stop()
 
         @_valueComp = null
         if @onChange
@@ -63,7 +62,7 @@ class J.AutoVar
 
     _recompute: ->
         # console.log @tag, @_id, "recomputing..."
-        J.assert @active
+        J.assert @_active
 
         # Pass a @ just like autorun does. This will help in case
         # we ever decide to compute @valueFunc the first time
@@ -93,7 +92,7 @@ class J.AutoVar
                 # first run of the computation.
                 @_valueComp = c
                 @_valueComp.autoVar = @
-                @_valueComp.tag = "AutoVar #{@tag}-#{@_id} valueComp" # TODO
+                @_valueComp.tag = "#{@toString()} valueComp"
 
             pos = @constructor._pending.indexOf @
             if pos >= 0
@@ -139,30 +138,18 @@ class J.AutoVar
 
 
     stop: ->
-        if @active
-            @active = false
+        if @_active
+            @_active = false
             @_valueComp?.stop()
             pos = @constructor._pending.indexOf @
             if pos >= 0
                 @constructor._pending.splice pos, 1
 
 
-    logDebugInfo: ->
-        getters = _.values @_gettersById
-        console.groupCollapsed @toString()
-        for c in getters
-            if c.autoVar?
-                c.autoVar.logDebugInfo()
-            else
-                console.log c.tag
-        console.groupEnd()
-
-
     toString: ->
-        if @tag?
-            "AutoVar(#{@tag}-#{@_id}=#{J.util.stringify @_var.get()})"
-        else
-            "AutoVar(#{@_id=J.util.stringify @_var.get()})"
+        s = "AutoVar[#{@_id}](#{J.util.stringifyTag @tag ? ''}=#{J.util.stringify @_var._value})"
+        if not @isActive() then s += " (inactive)"
+        s
 
 
     @_pending: []
