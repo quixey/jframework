@@ -1,3 +1,34 @@
+###
+    A few things to augment Meteor's Tracker
+###
+
+J._aafQueue = []
+J._flushAfterAfQueue = ->
+    console.log 'Flush AfterAfQueue'
+    while J._aafQueue.length
+        func = J._aafQueue.shift()
+        func()
+
+_setupAfWaiter = ->
+    afIsDone = false
+    Tracker.afterFlush -> afIsDone = true
+    if afIsDone
+        # AfterFlush is now
+        J._flushAfterAfQueue()
+    else
+        # AfterFlush is (synchronously or asynchronously) later
+        Tracker.afterFlush -> _setupAfWaiter()
+
+
+J.afterAf = (f) ->
+    ###
+        Run f at the soonest possible time after afterFlush
+    ###
+    J._aafQueue.push f
+    if J._aafQueue.length is 1
+        setupAfWaiter()
+
+
 class J.Dependency
     ###
         Like Tracker.Dependency except that a "creator computation",

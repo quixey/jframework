@@ -18,13 +18,14 @@
         this
             J.AutoDict(
                 a: -> 3
-                b: -> 4
+                b: 4
+                c: -> 5
                 onChange
             )
         should turn into this
             J.AutoDict(
                 -> ['a', 'b']
-                (k) -> {a: (-> 3), b: (-> 4)}[k]()
+                (k) -> {a: (-> 3), b: (-> 4), c: (-> 5)}[k]()
                 onChange
             )
 ###

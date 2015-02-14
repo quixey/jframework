@@ -30,7 +30,7 @@ Package.onUse(function(api) {
         "lib/URI.js",
         "j.coffee",
         "util.coffee",
-        "dependency.coffee",
+        "tracker.coffee",
         "var.coffee",
         "autovar.coffee",
         "dict.coffee",

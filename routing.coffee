@@ -9,6 +9,14 @@ if Meteor.isServer
 
 if Meteor.isClient and ReactRouter?
     # Hack J.Routable mixin as a combo of ReactRouter.State + ReactRouter.Navigation
+
+    ###
+        NOTE:
+        J Framework components.coffee has some inline code that conditions
+        on whether a control has J.Routable in its mixins, because we
+        wanted to use features (like a Reactive) outside the React Mixin framework.
+    ###
+
     J.Routable = _.extend _.clone(ReactRouter.State), ReactRouter.Navigation
     J.Routable.contextTypes = _.extend _.clone(ReactRouter.State.contextTypes),
         ReactRouter.Navigation.contextTypes
@@ -40,21 +48,14 @@ if Meteor.isClient and ReactRouter?
                 @_rawQueryFromClean query
             )).replace(/\ /g, '+').replace(/#/, '*hashtag*')
 
-    ###
-        NOTE:
-        J Framework components.coffee has some inline code that conditions
-        on whether a control has J.Routable in its mixins, because we
-        wanted to use features (like a Reactive) outside the React Mixin framework.
-    ###
 
-    Meteor.startup ->
-        Meteor.subscribe 'init'
-        Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
-            if J._routeGenerator?
-                rootRoute = J._routeGenerator()
+if Meteor.isClient then Meteor.startup ->
+    Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
+        if J._routeGenerator?
+            rootRoute = J._routeGenerator()
 
-                ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-                    React.render $$(Handler), document.body
+            ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
+                React.render $$(Handler), document.body
 
-            else
-                console.warn "No router defined. Call J.defineRouter to define a router."
+        else
+            console.warn "No router defined. Call J.defineRouter to define a router."
