@@ -90,7 +90,7 @@ class J.Var
         if previousValue isnt @constructor.NOT_READY
             @_previousReadyValue = previousValue
 
-        if not J.util.equals previousValue, newValue
+        if not J.util.equals previousValue, @_value
             for getterId, getter of @_getters
                 unless getter is setter is @creator
                     getter.invalidate()

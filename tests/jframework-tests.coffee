@@ -850,32 +850,6 @@ Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
     test.equal e.get(), 12
     test.equal history, ['a', 'e', 'b', 'c']
 
-Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
-    history = []
-    x = new J.Var 5
-    a = J.AutoVar ->
-        history.push 'a'
-        x.get()
-    b = J.AutoVar ->
-        history.push 'b'
-        Math.floor(a.get() / 100) * 100 # Round down to nearest 100
-    c = J.AutoVar ->
-        history.push 'c'
-        b.get()
-    test.equal c.get(), 0
-    test.equal history, ['c', 'b', 'a']
-    history = []
-    x.set 55
-    test.equal c.get(), 0
-    test.isTrue 'a' in history
-    test.isTrue 'b' in history
-    test.isFalse 'c' in history # Currently fails
-    history = []
-    x.set 101
-    test.equal c.get(), 100
-    test.isTrue 'a' in history
-    test.isTrue 'c' in history
-
 
 Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
     a = J.AutoVar(
@@ -941,108 +915,140 @@ Tinytest.add "Dict - don't invalidate creator computation", (test) ->
     test.equal runCount2, 3 # c1 invalidates c2
     c1.stop()
     c2.stop()
-#
-##
-##Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
-##    ###
-##        If an AutoVar's value is running its own computation,
-##        then the AutoVar's computation is the only one
-##        whose invalidation can invalidate that child's
-##        computation.
-##    ###
-##    console.log "FIXME"
-##    onComplete()
-##    return
-##
-##    al = null
-##    av = J.AutoVar "av",
-##        ->
-##            al = J.AutoList(
-##                -> 3
-##                (i) -> 5
-##            )
-##            al.tag = "av.al"
-##            al
-##
-##    av2 = J.AutoVar "av2",
-##        -> av.get()
-##
-##    test.isTrue av.active
-##    test.isTrue av2.active
-##    test.isNull al
-##    Meteor.defer =>
-##        test.isNull al
-##
-##        Tracker.autorun (c) =>
-##            myAl = av2.get()
-##            test.isTrue al.active, "al stopped prematurely"
-##            test.isTrue myAl.active, "myAl stopped prematurely"
-##            av2.stop()
-##
-##            test.isTrue myAl.active
-##            test.isTrue av.active
-##            test.isTrue al.active
-##            av.stop()
-##            test.isFalse al.active
-##            test.isFalse myAl.active
-##
-##            c.stop()
-##
-##            onComplete()
-##
-#
-#Tinytest.addAsync "AutoList - Maps don't stop prematurely", (test, onComplete) ->
-#    coef = new J.Var 2
-#    lst = J.List [3, 4, 5]
-#    mappedLst = lst.map (v) -> coef.get() * v
-#    test.equal mappedLst.getValues(), [6, 8, 10]
-#    coef.set 3
-#    test.equal mappedLst.getValues(), [6, 8, 10]
-#
-#    av = J.AutoVar 'av',
-#        -> lst.map (v) -> coef.get() * v
-#
-#    test.equal av.get().getValues(), [9, 12, 15]
-#    coef.set 4
-#    test.equal av.get().getValues(), [12, 16, 20]
-#    av.stop()
-#    test.throws -> av.get().getValues()
-#
-#    onComplete()
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
+
+
+Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
+    ###
+        If an AutoVar's value is running its own computation,
+        then the AutoVar's computation is the only one
+        whose invalidation can invalidate that child's
+        computation.
+    ###
+    al = null
+    av = J.AutoVar "av",
+        ->
+            al = J.AutoList(
+                -> 3
+                (i) -> 5
+            )
+            al.tag = "av.al"
+            al
+
+    av2 = J.AutoVar "av2",
+        -> av.get()
+
+    test.isTrue av.isActive()
+    test.isTrue av2.isActive()
+    test.isNull al
+    Meteor.defer =>
+        test.isNull al
+
+        Tracker.autorun (c) =>
+            myAl = av2.get()
+            test.isTrue al.isActive(), "al stopped prematurely"
+            test.isTrue myAl.isActive(), "myAl stopped prematurely"
+            av2.stop()
+
+            test.isTrue myAl.isActive()
+            test.isTrue av.isActive()
+            test.isTrue al.isActive()
+            av.stop()
+            test.isFalse al.isActive()
+            test.isFalse myAl.isActive()
+
+            c.stop()
+
+            onComplete()
+
+
+Tinytest.addAsync "AutoList - Maps don't stop prematurely", (test, onComplete) ->
+    coef = new J.Var 2
+    lst = J.List [3, 4, 5]
+    mappedLst = lst.map (v) -> coef.get() * v
+    test.equal mappedLst.getValues(), [6, 8, 10]
+    coef.set 3
+    test.equal mappedLst.getValues(), [6, 8, 10]
+
+    av = J.AutoVar 'av',
+        -> lst.map (v) -> coef.get() * v
+
+    test.equal av.get().getValues(), [9, 12, 15]
+    coef.set 4
+    test.equal av.get().getValues(), [12, 16, 20]
+    av.stop()
+    test.throws -> av.get().getValues()
+
+    onComplete()
+
+
+
+
+Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
+    history = []
+    x = new J.Var 5
+    a = J.AutoVar 'a', ->
+        history.push 'a'
+        x.get()
+    b = J.AutoVar 'b', ->
+        history.push 'b'
+        Math.floor(a.get() / 100) * 100 # Round down to nearest 100
+    c = J.AutoVar 'c', ->
+        history.push 'c'
+        b.get()
+    d = J.AutoVar 'd', ->
+        history.push 'd'
+        c.get()
+    test.equal c.get(), 0
+    test.equal history, ['c', 'b', 'a']
+    history = []
+    x.set 55
+    test.equal c.get(), 0
+    test.isTrue 'a' in history
+    test.isTrue 'b' in history
+    test.isFalse 'c' in history # Currently fails
+    history = []
+    x.set 101
+    test.equal c.get(), 100
+    test.isTrue 'a' in history
+    test.isTrue 'c' in history
+    history = []
+    d.get()
+    history = []
+    x.set 102
+    d.get()
+    test.isTrue 'a' in history
+    test.isTrue 'b' in history
+    test.isFalse 'c' in history
+    test.isFalse 'd' in history
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
