@@ -30,7 +30,7 @@ class J.Dict
             else if J.util.isPlainObject fieldsOrKeys
                 fields = fieldsOrKeys
             else
-                throw "Invalid fieldsOrKeys: #{fieldsOrKeys}"
+                throw new Meteor.Error "Invalid fieldsOrKeys: #{fieldsOrKeys}"
         else
             fields = {}
 
@@ -58,6 +58,14 @@ class J.Dict
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
+        oldValue = Tracker.nonreactive => @_fields[key].get()
+        console.warn "oldValue: ", oldValue, @onChange
+        if oldValue isnt undefined and @onChange
+            Tracker.afterFlush J.bindEnvironment =>
+                console.warn "isActive", @isActive()
+                if @isActive()
+                    @onChange.call @, key, oldValue, undefined
+
         delete @[key]
         delete @_fields[key]
 
@@ -84,7 +92,7 @@ class J.Dict
         if @hasKey key
             @_fields[key].get()
         else if force
-            throw "#{@constructor.name} missing key: #{J.util.stringify key}"
+            throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
         else
             undefined
 
@@ -119,7 +127,7 @@ class J.Dict
     _replaceKeys: (newKeys) ->
         keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
         @_delete key for key in keysDiff.deleted
-        @_initField key, undefined for key in keysDiff.added
+        @_initField key, J.Var.NOT_READY for key in keysDiff.added
         keysDiff
 
 
@@ -160,10 +168,6 @@ class J.Dict
 
 
     get: (key) ->
-        getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw "Can't get field of inactive #{@constructor.name}: #{@}"
         @_get key, false
 
 
@@ -175,11 +179,6 @@ class J.Dict
 
 
     getKeys: ->
-        getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw "Can't get keys of inactive #{@constructor.name}: #{@}"
-
         @_keysDep.depend()
         _.keys @_fields
 
@@ -208,7 +207,7 @@ class J.Dict
         setter = Tracker.currentComputation
         canSet = @isActive() or (setter? and setter is @creator)
         if not canSet
-            throw "Can't set value of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
@@ -231,7 +230,7 @@ class J.Dict
         setter = Tracker.currentComputation
         canSet = @isActive() or (setter? and setter is @creator)
         if not canSet
-            throw "Can't set value of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
@@ -263,11 +262,6 @@ class J.Dict
 
     size: ->
         # TODO: Finer-grained reactivity
-
-        getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw "Can't get size of inactive #{@constructor.name}: #{@}"
 
         @getKeys().length
 
@@ -311,7 +305,7 @@ class J.Dict
         else if J.util.isPlainObject dictOrObj
             dictOrObj
         else
-            throw "#{@constructor.name} can't unwrap #{dictOrObj}"
+            throw new Meteor.Error "#{@constructor.name} can't unwrap #{dictOrObj}"
 
 
     @wrap: (dictOrObj) ->
@@ -320,4 +314,4 @@ class J.Dict
         else if J.util.isPlainObject dictOrObj
             @ dictOrObj
         else
-            throw "#{@constructor.name} can't wrap #{dictOrObj}"
+            throw new Meteor.Error "#{@constructor.name} can't wrap #{dictOrObj}"

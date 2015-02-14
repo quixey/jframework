@@ -33,7 +33,7 @@ class J.List
         else if not values?
             arr = []
         else
-            throw "#{@constructor} values argument must be a List or
+            throw new Meteor.Error "#{@constructor} values argument must be a List or
                 array. Got: #{values}"
 
         if options?.creator is undefined
@@ -204,7 +204,7 @@ class J.List
                     (i) => f @get(i), i
                     true # This makes it not lazy
                 )
-                mappedAl.tag = "mapped (#{@tag})"
+                mappedAl.tag = "mapped (#{@toString()})"
                 mappedAl
         else
             J.List @getValues().map f
@@ -292,7 +292,7 @@ class J.List
         else if _.isArray listOrArr
             listOrArr
         else
-            throw "#{@constructor.name} can't unwrap #{listOrArr}"
+            throw new Meteor.Error "#{@constructor.name} can't unwrap #{listOrArr}"
 
 
     @wrap: (listOrArr) ->
@@ -301,4 +301,4 @@ class J.List
         else if _.isArray listOrArr
             @ listOrArr
         else
-            throw "#{@constructor.name} can't wrap #{listOrArr}"
+            throw new Meteor.Error "#{@constructor.name} can't wrap #{listOrArr}"

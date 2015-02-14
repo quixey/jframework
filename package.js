@@ -4,25 +4,23 @@ Package.describe({
 });
 
 Npm.depends({
-    "react-router": "0.11.6"
+    // "react-router": "0.11.6"
 });
 
 Package.onUse(function(api) {
     // Sets up window.ReactRouter
     api.addFiles(
-        '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
+        // '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
     );
 
     api.use([
         "underscore",
         "coffeescript",
         "tracker",
-        "reactive-var",
         "quixey:react"
     ]);
 
     api.imply([
-        "reactive-var",
         "underscore",
         "quixey:react"
     ]);
@@ -43,10 +41,10 @@ Package.onUse(function(api) {
         "proptypes.coffee",
         "models.coffee",
         "routing.coffee"
-    ]);
+    ], "client");
 
     api.addFiles([
-        "publish.coffee"
+        // "publish.coffee"
     ], "server");
 
     api.addFiles([
@@ -68,7 +66,6 @@ Package.onTest(function(api) {
 
     api.imply([
         "tracker",
-        "reactive-var",
         "tinytest",
         "jframework"
     ]);
@@ -77,13 +74,13 @@ Package.onTest(function(api) {
         "tests/util-tests.coffee",
         "tests/test-models.coffee",
         "tests/jframework-tests.coffee"
+    ], "client");
+
+    api.addFiles([
+        // "tests/publish-tests.coffee"
     ]);
 
     api.addFiles([
-        "tests/publish-tests.coffee"
-    ]);
-
-    api.addFiles([
-        "tests/jframework-client-tests.coffee"
+        // "tests/jframework-client-tests.coffee"
     ], "client");
 });

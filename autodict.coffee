@@ -76,7 +76,7 @@ class J.AutoDict extends J.Dict
                 keys = @keysFunc.apply null
 
                 unless _.isArray(keys) or keys instanceof J.List
-                    throw "AutoDict.keysFunc must return an array or List.
+                    throw new Meteor.Error "AutoDict.keysFunc must return an array or List.
                         Got #{J.util.stringify keys}"
 
                 keysArr = J.List.unwrap(keys)
@@ -87,7 +87,7 @@ class J.AutoDict extends J.Dict
                 if _.size(J.util.makeDictSet keysArr) < keys.length
                     throw new Meteor.Error "AutoDict keys must be unique."
 
-                @_pendingNewKeys = keys # Without toArr, this wont be invalidated much
+                @_pendingNewKeys = keys # TODO: get rid of toArr so this won't be invalidated so much
 
                 # Would be better to return the keys list itself, but then
                 # we need a call like .observe to listen for changes, since
@@ -119,15 +119,9 @@ class J.AutoDict extends J.Dict
 
 
     _delete: (key) ->
-        oldValue = @_fields[key]._var._previousReadyValue
-        @_fields[key].stop()
-
-        if oldValue isnt undefined and _.isFunction @onChange
-            Tracker.afterFlush J.bindEnvironment =>
-                if @isActive()
-                    @onChange.call @, key, oldValue, undefined
-
+        fieldAutoVar = @_fields[key]
         super
+        fieldAutoVar.stop()
 
 
     _get: (key, force) ->

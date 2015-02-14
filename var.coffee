@@ -35,13 +35,13 @@ class J.Var
         else if options.creator instanceof Tracker.Computation or not options.creator?
             @creator = options.creator
         else
-            throw "Invalid J.Var creator: #{options.creator}"
+            throw new Meteor.Error "Invalid J.Var creator: #{options.creator}"
 
         @tag = options?.tag
         if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?
-            throw "Invalid J.Var onChange: #{options.onChange}"
+            throw new Meteor.Error "Invalid J.Var onChange: #{options.onChange}"
         else
             @onChange = null
 
@@ -58,10 +58,6 @@ class J.Var
 
     get: ->
         getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw "Can't get value of inactive Var: #{@}"
-
         if getter? and getter._id not of @_getters
             if getter._id not of @_getters
                 @_getters[getter._id] = getter
@@ -86,7 +82,7 @@ class J.Var
         setter = Tracker.currentComputation
         canSet = @isActive() or (setter? and setter is @creator)
         if not canSet
-            throw "Can't set value of inactive Var: #{@}"
+            throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 
         previousValue = @_value
         @_value = @constructor.wrap value
@@ -135,17 +131,15 @@ class J.Var
     @isValidValue: (value) ->
         not (
             value is undefined or
-            value instanceof J.AutoVar or
-            value instanceof J.AutoDict or
-            value instanceof J.AutoList
+            value instanceof J.AutoVar
         )
 
     @wrap: (value) ->
         if value is undefined
-            throw "Can't set Var value to undefined. Use
+            throw new Meteor.Error "Can't set Var value to undefined. Use
                 null or J.Var.NOT_READY instead."
         else if not @isValidValue value
-            throw "Invalid value for Var: #{value}"
+            throw new Meteor.Error "Invalid value for Var: #{value}"
 
         if value is @NOT_READY
             @NOT_READY

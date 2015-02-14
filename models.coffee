@@ -332,7 +332,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     # Set up instance methods for getting/setting fields
     for fieldName, fieldSpec of modelClass.fieldSpecs
         if fieldName is '_id'
-            throw "_id is not a valid field name for #{modelName}"
+            throw new Meteor.Error "_id is not a valid field name for #{modelName}"
 
         modelClass.prototype[fieldName] ?= do (fieldName, fieldSpec) -> (value) ->
             if arguments.length is 0
@@ -346,10 +346,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     # Set up reactives
     for reactiveName, reactiveSpec of modelClass.reactiveSpecs
         if reactiveName of modelClass.fieldSpecs
-            throw "#{modelClass}.reactive can't have same name as field: #{reactiveName}"
+            throw new Meteor.Error "#{modelClass}.reactive can't have same name as field: #{reactiveName}"
 
         unless reactiveSpec.val?
-            throw "#{modelClass}.reactives.#{reactiveName} missing val function"
+            throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
             @reactives[reactiveName].get()

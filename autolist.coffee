@@ -31,7 +31,7 @@ class J.AutoList extends J.List
             =>
                 size = @sizeFunc()
                 unless _.isNumber(size) and parseInt(size) is size and size >= 0
-                    throw "Invalid AutoList sizeFunc output: #{size}"
+                    throw new Meteor.Error "Invalid AutoList sizeFunc output: #{size}"
                 "#{i}" for i in [0...size]
 
             (key, _dict) => @valueFunc parseInt(key), @
@@ -59,7 +59,7 @@ class J.AutoList extends J.List
         getter = Tracker.currentComputation
         canGet = @isActive() or (getter? and getter is @creator)
         if not canGet
-            throw "Can't get field of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Can't get field of inactive #{@constructor.name}: #{@}"
 
         super
 
@@ -92,7 +92,7 @@ class J.AutoList extends J.List
         getter = Tracker.currentComputation
         canGet = @isActive() or (getter? and getter is @creator)
         if not canGet
-            throw "Can't get size of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
 
         super
 

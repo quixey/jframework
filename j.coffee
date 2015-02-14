@@ -23,9 +23,17 @@ J.getNextId = ->
 
 
 if Meteor.isServer
+    _collapsed = false
+    console.log = ->
+        return if _collapsed
+        console.log.apply console, arguments
     console.debug = console.log
-    console.groupCollapsed = console.log
-    console.groupEnd = console.log
+    console.groupCollapsed = ->
+        console.log.apply console, arguments
+        _collapsed = true
+    console.groupEnd = ->
+        _collapsed = false
+        console.log.apply console, arguments
     console.group = console.log
 
     Meteor.startup ->

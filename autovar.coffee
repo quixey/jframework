@@ -1,3 +1,5 @@
+crap = 0
+
 class J.AutoVar
     constructor: (tag, valueFunc, onChange, options) ->
         ###
@@ -61,6 +63,9 @@ class J.AutoVar
 
 
     _recompute: ->
+        crap += 1
+        if crap >= 1000 then crash
+
         # console.log @tag, @_id, "recomputing..."
         J.assert @_active
 
@@ -82,7 +87,7 @@ class J.AutoVar
 
 
     _setupValueComp: ->
-        # console.log "_setupValueComp", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "_setupValueComp", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
         J.assert @isActive()
 
         @_valueComp?.stop()
@@ -101,16 +106,21 @@ class J.AutoVar
             @_recompute()
 
             @_valueComp.onInvalidate =>
-                # console.log "invalidated", @tag, @_id
+                console.groupCollapsed "invalidated", @toString()
+                console.trace()
+                console.groupEnd()
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
 
 
     get: ->
+        crap += 1
+        if crap >= 1000 then getCrash
+
         unless @isActive()
             console.error()
-            throw "#{@constructor.name} ##{@_id} is stopped: #{@}."
+            throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
 
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
@@ -118,7 +128,7 @@ class J.AutoVar
         if Meteor.isServer and J._inMethod.get()
             return @valueFunc.call null, @
 
-        # console.log "GET", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "GET", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.
@@ -157,6 +167,7 @@ class J.AutoVar
 
     @flush: ->
         console.groupCollapsed("FLUSH called")
+        console.log (x.toString() for x in @_pending)
         console.trace()
         console.groupEnd()
         while @_pending.length

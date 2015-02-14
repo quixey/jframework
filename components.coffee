@@ -325,7 +325,7 @@ J._defineComponent = (componentName, componentSpec) ->
             if @_renderComp.invalidated
                 @_renderComp.stop()
             else
-                throw "Called #{@toString()}.forceUpdate() - J.components don't allow
+                throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components don't allow
                     forceUpdate(). Use reactive expressions instead."
 
         element = undefined

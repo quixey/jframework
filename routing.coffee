@@ -7,7 +7,7 @@ if Meteor.isServer
     # and some of them try to use the ReactRouter.State mixin.
     J.Routable = {NOT_IMPLEMENTED_YET: true};
 
-if Meteor.isClient
+if Meteor.isClient and ReactRouter?
     # Hack J.Routable mixin as a combo of ReactRouter.State + ReactRouter.Navigation
     J.Routable = _.extend _.clone(ReactRouter.State), ReactRouter.Navigation
     J.Routable.contextTypes = _.extend _.clone(ReactRouter.State.contextTypes),
@@ -53,7 +53,7 @@ if Meteor.isClient
             if J._routeGenerator?
                 rootRoute = J._routeGenerator()
 
-                ReactRouter.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
+                ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
                     React.render $$(Handler), document.body
 
             else
