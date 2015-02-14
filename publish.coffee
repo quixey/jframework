@@ -95,7 +95,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         publishJData.call @, dataSessionId
 
     @onStop =>
-        log 'Stop publish _jdata', dataSessionId
+        console.log "[#{dataSessionId}] STOPPED"
         sessionComp.stop()
         delete dataSessions[dataSessionId]
 

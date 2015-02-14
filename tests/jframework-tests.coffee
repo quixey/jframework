@@ -4,6 +4,92 @@ Tinytest.add "_init", (test) ->
     # tests' times aren't artificially high
     return
 
+Tinytest.add "AutoDict - create with fieldSpec instead of keyFunc", (test) ->
+    w = J.Var 9
+    changeHist = []
+    ad = J.AutoDict('ad',
+        x: 5
+        y: [6, 7]
+        z: -> 'eight'
+        w: -> w.get()
+        (key, oldValue, newValue) ->
+            changeHist.push [key, oldValue ? null, newValue ? null]
+    )
+    test.equal ad.toObj(),
+        x: 5
+        y: [6, 7]
+        z: 'eight'
+        w: 9
+    test.equal ad.y().get(1), 7
+    ad.y().push 88
+    w.set 99
+    test.equal ad.toObj(),
+        x: 5
+        y: [6, 7, 88]
+        z: 'eight'
+        w: 99
+    Tracker.flush()
+    test.equal J.List(changeHist).toArr(), [
+        ['x', null, 5]
+        ['y', null, [6, 7, 88]]
+        ['z', null, 'eight']
+        ['w', null, 9]
+        ['w', 9, 99]
+    ]
+    ad.stop()
+
+
+Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
+    ad = J.AutoDict('ad',
+        ['x', 'y', 'z']
+        (key) -> "#{key}-v"
+    )
+    test.equal ad.getFields(),
+        x: 'x-v'
+        y: 'y-v'
+        z: 'z-v'
+    ad.stop()
+
+    lst = J.List ['q', 'r']
+    ad = J.AutoDict('ad',
+        lst
+        (key) -> "#{key}-v"
+    )
+    test.equal ad.getFields(),
+        q: 'q-v'
+        r: 'r-v'
+    test.isUndefined ad.get('s')
+    ad.stop()
+
+    size = J.Var 5
+    al = J.AutoList('haial',
+        -> size.get()
+        (i) -> "#{i}-k"
+    )
+    ad = J.AutoDict('ad',
+        al
+        (key) -> "#{key}-v"
+    )
+    test.equal ad.get('3-k'), '3-k-v'
+    test.equal ad.getFields(),
+        '0-k': '0-k-v'
+        '1-k': '1-k-v'
+        '2-k': '2-k-v'
+        '3-k': '3-k-v'
+        '4-k': '4-k-v'
+    size.set 4
+    console.warn "here goes"
+    test.equal ad.getFields(),
+        '0-k': '0-k-v'
+        '1-k': '1-k-v'
+        '2-k': '2-k-v'
+        '3-k': '3-k-v'
+    console.warn "done"
+    al.stop()
+    ad.stop()
+
+
+
 
 Tinytest.addAsync "AfterAf - Basics", (test, onComplete) ->
     afCount = 0

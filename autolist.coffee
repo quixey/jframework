@@ -29,6 +29,7 @@ class J.AutoList extends J.List
             )
 
             =>
+                console.log @toString(), "recompute 0...size"
                 size = @sizeFunc()
                 unless _.isNumber(size) and parseInt(size) is size and size >= 0
                     throw new Meteor.Error "Invalid AutoList sizeFunc output: #{size}"

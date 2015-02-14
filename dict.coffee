@@ -108,13 +108,7 @@ class J.Dict
                 (oldValue, newValue) =>
                     @onChange.call @, key, oldValue, newValue
 
-        # This question mark is to avoid overshadowing reserved
-        # members like "set".
-        @[key] ?= (v) ->
-            if arguments.length is 0
-                @forceGet key
-            else
-                @set key, v
+        @_setupGetterSetter key
 
         @_keysDep.changed()
         if @_hasKeyDeps[key]?
@@ -124,9 +118,21 @@ class J.Dict
 
     _replaceKeys: (newKeys) ->
         keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
+        console.log @toString(), "_replaceKeys", newKeys, keysDiff
         @_delete key for key in keysDiff.deleted
         @_initField key, J.Var.NOT_READY for key in keysDiff.added
         keysDiff
+
+
+    _setupGetterSetter: (key) ->
+        # This question mark is to avoid overshadowing members
+        # like "creator" and "get".
+        if key not of @
+            @[key] = (v) ->
+                if arguments.length is 0
+                    @forceGet key
+                else
+                    @set key, v
 
 
     clear: ->

@@ -35,13 +35,13 @@ class J.Var
         else if options.creator instanceof Tracker.Computation or not options.creator?
             @creator = options.creator
         else
-            throw new Meteor.Error "Invalid J.Var creator: #{options.creator}"
+            throw new Meteor.Error "Invalid Var creator: #{options.creator}"
 
         @tag = options?.tag
         if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?
-            throw new Meteor.Error "Invalid J.Var onChange: #{options.onChange}"
+            throw new Meteor.Error "Invalid Var onChange: #{options.onChange}"
         else
             @onChange = null
 

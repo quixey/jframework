@@ -27,7 +27,7 @@ class J.List
             @tag ?=
                 constructorCloneOf: values
                 tag: "#{@constructor.name} clone of (#{values.toString()})"
-            arr = arr.getValues()
+            arr = values.getValues()
         else if _.isArray values
             arr = values
         else if not values?

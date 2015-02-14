@@ -1,5 +1,3 @@
-crap = 0
-
 class J.AutoVar
     constructor: (tag, valueFunc, onChange, options) ->
         ###
@@ -63,10 +61,7 @@ class J.AutoVar
 
 
     _recompute: ->
-        crap += 1
-        if crap >= 1000 then crash
-
-        # console.log @tag, @_id, "recomputing..."
+        console.log @toString(), "recomputing..."
         J.assert @_active
 
         # Pass a @ just like autorun does. This will help in case
@@ -75,19 +70,20 @@ class J.AutoVar
         try
             # ValueFunc may either return or throw J.Var.NOT_READY.
             # It may not return undefined.
-            rawValue = @valueFunc.call null, @
+            value = @valueFunc.call null, @
         catch e
             throw e unless e is J.Var.NOT_READY
-            rawValue = J.Var.NOT_READY
+            value = J.Var.NOT_READY
 
-        if rawValue is undefined
+        if value is undefined
             throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
 
-        @_var.set rawValue
+        console.log "...", @toString(), "recomputed: ", value
+        @_var.set value
 
 
     _setupValueComp: ->
-        console.log "_setupValueComp", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "_setupValueComp", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
         J.assert @isActive()
 
         @_valueComp?.stop()
@@ -115,9 +111,6 @@ class J.AutoVar
 
 
     get: ->
-        crap += 1
-        if crap >= 1000 then getCrash
-
         unless @isActive()
             console.error()
             throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
@@ -128,7 +121,7 @@ class J.AutoVar
         if Meteor.isServer and J._inMethod.get()
             return @valueFunc.call null, @
 
-        console.log "GET", @tag, @_id, @_valueComp?, (a.tag for a in @constructor._pending)
+        console.log "GET", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.
@@ -136,7 +129,9 @@ class J.AutoVar
         else
             @_setupValueComp()
 
-        @_var.get()
+        ret = @_var.get()
+        console.log "...#{@toString()} GET returning", ret
+        ret
 
 
     isActive: ->
