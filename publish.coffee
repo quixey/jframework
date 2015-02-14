@@ -74,7 +74,7 @@ Meteor.methods
             # a problem for a data query.
             session.currentQuery = new Future()
             J.afterAf ->
-                # AfterAf gives the publish function time to stop and start observers
+                # J.AfterAf gives the publish function time to stop and start observers
                 # to achieve its new set of merged cursors, plus have those cursors
                 # send their initial data to the client.
                 session.currentQuery.return()

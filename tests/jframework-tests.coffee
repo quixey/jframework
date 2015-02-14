@@ -5,19 +5,75 @@ Tinytest.add "_init", (test) ->
     return
 
 
-Tinytest.add "AutoList - throw out when invalidated", (test) ->
-    # When you invalidate an Auto, all the Autos it spawned
-    # should get instantly stopped. If an Auto is in the
-    # process of computing and gets hit by a stop from
-    # an upstream invalidation, it should throw out of its
-    # computation.
-    # The only computation that gets re-run is the non-stopped one.
+Tinytest.addAsync "AfterAf - Basics", (test, onComplete) ->
+    afCount = 0
+    aafCount = 0
+    J.afterAf ->
+        aafCount += 1
+        test.equal aafCount, 1, 'fail 1'
+    J.afterAf ->
+        aafCount += 1
+        test.equal aafCount, 2, 'fail 2'
+        J.afterAf ->
+            aafCount += 1
+            test.equal afCount, 2, 'fail 3'
+            test.equal aafCount, 3, 'fail 4'
+            J.afterAf ->
+                aafCount += 1
+            J.afterAf ->
+                test.equal aafCount, 4, 'fail 5'
+                aafCount += 1
+                J.afterAf ->
+                    test.equal aafCount, 6, 'fail 6'
+                    onComplete()
+            J.afterAf ->
+                test.equal aafCount, 5, 'fail 7'
+                aafCount += 1
+            test.equal afCount, 2, 'fail 8'
+            test.equal aafCount, 3, 'fail 9'
+        Tracker.afterFlush ->
+            afCount += 1
+            test.equal afCount, 1, 'fail 10'
+            test.equal aafCount, 2, 'fail 11'
+        Tracker.afterFlush ->
+            afCount += 1
+            test.equal afCount, 2, 'fail 12'
+            test.equal aafCount, 2, 'fail 13'
+        test.equal afCount, 0, 'fail 14'
+        test.equal aafCount, 2, 'fail 15'
+    test.equal aafCount, 0, 'fail 16'
 
-    # Simplest algorithm - don't worry about throwing, just
-    # tell lists/dicts not to recompute fields that were
-    # *stopped*.
 
-    return
+Tinytest.addAsync "AfterAf - trigger after all onChange handlers", (test, onComplete) ->
+    v = J.Var 6
+    onChangeCount = 0
+    J.afterAf ->
+        test.equal onChangeCount, 1, 'fail 1'
+    a = J.AutoVar('a',
+        -> v.get()
+        (oldA, newA) ->
+            onChangeCount += 1
+    )
+    J.afterAf ->
+        test.equal onChangeCount, 3, 'fail 2'
+    test.equal onChangeCount, 0, 'fail 3'
+    Tracker.flush()
+    test.equal onChangeCount, 1, 'fail 4'
+    J.afterAf ->
+        test.equal onChangeCount, 3, 'fail 5'
+    b = J.AutoVar('b',
+        -> v.get() - v.get() % 2
+        (oldA, newA) ->
+            onChangeCount += 1
+    )
+    J.afterAf ->
+        test.equal onChangeCount, 3, 'fail 6'
+        a.stop()
+        b.stop()
+        onComplete()
+    v.set 7
+    test.equal onChangeCount, 1, 'fail 7'
+
 
 
 Tinytest.add "AutoVar - Topological invalidation order", (test) ->

@@ -4,21 +4,18 @@
 
 J._aafQueue = []
 J._flushAfterAfQueue = ->
-    console.log 'Flush AfterAfQueue'
-    while J._aafQueue.length
+    console.debug 'J.afterAf!'
+    if J._aafQueue.length
         func = J._aafQueue.shift()
+        wasEmpty = J._aafQueue.length is 0
         func()
-
-_setupAfWaiter = ->
-    afIsDone = false
-    Tracker.afterFlush -> afIsDone = true
-    if afIsDone
-        # AfterFlush is now
-        J._flushAfterAfQueue()
-    else
-        # AfterFlush is (synchronously or asynchronously) later
-        Tracker.afterFlush -> _setupAfWaiter()
-
+        if not wasEmpty
+            Tracker.afterFlush ->
+                setTimeout(
+                    J.bindEnvironment ->
+                        J._flushAfterAfQueue()
+                    1
+                )
 
 J.afterAf = (f) ->
     ###
@@ -26,7 +23,13 @@ J.afterAf = (f) ->
     ###
     J._aafQueue.push f
     if J._aafQueue.length is 1
-        setupAfWaiter()
+        Tracker.afterFlush ->
+            setTimeout(
+                J.bindEnvironment ->
+                    J._flushAfterAfQueue()
+                1
+            )
+
 
 
 class J.Dependency
