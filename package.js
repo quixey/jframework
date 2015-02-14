@@ -41,10 +41,10 @@ Package.onUse(function(api) {
         "proptypes.coffee",
         "models.coffee",
         "routing.coffee"
-    ], "client");
+    ]);
 
     api.addFiles([
-        // "publish.coffee"
+        "publish.coffee"
     ], "server");
 
     api.addFiles([
@@ -77,7 +77,7 @@ Package.onTest(function(api) {
     ], "client");
 
     api.addFiles([
-        // "tests/publish-tests.coffee"
+        "tests/publish-tests.coffee"
     ]);
 
     api.addFiles([

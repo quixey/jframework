@@ -1,5 +1,4 @@
 addTest = (testName, testFunc) ->
-    return
     return if Meteor.isServer
     Tinytest.addAsync testName, (test, onComplete) ->
         testFunc test, onComplete
@@ -16,6 +15,8 @@ Tinytest.addAsync "weird problem", (test, onComplete) ->
     if Meteor.isServer
         onComplete()
         return
+    onComplete()
+    return
 
     console.info "begin weird problem"
 
