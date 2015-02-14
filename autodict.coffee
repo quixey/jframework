@@ -86,28 +86,13 @@ class J.AutoDict extends J.Dict
                 if _.size(J.util.makeDictSet keysArr) < keys.length
                     throw new Meteor.Error "AutoDict keys must be unique."
 
-                @_pendingNewKeys = keys # TODO: get rid of toArr so this won't be invalidated so much
+                # FIXME: AutoVar valueFuncs *really* aren't supposed to have side effects.
+                # Maybe AutoVar should support a synchronous onChange too.
+                @_replaceKeys keys
 
-                # Would be better to return the keys list itself, but then
-                # we need a call like .observe to listen for changes, since
-                # the list pointer might not change when its contents do.
-                keysArr
+                keys
 
-            (oldKeys, newKeys) =>
-                ###
-                    The naive implementation is @_replaceKeys(newKeys), but this has
-                    two problems:
-                    1. @_keysVar might queue up multiple change events before the flush,
-                       and it's wasteful to @_replaceKeys a bunch of times.
-                    2. Even worse, @get() may have been called on a new key, which
-                       would cause _initField to be called before the flush, and now
-                       we can only trust the last call to this onChange function,
-                       otherwise @_replaceKeys(newKeys) might actually revert the keys
-                       back to an earlier state and kill the field's AutoVar.
-                ###
-                if @_pendingNewKeys?
-                    @_replaceKeys @_pendingNewKeys
-                    @_pendingNewKeys = null
+            if @onChange? then true else null
 
             creator: @creator
         )

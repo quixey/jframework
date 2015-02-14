@@ -763,186 +763,185 @@ Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
     test.equal valueFuncRunCount, 5
     d.stop()
 
-##
-##Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
-##    size = new J.Var 3
-##    val = new J.Var 100
-##    keysFuncRunCount = 0
-##    valueFuncRunCount = 0
-##    d = J.AutoDict(
-##        ->
-##            keysFuncRunCount += 1
-##            "#{x}" for x in [0...size.get()]
-##        (key) ->
-##            valueFuncRunCount += 1
-##            val.get() + parseInt key
-##    )
-##    size.set 2
-##    test.isUndefined d.get('2')
-##    Tracker.flush()
-##    test.equal d.toObj(),
-##        0: 100
-##        1: 101
-##    val.set 200
-##    size.set 1
-##    test.isUndefined d.get('1')
-##    size.set 0
-##    val.set 300
-##    test.isUndefined d.get('0')
-##
-##
-##Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
-##    x = new J.Var 5
-##    a = J.AutoVar -> x.get()
-##    b = J.AutoVar -> a.get()
-##    c = J.AutoVar -> b.get()
-##    d = J.AutoVar -> c.get()
-##    e = J.AutoVar -> d.get()
-##    test.equal e.get(), 5
-##    x.set 6
-##    test.equal e.get(), 6
-##    Tracker.flush()
-##    test.equal e.get(), 6
-##
-##Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
-##    x = new J.Var 5
-##    a = J.AutoVar -> x.get()
-##    b = J.AutoVar -> a.get()
-##    c = J.AutoVar -> b.get()
-##    d = J.AutoVar -> c.get()
-##    e = J.AutoVar -> c.get() + a.get()
-##    test.equal e.get(), 10
-##    x.set 6
-##    test.equal e.get(), 12
-##    Tracker.flush()
-##    test.equal e.get(), 12
-##
-##Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
-##    history = []
-##    x = new J.Var 5
-##    a = J.AutoVar ->
-##        history.push 'a'
-##        x.get()
-##    a.tag = 'a'
-##    b = J.AutoVar ->
-##        history.push 'b'
-##        a.get()
-##    b.tag = 'b'
-##    c = J.AutoVar ->
-##        history.push 'c'
-##        b.get()
-##    c.tag = 'c'
-##    d = J.AutoVar ->
-##        history.push 'd'
-##        c.get()
-##    d.tag = 'd'
-##    e = J.AutoVar ->
-##        history.push 'e'
-##        a.get() + c.get()
-##    e.tag = 'e'
-##
-##    test.equal history, []
-##    test.equal e.get(), 10
-##    test.equal history, ['e', 'a', 'c', 'b']
-##    history = []
-##    x.set 6
-##    test.equal history, []
-##    test.equal e.get(), 12
-##    test.equal history, ['a', 'e', 'b', 'c']
-##
-##Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
-##    history = []
-##    x = new J.Var 5
-##    a = J.AutoVar ->
-##        history.push 'a'
-##        x.get()
-##    b = J.AutoVar ->
-##        history.push 'b'
-##        Math.floor(a.get() / 100) * 100 # Round down to nearest 100
-##    c = J.AutoVar ->
-##        history.push 'c'
-##        b.get()
-##    test.equal c.get(), 0
-##    test.equal history, ['c', 'b', 'a']
-##    history = []
-##    x.set 55
-##    test.equal c.get(), 0
-##    test.isTrue 'a' in history
-##    test.isTrue 'b' in history
-##    test.isFalse 'c' in history # Currently fails
-##    history = []
-##    x.set 101
-##    test.equal c.get(), 100
-##    test.isTrue 'a' in history
-##    test.isTrue 'c' in history
-##
-##
-##Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
-##    a = J.AutoVar(
-##        -> a.stop() ? null
-##        true
-##    )
-##    Tracker.flush()
-##    test.isFalse a.active
-##    test.isTrue a._valueComp.stopped
-##
-##
-##
-##Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
-##    dep = null
-##    c1 = Tracker.autorun ->
-##        dep = new J.Dependency()
-##        dep.depend()
-##        dep.changed()
-##    test.isFalse c1.invalidated
-##    dep.changed()
-##    test.isTrue c1.invalidated
-##    c1.stop()
-##
-##
-##Tinytest.add "Dict - don't invalidate creator computation", (test) ->
-##    runCount = 0
-##    runCount2 = 0
-##    d = null
-##    d2 = J.Dict()
-##    c1 = Tracker.autorun (c) ->
-##        # Since this autorun is creating d ,
-##        # it won't invalidate when it's the
-##        # one mutating d.
-##        runCount += 1
-##        d ?= J.Dict()
-##        d.size()
-##        d.setOrAdd 'a', (d.get('a') ? 0) + 1
-##        d.hasKey 'b'
-##        d.setOrAdd 'b', 4
-##        test.isTrue d.hasKey 'b'
-##        d.a()
-##        test.equal d2.size(), 0
-##    c2 = Tracker.autorun ->
-##        runCount2 += 1
-##        d.get('a')
-##    test.equal runCount, 1
-##    test.equal runCount2, 1
-##    Tracker.flush()
-##    test.equal runCount, 1
-##    test.equal runCount2, 1
-##    d.a 33
-##    Tracker.flush()
-##    test.equal runCount, 2
-##    test.equal runCount2, 2
-##    d.b 44
-##    Tracker.flush()
-##    test.equal runCount, 2
-##    test.equal runCount2, 2
-##    d.delete 'b'
-##    test.isTrue c1.invalidated
-##    test.isFalse c2.invalidated
-##    Tracker.flush()
-##    test.equal runCount, 3
-##    test.equal runCount2, 3 # c1 invalidates c2
-##    c1.stop()
-##    c2.stop()
-##
+
+Tinytest.add "AutoDict - Make sure key still exists when expediting value recalculation", (test) ->
+    size = new J.Var 3
+    val = new J.Var 100
+    keysFuncRunCount = 0
+    valueFuncRunCount = 0
+    d = J.AutoDict(
+        ->
+            keysFuncRunCount += 1
+            "#{x}" for x in [0...size.get()]
+        (key) ->
+            valueFuncRunCount += 1
+            val.get() + parseInt key
+    )
+    size.set 2
+    test.isUndefined d.get('2')
+    Tracker.flush()
+    test.equal d.toObj(),
+        0: 100
+        1: 101
+    val.set 200
+    size.set 1
+    test.isUndefined d.get('1')
+    size.set 0
+    val.set 300
+    test.isUndefined d.get('0')
+
+
+Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
+    x = new J.Var 5
+    a = J.AutoVar -> x.get()
+    b = J.AutoVar -> a.get()
+    c = J.AutoVar -> b.get()
+    d = J.AutoVar -> c.get()
+    e = J.AutoVar -> d.get()
+    test.equal e.get(), 5
+    x.set 6
+    test.equal e.get(), 6
+    Tracker.flush()
+    test.equal e.get(), 6
+
+Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
+    x = new J.Var 5
+    a = J.AutoVar -> x.get()
+    b = J.AutoVar -> a.get()
+    c = J.AutoVar -> b.get()
+    d = J.AutoVar -> c.get()
+    e = J.AutoVar -> c.get() + a.get()
+    test.equal e.get(), 10
+    x.set 6
+    test.equal e.get(), 12
+    Tracker.flush()
+    test.equal e.get(), 12
+
+Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
+    history = []
+    x = new J.Var 5
+    a = J.AutoVar ->
+        history.push 'a'
+        x.get()
+    a.tag = 'a'
+    b = J.AutoVar ->
+        history.push 'b'
+        a.get()
+    b.tag = 'b'
+    c = J.AutoVar ->
+        history.push 'c'
+        b.get()
+    c.tag = 'c'
+    d = J.AutoVar ->
+        history.push 'd'
+        c.get()
+    d.tag = 'd'
+    e = J.AutoVar ->
+        history.push 'e'
+        a.get() + c.get()
+    e.tag = 'e'
+
+    test.equal history, []
+    test.equal e.get(), 10
+    test.equal history, ['e', 'a', 'c', 'b']
+    history = []
+    x.set 6
+    test.equal history, []
+    test.equal e.get(), 12
+    test.equal history, ['a', 'e', 'b', 'c']
+
+Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
+    history = []
+    x = new J.Var 5
+    a = J.AutoVar ->
+        history.push 'a'
+        x.get()
+    b = J.AutoVar ->
+        history.push 'b'
+        Math.floor(a.get() / 100) * 100 # Round down to nearest 100
+    c = J.AutoVar ->
+        history.push 'c'
+        b.get()
+    test.equal c.get(), 0
+    test.equal history, ['c', 'b', 'a']
+    history = []
+    x.set 55
+    test.equal c.get(), 0
+    test.isTrue 'a' in history
+    test.isTrue 'b' in history
+    test.isFalse 'c' in history # Currently fails
+    history = []
+    x.set 101
+    test.equal c.get(), 100
+    test.isTrue 'a' in history
+    test.isTrue 'c' in history
+
+
+Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
+    a = J.AutoVar(
+        -> a.stop() ? null
+        true
+    )
+    Tracker.flush()
+    test.isFalse a.active
+    test.isTrue a._valueComp.stopped
+
+
+
+Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
+    dep = null
+    c1 = Tracker.autorun ->
+        dep = new J.Dependency()
+        dep.depend()
+        dep.changed()
+    test.isFalse c1.invalidated
+    dep.changed()
+    test.isTrue c1.invalidated
+    c1.stop()
+
+
+Tinytest.add "Dict - don't invalidate creator computation", (test) ->
+    runCount = 0
+    runCount2 = 0
+
+    d = null
+    c1 = Tracker.autorun (c) ->
+        # Since this autorun is creating d,
+        # it won't invalidate when it's the
+        # one mutating d.
+        runCount += 1
+        d ?= J.Dict()
+        d.size()
+        d.setOrAdd 'a', (d.get('a') ? 0) + 1
+        d.hasKey 'b'
+        d.setOrAdd 'b', 4
+        test.isTrue d.hasKey 'b'
+        d.a()
+    c2 = Tracker.autorun ->
+        runCount2 += 1
+        d.get('a')
+    test.equal runCount, 1
+    test.equal runCount2, 1
+    Tracker.flush()
+    test.equal runCount, 1
+    test.equal runCount2, 1
+    d.a 33
+    Tracker.flush()
+    test.equal runCount, 2
+    test.equal runCount2, 2
+    d.b 44
+    Tracker.flush()
+    test.equal runCount, 2
+    test.equal runCount2, 2
+    d.delete 'b'
+    test.isTrue c1.invalidated
+    test.isFalse c2.invalidated
+    Tracker.flush()
+    test.equal runCount, 3
+    test.equal runCount2, 3 # c1 invalidates c2
+    c1.stop()
+    c2.stop()
+#
 ##
 ##Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
 ##    ###

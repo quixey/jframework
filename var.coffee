@@ -92,7 +92,8 @@ class J.Var
 
         if not J.util.equals previousValue, newValue
             for getterId, getter of @_getters
-                getter.invalidate()
+                unless getter is setter is @creator
+                    getter.invalidate()
 
         if (
             @onChange? and

@@ -59,10 +59,8 @@ class J.Dict
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
         oldValue = Tracker.nonreactive => @_fields[key].get()
-        console.warn "oldValue: ", oldValue, @onChange
         if oldValue isnt undefined and @onChange
             Tracker.afterFlush J.bindEnvironment =>
-                console.warn "isActive", @isActive()
                 if @isActive()
                     @onChange.call @, key, oldValue, undefined
 
