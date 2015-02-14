@@ -315,17 +315,20 @@ Tinytest.add "Dict and List reactivity 3", (test) ->
     test.equal lst.toArr(), [4, 3, 2, 1, 0], "Screwed up the reverse"
     c.stop()
 
-Tinytest.add "Dict and List reactivity 4", (test) ->
+Tinytest.add "List - sort", (test) ->
     lst = J.List [4, 3, 2, 1, 0]
-    sortedLst = []
-    c = Tracker.autorun ->
+    sortedLst = null
+    c = Tracker.autorun (c) ->
         sortedLst = lst.getSorted()
-        test.equal lst.toArr(), [4, 3, 2, 1, 0]
-        test.equal sortedLst.toArr(), [0, 1, 2, 3, 4]
-        lst.set 1, 5
-        test.equal lst.toArr(), [4, 5, 2, 1, 0]
-        test.equal sortedLst.toArr(), [0, 1, 2, 4, 5]
-    c.stop()
+        if c.firstRun
+            test.equal lst.toArr(), [4, 3, 2, 1, 0]
+            test.equal sortedLst.toArr(), [0, 1, 2, 3, 4]
+            lst.set 1, 5
+        else
+            test.equal lst.toArr(), [4, 5, 2, 1, 0]
+            test.equal sortedLst.toArr(), [0, 1, 2, 4, 5]
+            c.stop()
+    Tracker.flush()
 
 
 Tinytest.add "List - resize", (test) ->
@@ -554,9 +557,13 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
     test.equal sizeFuncRunCount, 1
     test.equal valueFuncRunCount, 3
     Tracker.flush()
-    test.equal al.toArr(), [0, 100]
     test.equal sizeFuncRunCount, 2
     test.equal valueFuncRunCount, 5
+    test.equal al.toArr(), [0, 100]
+    coef.set 1000
+    test.equal al.toArr(), [0, 1000]
+    test.equal sizeFuncRunCount, 2
+    test.equal valueFuncRunCount, 7
 
 
 Tinytest.add "AutoList - onChange", (test) ->

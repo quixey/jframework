@@ -155,7 +155,7 @@ class J.List
 
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
-        sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues() # Good to do this in parallel
+        sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues()
         items = _.map @getValues(), (v, i) -> index: i, value: v
         J.List _.map(
             J.util.sortByKey items, (item) -> sortKeys[item.index]
