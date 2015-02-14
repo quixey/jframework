@@ -13,7 +13,7 @@ if J.debugFlush
 J.bindEnvironment = if Meteor.isServer then Meteor.bindEnvironment else _.identity
 
 
-J.graph = {} # jid: object
+J.g = J.graph = {} # jid: object
 J.debugGraph = true
 J._nextId = 0
 J.getNextId = ->

@@ -135,8 +135,8 @@ class J.List
 
 
     getConcat: (lst) ->
-        lst = @constructor.wrap lst
         if Tracker.active
+            lst = @constructor.wrap lst
             J.AutoList(
                 =>
                     @size() + lst.size()
@@ -147,7 +147,7 @@ class J.List
                         lst.get i - @size()
             )
         else
-            J.List @getValues().concat lst
+            J.List @getValues().concat @constructor.unwrap lst
 
 
     getReversed: ->
@@ -274,7 +274,8 @@ class J.List
 
 
     toString: ->
-        s = "List[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        s = "List[#{@_id}]"
+        if @tag then s += "(#{J.util.stringifyTag @tag})"
         if @_dict? and not @isActive() then s += " (inactive)"
         s
 

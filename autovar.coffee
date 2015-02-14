@@ -18,7 +18,7 @@ class J.AutoVar
         ###
 
         unless @ instanceof J.AutoVar
-            return new J.AutoVar tag, valueFunc, onChange
+            return new J.AutoVar tag, valueFunc, onChange, options
 
         if _.isFunction tag
             # Alternate signature: J.AutoVar(valueFunc, onChange, options)

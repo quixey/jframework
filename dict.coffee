@@ -285,7 +285,8 @@ class J.Dict
 
 
     toString: ->
-        s = "Dict[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
+        s = "Dict[#{@_id}]"
+        if @tag then s += "(#{J.util.stringifyTag @tag})"
         if not @isActive() then s += " (inactive)"
         s
 

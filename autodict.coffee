@@ -47,6 +47,7 @@ class J.AutoDict extends J.Dict
             throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
 
         super {},
+            creator: Tracker.currentComputation
             onChange: null # doesn't support onChange=true
             tag: tag
 
@@ -62,8 +63,6 @@ class J.AutoDict extends J.Dict
                 AutoDict becomes non-lazy.
         ###
         @onChange = onChange
-
-        @creator = Tracker.currentComputation
 
         @_pendingNewKeys = null
         @_keysVar = J.AutoVar(
