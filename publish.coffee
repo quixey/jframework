@@ -87,7 +87,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
     # Run the publisher in a computation so we can stop all its
     # AutoVars with a single command.
 
-    sessionComp = Tracker.autorun (sessionComp) ->
+    sessionComp = Tracker.autorun (sessionComp) =>
         if not sessionComp.firstRun
             throw new Meteor.Error "Nothing should invalidate the
                 publisher computation (other than stopping it)."

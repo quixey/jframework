@@ -61,7 +61,7 @@ class J.AutoVar
 
 
     _recompute: ->
-        console.log @toString(), "recomputing..."
+        # console.log @toString(), "recomputing..."
         J.assert @_active
 
         # Pass a @ just like autorun does. This will help in case
@@ -78,12 +78,12 @@ class J.AutoVar
         if value is undefined
             throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
 
-        console.log "...", @toString(), "recomputed: ", value
+        # console.log "...", @toString(), "recomputed: ", value
         @_var.set value
 
 
     _setupValueComp: ->
-        console.log "_setupValueComp", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
+        # console.log "_setupValueComp", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
         J.assert @isActive()
 
         @_valueComp?.stop()
@@ -102,9 +102,9 @@ class J.AutoVar
             @_recompute()
 
             @_valueComp.onInvalidate =>
-                console.groupCollapsed "invalidated", @toString()
-                console.trace()
-                console.groupEnd()
+                # console.groupCollapsed "invalidated", @toString()
+                # console.trace()
+                # console.groupEnd()
                 unless @_valueComp.stopped
                     if @ not in @constructor._pending
                         @constructor._pending.push @
@@ -121,7 +121,7 @@ class J.AutoVar
         if Meteor.isServer and J._inMethod.get()
             return @valueFunc.call null, @
 
-        console.log "GET", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
+        # console.log "GET", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
         if @_valueComp?
             # Note that @ itself may or may not be in @constructor._pending now,
             # and it may also find itself in @constructor._pending during the flush.
@@ -129,9 +129,8 @@ class J.AutoVar
         else
             @_setupValueComp()
 
-        ret = @_var.get()
-        console.log "...#{@toString()} GET returning", ret
-        ret
+        # console.log "...#{@toString()} GET returning", @_var.get()
+        @_var.get()
 
 
     isActive: ->
@@ -161,11 +160,12 @@ class J.AutoVar
 
 
     @flush: ->
+        ###
         console.groupCollapsed("FLUSH called")
         console.log (x.toString() for x in @_pending)
         console.trace()
         console.groupEnd()
+        ###
         while @_pending.length
             av = @_pending.shift()
-            console.debug "FLUSHING ", av.tag, av._id, (a.tag for a in @_pending)
             av._setupValueComp()

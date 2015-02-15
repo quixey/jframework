@@ -117,11 +117,11 @@ Tinytest.addAsync "AfterAf - Basics", (test, onComplete) ->
                 aafCount += 1
             test.equal afCount, 2, 'fail 8'
             test.equal aafCount, 3, 'fail 9'
-        Tracker.afterFlush ->
+        Tracker.afterFlush J.bindEnvironment ->
             afCount += 1
             test.equal afCount, 1, 'fail 10'
             test.equal aafCount, 2, 'fail 11'
-        Tracker.afterFlush ->
+        Tracker.afterFlush J.bindEnvironment ->
             afCount += 1
             test.equal afCount, 2, 'fail 12'
             test.equal aafCount, 2, 'fail 13'
@@ -814,7 +814,10 @@ Tinytest.add "List - reverse", (test) ->
 
 Tinytest.add "AutoVar - don't allow AutoVar to return AutoVar", (test) ->
     a = J.AutoVar -> J.AutoVar -> 5
-    test.throws -> a.get()
+    console.log "HERE GOES!!"
+    try
+        v = a.get()
+    test.isUndefined v
 
 Tinytest.add "List - getConcat", (test) ->
     lst1 = J.List [3, 5, 6]

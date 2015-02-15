@@ -106,8 +106,6 @@ class J.AutoDict extends J.Dict
             )
 
             =>
-                console.info @toString(), "recompute keysVar"
-
                 keys = @keysFunc.apply null
 
                 unless _.isArray(keys) or keys instanceof J.List
@@ -115,7 +113,6 @@ class J.AutoDict extends J.Dict
                         Got #{J.util.stringify keys}"
 
                 keysArr = J.List.unwrap(keys)
-                console.info "...and got", keysArr
 
                 unless _.all (_.isString(key) for key in keysArr)
                     throw new Meteor.Error "AutoDict keys must all be type string.

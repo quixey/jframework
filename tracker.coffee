@@ -10,25 +10,17 @@ J._flushAfterAfQueue = ->
         wasEmpty = J._aafQueue.length is 0
         func()
         if not wasEmpty
-            Tracker.afterFlush ->
-                setTimeout(
-                    J.bindEnvironment ->
-                        J._flushAfterAfQueue()
-                    1
-                )
+            Tracker.afterFlush J.bindEnvironment ->
+                Meteor.setTimeout J._flushAfterAfQueue, 1
 
 J.afterAf = (f) ->
     ###
         Run f at the soonest possible time after afterFlush
     ###
-    J._aafQueue.push f
+    J._aafQueue.push J.bindEnvironment f
     if J._aafQueue.length is 1
-        Tracker.afterFlush ->
-            setTimeout(
-                J.bindEnvironment ->
-                    J._flushAfterAfQueue()
-                1
-            )
+        Tracker.afterFlush J.bindEnvironment ->
+            Meteor.setTimeout J._flushAfterAfQueue, 1
 
 
 

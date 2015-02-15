@@ -118,7 +118,6 @@ class J.Dict
 
     _replaceKeys: (newKeys) ->
         keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
-        console.log @toString(), "_replaceKeys", newKeys, keysDiff
         @_delete key for key in keysDiff.deleted
         @_initField key, J.Var.NOT_READY for key in keysDiff.added
         keysDiff
@@ -166,7 +165,6 @@ class J.Dict
 
 
     forEach: (f) ->
-        # TODO: Parallelize
         f key, value for key, value of @getFields()
         null
 
