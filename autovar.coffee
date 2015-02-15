@@ -44,6 +44,9 @@ class J.AutoVar
             @creator = options.creator
 
         @_var = new J.Var J.Var.NOT_READY,
+            tag:
+                autoVar: @
+                tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
             creator: @creator
             onChange: if _.isFunction @onChange then @onChange
 

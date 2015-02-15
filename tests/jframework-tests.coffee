@@ -4,6 +4,67 @@ Tinytest.add "_init", (test) ->
     # tests' times aren't artificially high
     return
 
+
+Tinytest.add "AutoVar - invalidation of parent computation", (test) ->
+    v = J.Var 5
+    b = null
+    a = J.AutoVar 'a',
+        ->
+            b = J.AutoVar 'b',
+                ->
+                    v.get()
+            b.get()
+
+    test.equal a.get(), 5
+    v.set 6
+    test.isFalse a._valueComp.invalidated
+    test.isTrue b._valueComp.invalidated
+    b.get()
+    test.isTrue a._valueComp.invalidated, "Maybe this is because of a bad flush order"
+    test.isTrue b._valueComp.invalidated, "Maybe this is because of a bad flush order"
+
+Tinytest.add "AutoVar - invalidation of parent computation 2", (test) ->
+    v = J.Var 5
+    b = null
+    a = J.AutoVar 'a',
+        ->
+            b.get()
+    b = J.AutoVar 'b',
+        ->
+            v.get()
+
+    test.equal a.get(), 5
+    v.set 6
+    test.isFalse a._valueComp.invalidated
+    test.isTrue b._valueComp.invalidated
+    b.get()
+    test.isTrue a._valueComp.invalidated, "Maybe this is because of a bad flush order"
+    test.isFalse b._valueComp.invalidated
+
+
+Tinytest.add "AutoVar - invalidation of parent computation 3", (test) ->
+    v = J.Var 5, tag: 'v'
+    w = J.AutoVar 'w', -> v.get()
+
+    a = J.AutoVar 'a',
+        ->
+            c = J.AutoVar 'c', ->
+                v.get()
+                w.get()
+                8
+
+            c.get()
+            w.get()
+            3
+
+    test.equal a.get(), 3
+    v.set 6
+
+    # It might crash here if the flush queue doesn't topologically
+    # sort.
+    test.equal a.get(), 3
+
+
 Tinytest.add "AutoDict - create with fieldSpec instead of keyFunc", (test) ->
     w = J.Var 9
     changeHist = []
