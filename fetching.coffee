@@ -140,6 +140,6 @@ J.fetching =
             @_requestsChanged = true
             J.afterAf =>
                 @remergeQueries()
-            throw J.Var.NOT_READY
+            throw J.makeValueNotReadyObject()
         else
             undefined

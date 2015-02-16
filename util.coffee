@@ -185,10 +185,9 @@ J.util =
 
     invalidateAtTime: (ms) ->
         # TODO: ms can be a Date in the future too
-        dep = new Tracker.Dependency()
-        dep.depend()
-        Meteor.setTimeout(
-            => dep.changed()
+        c = Tracker.currentComputation
+        if c? then Meteor.setTimeout(
+            => c.invalidate()
             ms
         )
 
@@ -288,7 +287,7 @@ J.util =
         arr.reverse()
 
     stringify: (obj) ->
-        if obj is J.Var.NOT_READY
+        if obj instanceof J.VALUE_NOT_READY
             '<NOT_READY>'
         else if obj is undefined
             'undefined'
@@ -316,4 +315,4 @@ J.util =
         try
             getFunc()
         catch e
-            throw e unless e is J.AutoVar.NOT_READY
+            throw e unless e instanceof J.VALUE_NOT_READY

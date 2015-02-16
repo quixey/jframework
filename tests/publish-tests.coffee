@@ -1,5 +1,5 @@
 addTest = (testName, testFunc) ->
-    return if Meteor.isServer
+    return
     Tinytest.addAsync testName, (test, onComplete) ->
         testFunc test, onComplete
 
@@ -10,6 +10,13 @@ debug = false
 log = ->
     if debug
         console.log.apply console, arguments
+
+
+Tinytest.addAsync "publishing basics", (test, onComplete) ->
+    console.log "pubbasics"
+    onComplete()
+
+
 
 Tinytest.addAsync "weird problem", (test, onComplete) ->
     if Meteor.isServer
@@ -430,7 +437,8 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
     )
 
 
-addTest "_lastTest2", (test, onComplete) ->
+Tinytest.addAsync "_lastTest2", (test, onComplete) ->
+    return
     setTimeout(
         -> onComplete()
         1000

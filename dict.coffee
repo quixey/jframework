@@ -123,7 +123,7 @@ class J.Dict
     _replaceKeys: (newKeys) ->
         keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
         @_delete key for key in keysDiff.deleted
-        @_initField key, J.Var.NOT_READY for key in keysDiff.added
+        @_initField key, J.makeValueNotReadyObject() for key in keysDiff.added
         keysDiff
 
 

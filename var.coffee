@@ -1,6 +1,16 @@
-class J.Var
-    @NOT_READY = {name: "J.Var.NOT_READY"}
+class J.VALUE_NOT_READY extends Error
+    constructor: ->
+        @message = "Value not ready."
 
+J.makeValueNotReadyObject = ->
+    e = Error()
+    obj = new J.VALUE_NOT_READY
+    obj.isServer = Meteor.isServer
+    obj.stack = e.stack
+    obj
+
+
+class J.Var
     ###
         TODO: Fancy granular deps
             general:
@@ -22,7 +32,7 @@ class J.Var
         ###
 
         if arguments.length is 0
-            value = J.Var.NOT_READY
+            value = J.makeValueNotReadyObject()
 
         unless @ instanceof J.Var
             return new J.Var value, options
@@ -48,8 +58,8 @@ class J.Var
         @_getters = {} # computationId: computation
 
         ###
-            @_value is never undefined. It can be J.Var.NOT_READY
-            which causes get() to either throw NOT_READY or return
+            @_value is never undefined. It can be J.VALUE_NOT_READY
+            which causes get() to either throw VALUE_NOT_READY or return
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
@@ -72,8 +82,8 @@ class J.Var
                     delete getter.gets[@_id]
                     delete @_getters[getter._id]
 
-        if @_value is @constructor.NOT_READY
-            if getter then throw @constructor.NOT_READY
+        if @_value instanceof J.VALUE_NOT_READY
+            if getter then throw @_value
             undefined
         else
             @_value
@@ -92,7 +102,7 @@ class J.Var
         previousValue = @_value
         @_value = @constructor.wrap value
 
-        if previousValue isnt @constructor.NOT_READY
+        if previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
 
         if not J.util.equals previousValue, @_value
@@ -102,7 +112,7 @@ class J.Var
 
         if (
             @onChange? and
-            @_value isnt @constructor.NOT_READY and
+            @_value not instanceof J.VALUE_NOT_READY and
             not J.util.equals @_previousReadyValue, @_value
         )
             # Need lexically scoped oldValue and newValue because the
@@ -143,12 +153,12 @@ class J.Var
     @wrap: (value) ->
         if value is undefined
             throw new Meteor.Error "Can't set Var value to undefined. Use
-                null or J.Var.NOT_READY instead."
+                null or new J.VALUE_NOT_READY instead."
         else if not @isValidValue value
             throw new Meteor.Error "Invalid value for Var: #{value}"
 
-        if value is @NOT_READY
-            @NOT_READY
+        if value instanceof J.VALUE_NOT_READY
+            value
         else if J.util.isPlainObject value
             J.Dict value
         else if _.isArray(value)
@@ -158,7 +168,7 @@ class J.Var
             try
                 value.get()
             catch e
-                throw e unless e is @NOT_READY
-                @NOT_READY
+                throw e unless e instanceof J.VALUE_NOT_READY
+                e
         else
             value

@@ -240,7 +240,7 @@ class J.List
             throw new Meteor.Error "List index out of range"
 
         setter = {}
-        setter[index] = value
+        setter["#{index}"] = value
         @_dict.set setter
 
 

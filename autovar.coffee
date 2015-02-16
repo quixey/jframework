@@ -72,7 +72,7 @@ class J.AutoVar
                 @_valueComp.autoVar = @
                 @_valueComp.tag = "#{@toString()} valueComp"
 
-                @_var = new J.Var J.Var.NOT_READY,
+                @_var = new J.Var J.makeValueNotReadyObject(),
                     tag:
                         autoVar: @
                         tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
@@ -92,8 +92,8 @@ class J.AutoVar
                 value = @valueFunc.call null, @
 
             catch e
-                if e is J.Var.NOT_READY
-                    @_var.set J.Var.NOT_READY
+                if e instanceof J.VALUE_NOT_READY
+                    @_var.set e
                     return
 
                 else if e is J.AutoVar.COMPUTING
@@ -117,7 +117,7 @@ class J.AutoVar
             if value is undefined
                 throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
 
-            console.log "...", @toString(), "recomputed: ", value
+            # console.log "...", @toString(), "recomputed: ", value
 
             @_var.set value
 
@@ -176,12 +176,8 @@ class J.AutoVar
 
         knownDependents[@_id] = true
         for varId, v of @_valueComp.gets
-            if v.creator?.autoVar?
-                if v.creator.autoVar.currentValueMightChange knownDependents
-                    return true
-            else if v.creator?
-                if v.creator.invalidated
-                    return true
+            if v.tag?.autoVar?.currentValueMightChange knownDependents
+                return true
         delete knownDependents[@_id]
         false
 

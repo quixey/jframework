@@ -16,7 +16,6 @@ Package.onUse(function(api) {
     api.use([
         "underscore",
         "coffeescript",
-        "tracker",
         "quixey:react"
     ]);
 
@@ -29,8 +28,8 @@ Package.onUse(function(api) {
         "lib/date.js",
         "lib/URI.js",
         "j.coffee",
-        "util.coffee",
         "tracker.coffee",
+        "util.coffee",
         "var.coffee",
         "autovar.coffee",
         "dict.coffee",
@@ -51,6 +50,8 @@ Package.onUse(function(api) {
         "fetching.coffee"
     ], "client");
 
+
+    api.export("Tracker");
     api.export("J");
     api.export("$$");
 });
@@ -60,12 +61,10 @@ Package.onTest(function(api) {
         "insecure",
         "tinytest",
         "coffeescript",
-        "tracker",
         "jframework"
     ]);
 
     api.imply([
-        "tracker",
         "tinytest",
         "jframework"
     ]);
@@ -73,11 +72,11 @@ Package.onTest(function(api) {
     api.addFiles([
         "tests/util-tests.coffee",
         "tests/test-models.coffee",
-        "tests/jframework-tests.coffee"
-    ], "client");
+        // "tests/jframework-tests.coffee"
+    ]);
 
     api.addFiles([
-        // "tests/publish-tests.coffee"
+        "tests/publish-tests.coffee"
     ], "client");
 
     api.addFiles([

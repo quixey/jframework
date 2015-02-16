@@ -286,6 +286,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
+
+        for fieldName, value of nonIdInitFields
+            if fieldName not of @modelClass.fieldSpecs
+                throw new Meteor.Error "Invalid field #{JSON.stringify fieldName} passed
+                    to #{modelClass.name} constructor"
+
         @_fields = J.Dict nonIdInitFields
         @_fields.replaceKeys _.keys @modelClass.fieldSpecs
 

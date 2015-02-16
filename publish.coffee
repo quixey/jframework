@@ -120,6 +120,8 @@ publishJData = (dataSessionId) ->
         mergedQuerySpecs: => getMergedQuerySpecs session.querySpecSet()
 
         observerByQsString: J.AutoDict(
+            "observerByQsString"
+
             => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
 
             (qsString) => makeObserver EJSON.parse qsString
@@ -186,7 +188,7 @@ publishJData = (dataSessionId) ->
 
         cursor.observeChanges
             added: (id, fields) =>
-                # log querySpec, "server says ADDED:", id, fields
+                log querySpec, "server says ADDED:", id, fields
 
                 if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
                     # log querySpec, "sending ADDED:", id, fields
@@ -199,7 +201,7 @@ publishJData = (dataSessionId) ->
                     fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
 
             changed: (id, fields) =>
-                # log querySpec, "server says CHANGED:", id, fields
+                log querySpec, "server says CHANGED:", id, fields
 
                 changedFields = {}
 
@@ -212,11 +214,11 @@ publishJData = (dataSessionId) ->
                         changedFields[fieldName] = value
 
                 if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id, changedFields
+                    log querySpec, "sending CHANGED:", id, changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                # log querySpec, "server says REMOVED:", id
+                log querySpec, "server says REMOVED:", id
 
                 changedFields = {}
 
@@ -231,8 +233,8 @@ publishJData = (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    # log querySpec, "sending REMOVED:", id
+                    log querySpec, "sending REMOVED:", id
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id
+                    log querySpec, "sending CHANGED:", id
                     @changed modelClass.collection._name, id, changedFields

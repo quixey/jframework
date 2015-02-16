@@ -2,16 +2,7 @@ J = {}
 J.stores = {}
 
 
-J.debugFlush = true
-if J.debugFlush
-    trackerFlush = Tracker.flush
-    Tracker.flush = ->
-        console.debug "Tracker.flush!"
-        trackerFlush()
-
-
 J.bindEnvironment = if Meteor.isServer then Meteor.bindEnvironment else _.identity
-
 
 J.g = J.graph = {} # jid: object
 J.debugGraph = true
