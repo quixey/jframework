@@ -87,13 +87,13 @@ class J.AutoDict extends J.Dict
                 if _.size(J.util.makeDictSet keysArr) < keys.length
                     throw new Meteor.Error "AutoDict keys must be unique."
 
-                # Returning keys makes logical sense but returning keysArr
-                # is the only way to propagate invalidation in the accelerated
-                # AutoVar pending queue right now.
-                keysArr # FIXME
+                # Side effects during AutoVar recompute functions are usually not okay.
+                # We just need the framework to do it in this one place.
+                @_replaceKeys keys
 
-            (oldKeys, newKeys) =>
-                @_replaceKeys newKeys
+                keys
+
+            if @onChange? then true else null
 
             creator: @creator
         )
@@ -114,15 +114,16 @@ class J.AutoDict extends J.Dict
 
 
     _get: (key, force) ->
-        if @hasKey key
-            if key not of @_fields
-                # Key would have been initialized at Tracker.afterFlush time
-                @_initField key
+        hasKey = @hasKey key
+        return undefined if hasKey is undefined
+
+        if hasKey
             @_fields[key].get()
-        else if force
-            throw new Meteor.Error "#{@constructor.name} missing key #{J.util.stringify key}"
         else
-            undefined
+            if force
+                throw new Meteor.Error "#{@constructor.name} missing key #{J.util.stringify key}"
+            else
+                undefined
 
 
     _initField: (key) ->
@@ -180,7 +181,8 @@ class J.AutoDict extends J.Dict
 
 
     hasKey: (key) ->
-        @_keysVar.get().contains key
+        keys = @_keysVar.get()
+        if keys is undefined then undefined else keys.contains key
 
 
     isActive: ->

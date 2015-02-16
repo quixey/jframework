@@ -157,7 +157,7 @@ class J.AutoVar
         @_active
 
 
-    currentValueMightChange: ->
+    currentValueMightChange: (knownDependents = {}) ->
         # Returns true @_var.value might change between now
         # and the end of the current flush (or the end of
         # hypothetically calling Tracker.flush() now).
@@ -166,15 +166,23 @@ class J.AutoVar
         # dependency values will recompute themselves to have
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
+
         if @_invalidated
             return true
+
+        if @_id of knownDependents
+            throw new Meteor.Error "Cycle detected in AutoVar
+                dependency graph involving #{@toString()}"
+
+        knownDependents[@_id] = true
         for varId, v of @_valueComp.gets
             if v.creator?.autoVar?
-                if v.creator.autoVar.currentValueMightChange()
+                if v.creator.autoVar.currentValueMightChange knownDependents
                     return true
             else if v.creator?
                 if v.creator.invalidated
                     return true
+        delete knownDependents[@_id]
         false
 
 
