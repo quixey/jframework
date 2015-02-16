@@ -58,6 +58,11 @@ class J.Var
 
     get: ->
         getter = Tracker.currentComputation
+
+        canGet = @isActive() # or (getter? and getter is @creator)
+        if not canGet
+            throw new Meteor.Error "Can't get value of inactive Var: #{@}"
+
         if getter? and getter._id not of @_getters
             if getter._id not of @_getters
                 @_getters[getter._id] = getter
@@ -80,7 +85,7 @@ class J.Var
 
     set: (value) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() or (setter? and setter is @creator)
+        canSet = @isActive() # or (setter? and setter is @creator)
         if not canSet
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 

@@ -72,9 +72,9 @@ Package.onTest(function(api) {
 
     api.addFiles([
         "tests/util-tests.coffee",
-        "tests/test-models.coffee",
+        // "tests/test-models.coffee",
         "tests/jframework-tests.coffee"
-    ]);
+    ], "client");
 
     api.addFiles([
         // "tests/publish-tests.coffee"

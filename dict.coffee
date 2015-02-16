@@ -82,6 +82,10 @@ class J.Dict
 
 
     _get: (key, force) ->
+        canGet = @isActive()
+        if not canGet
+            throw new Meteor.Error "Can't get value of inactive #{@constructor.name}: #{@}"
+
         # The @hasKey call is necessary to reactively invalidate
         # the computation if and when this field gets added/deleted.
         # It's not at all redundant with @_fields[key].get(), which
@@ -207,7 +211,7 @@ class J.Dict
 
     set: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() or (setter? and setter is @creator)
+        canSet = @isActive() # or (setter? and setter is @creator)
         if not canSet
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
@@ -230,7 +234,7 @@ class J.Dict
 
     setOrAdd: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() or (setter? and setter is @creator)
+        canSet = @isActive() # or (setter? and setter is @creator)
         if not canSet
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
@@ -265,7 +269,8 @@ class J.Dict
     size: ->
         # TODO: Finer-grained reactivity
 
-        @getKeys().length
+        keys = @getKeys()
+        if keys is undefined then undefined else keys.length
 
 
     toObj: ->

@@ -1,37 +1,3 @@
-###
-    TODO:
-    1.
-        this
-            J.AutoDict(
-                J.List [1, 2, 3] *or* [1, 2, 3]
-                (key) -> f()
-            )
-        should be like this
-            J.AutoDict(
-                -> J.List [1, 2, 3]
-                (key) -> f()
-            )
-        and have a bonus of initializing the functions .1(), .2(), .3() at construct time
-
-
-    2.
-        this
-            J.AutoDict(
-                a: -> 3
-                b: 4
-                c: -> 5
-                onChange
-            )
-        should turn into this
-            J.AutoDict(
-                -> ['a', 'b']
-                (k) -> {a: (-> 3), b: (-> 4), c: (-> 5)}[k]()
-                onChange
-            )
-###
-
-
-
 class J.AutoDict extends J.Dict
     constructor: (tag, keysFunc, valueFunc, onChange) ->
         ###
@@ -78,7 +44,8 @@ class J.AutoDict extends J.Dict
 
 
         unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
-            throw new Meteor.Error "AutoDict must be constructed with keysFunc and valueFunc"
+            throw new Meteor.Error "AutoDict must be constructed with
+                keysFunc and valueFunc"
 
         super {},
             creator: Tracker.currentComputation
@@ -109,8 +76,8 @@ class J.AutoDict extends J.Dict
                 keys = @keysFunc.apply null
 
                 unless _.isArray(keys) or keys instanceof J.List
-                    throw new Meteor.Error "AutoDict.keysFunc must return an array or List.
-                        Got #{J.util.stringify keys}"
+                    throw new Meteor.Error "AutoDict.keysFunc must return a List
+                        or array. Got #{J.util.stringify keys}"
 
                 keysArr = J.List.unwrap(keys)
 
@@ -120,16 +87,13 @@ class J.AutoDict extends J.Dict
                 if _.size(J.util.makeDictSet keysArr) < keys.length
                     throw new Meteor.Error "AutoDict keys must be unique."
 
-                # FIXME: AutoVar valueFuncs *really* aren't supposed to have side effects.
-                # Maybe AutoVar should support a synchronous onChange too.
-                @_replaceKeys keys
-
                 # Returning keys makes logical sense but returning keysArr
                 # is the only way to propagate invalidation in the accelerated
                 # AutoVar pending queue right now.
-                keysArr
+                keysArr # FIXME
 
-            if @onChange? then true else null
+            (oldKeys, newKeys) =>
+                @_replaceKeys newKeys
 
             creator: @creator
         )
@@ -203,11 +167,16 @@ class J.AutoDict extends J.Dict
         super
 
 
+    getFields: (keys = @getKeys()) ->
+        if keys is undefined
+            undefined
+        else
+            super keys
+
+
     getKeys: ->
-        # This call might have the super awkward side effect
-        # of calling @_replaceKeys.
-        @_keysVar.get()
-        super
+        keysList = @_keysVar.get()
+        if keysList is undefined then undefined else keysList.getValues()
 
 
     hasKey: (key) ->

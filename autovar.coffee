@@ -1,4 +1,6 @@
 class J.AutoVar
+    @COMPUTING: {name: "J.AutoVar.COMPUTING"}
+
     constructor: (tag, valueFunc, onChange, options) ->
         ###
             AutoVars default to being "lazy", i.e. not calculated
@@ -43,17 +45,15 @@ class J.AutoVar
         else
             @creator = options.creator
 
-        @_var = new J.Var J.Var.NOT_READY,
-            tag:
-                autoVar: @
-                tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
-            creator: @creator
-            onChange: if _.isFunction @onChange then @onChange
+        # We can't use @_valueComp.invalidated because when @_valueComp
+        # invalidates itself, it schedules it to happen at afterFlush time.
+        @_invalidated = false
 
         @_active = true
         @creator?.onInvalidate =>
             @stop()
 
+        @_var = null
         @_valueComp = null
         if @onChange
             # Truthy onChange means do a non-lazy first run
@@ -63,33 +63,7 @@ class J.AutoVar
                     @_setupValueComp()
 
 
-    _recompute: ->
-        # console.log @toString(), "recomputing..."
-        J.assert @_active
-
-        # Pass a @ just like autorun does. This will help in case
-        # we ever decide to compute @valueFunc the first time
-        # synchronously.
-        try
-            # ValueFunc may either return or throw J.Var.NOT_READY.
-            # It may not return undefined.
-            value = @valueFunc.call null, @
-        catch e
-            throw e unless e is J.Var.NOT_READY
-            value = J.Var.NOT_READY
-
-        if value is undefined
-            throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
-
-        # console.log "...", @toString(), "recomputed: ", value
-        @_var.set value
-
-
     _setupValueComp: ->
-        # console.log "_setupValueComp", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
-        J.assert @isActive()
-
-        @_valueComp?.stop()
         Tracker.nonreactive => Tracker.autorun J.bindEnvironment (c) =>
             if c.firstRun
                 # Important to do this here in case @stop() is called during the
@@ -98,19 +72,55 @@ class J.AutoVar
                 @_valueComp.autoVar = @
                 @_valueComp.tag = "#{@toString()} valueComp"
 
-            pos = @constructor._pending.indexOf @
-            if pos >= 0
-                @constructor._pending.splice pos, 1
+                @_var = new J.Var J.Var.NOT_READY,
+                    tag:
+                        autoVar: @
+                        tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
+                    creator: @_valueComp
+                    onChange: if _.isFunction @onChange then @onChange
 
-            @_recompute()
-
+            @_invalidated = false
             @_valueComp.onInvalidate =>
-                # console.groupCollapsed "invalidated", @toString()
-                # console.trace()
-                # console.groupEnd()
-                unless @_valueComp.stopped
-                    if @ not in @constructor._pending
-                        @constructor._pending.push @
+                # A different computation invalidated this one
+                @_invalidated = true
+                # console.log "invalidated", @toString()
+
+            console.log "Recomputing ", @toString()
+            try
+                # ValueFunc may either return or throw J.Var.NOT_READY
+                # or throw J.COMPUTING. It may not return undefined.
+                value = @valueFunc.call null, @
+
+            catch e
+                if e is J.Var.NOT_READY
+                    @_var.set J.Var.NOT_READY
+                    return
+
+                else if e is J.AutoVar.COMPUTING
+                    console.log "...", @toString(), "got COMPUTING"
+                    # We want @_valueComp to invalidate itself, but we want
+                    # the recalculation to happen at the end of the flush
+                    # queue (FIFO flushing), not right away. That's why
+                    # we're using afterFlush.
+                    @_invalidated = true
+                    Tracker.afterFlush =>
+                        # Make sure we haven't already recomputed this.
+                        J.assert @_invalidated, "Nothing else should be able
+                            to invalidate this. The Vars it accessed should
+                            all have stable values."
+                        @_valueComp.invalidate()
+                    return
+
+                else
+                    throw e
+
+            if value is undefined
+                throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
+
+            console.log "...", @toString(), "recomputed: ", value
+
+            @_var.set value
+
 
 
     get: ->
@@ -124,20 +134,48 @@ class J.AutoVar
         if Meteor.isServer and J._inMethod.get()
             return @valueFunc.call null, @
 
-        # console.log "GET", @toString(), @_valueComp?, (a.toString() for a in @constructor._pending)
-        if @_valueComp?
-            # Note that @ itself may or may not be in @constructor._pending now,
-            # and it may also find itself in @constructor._pending during the flush.
-            @constructor.flush()
-        else
+        if not @_valueComp?
+            console.log "GET", @toString(), "[first time]"
+            # Getting a lazy AutoVar for the first time
             @_setupValueComp()
+            if @_valueComp.invalidated then console.log "#{@toString()} invalidated during first get!"
+        else
+            console.log "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
 
-        # console.log "...#{@toString()} GET returning", @_var.get()
+        if @currentValueMightChange()
+            if Tracker.active
+                # Add a dependency to the @_var in case its value changes
+                # when the recompute is done.
+                throw J.AutoVar.COMPUTING
+            else
+                return undefined
+
         @_var.get()
 
 
     isActive: ->
         @_active
+
+
+    currentValueMightChange: ->
+        # Returns true @_var.value might change between now
+        # and the end of the current flush (or the end of
+        # hypothetically calling Tracker.flush() now).
+        # Note that true doesn't mean the current value
+        # *will* change. It's possible that all invalidated
+        # dependency values will recompute themselves to have
+        # the same value, and thereby stop @_valueComp from
+        # ever invalidating.
+        if @_invalidated
+            return true
+        for varId, v of @_valueComp.gets
+            if v.creator?.autoVar?
+                if v.creator.autoVar.currentValueMightChange()
+                    return true
+            else if v.creator?
+                if v.creator.invalidated
+                    return true
+        false
 
 
     set: ->
@@ -148,27 +186,9 @@ class J.AutoVar
         if @_active
             @_active = false
             @_valueComp?.stop()
-            pos = @constructor._pending.indexOf @
-            if pos >= 0
-                @constructor._pending.splice pos, 1
 
 
     toString: ->
-        s = "AutoVar[#{@_id}](#{J.util.stringifyTag @tag ? ''}=#{J.util.stringify @_var._value})"
+        s = "AutoVar[#{J.util.stringifyTag @tag ? ''}##{@_id}]=#{J.util.stringify @_var?._value}"
         if not @isActive() then s += " (inactive)"
         s
-
-
-    @_pending: []
-
-
-    @flush: ->
-        ###
-        console.groupCollapsed("FLUSH called")
-        console.log (x.toString() for x in @_pending)
-        console.trace()
-        console.groupEnd()
-        ###
-        while @_pending.length
-            av = @_pending.shift()
-            av._setupValueComp()
