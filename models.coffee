@@ -385,7 +385,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
             collection.find().observeChanges
                 added: (id, fields) ->
-                    console.log "ADDED", id, fields
                     doc = _.clone fields
                     doc._id = id
                     instance = modelClass.fromDoc doc

@@ -1125,7 +1125,7 @@ Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
 Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
     dep = null
     c1 = Tracker.autorun ->
-        dep = new J.Dependency()
+        dep = new Tracker.Dependency()
         dep.depend()
         dep.changed()
     test.isFalse c1.invalidated

@@ -12,7 +12,7 @@ if Meteor.isClient and ReactRouter?
 
     ###
         NOTE:
-        J Framework components.coffee has some inline code that conditions
+        JFramework components.coffee has some inline code that conditions
         on whether a control has J.Routable in its mixins, because we
         wanted to use features (like a Reactive) outside the React Mixin framework.
     ###

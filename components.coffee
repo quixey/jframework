@@ -43,7 +43,7 @@ J._defineComponent = (componentName, componentSpec) ->
         'componentWillUpdate'
     ]
         if memberName of componentSpec
-            throw new Meteor.Error "Unnecessary to define #{memberName} for J Framework components
+            throw new Meteor.Error "Unnecessary to define #{memberName} for JFramework components
                 (in #{componentName})"
 
     unless _.isFunction componentSpec.render
@@ -54,6 +54,15 @@ J._defineComponent = (componentName, componentSpec) ->
     delete reactSpec.state
     delete reactSpec.reactives
     delete reactSpec.debug
+
+    propSpecs = _.clone componentSpec.props ? {}
+    propSpecs.className ?=
+        type: React.PropTypes.string
+    propSpecs.children ?=
+        type: React.PropTypes.oneOfType [
+            React.PropTypes.element
+            React.PropTypes.arrayOf(React.PropTypes.element)
+        ]
 
     reactSpec.displayName = componentName
 
@@ -131,9 +140,12 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.getDefaultProps = ->
         defaultProps = {}
-        for propName, propSpec of componentSpec.props
-            if 'default' of propSpec
-                defaultProps[propName] = propSpec.default
+        for propName, propSpec of propSpecs
+            defaultProps[propName] =
+                if 'default' of propSpec
+                    propSpec.default
+                else
+                    null
         defaultProps
 
 
@@ -145,14 +157,6 @@ J._defineComponent = (componentName, componentSpec) ->
         J._componentsByName[componentName][@_componentId] = @
 
         # Check for invalid prop names in @props
-        propSpecs = _.clone componentSpec.props ? {}
-        propSpecs.className ?=
-            type: React.PropTypes.string
-        propSpecs.children ?=
-            type: React.PropTypes.oneOfType [
-                React.PropTypes.element
-                React.PropTypes.arrayOf(React.PropTypes.element)
-            ]
         for propName, value of @props
             unless propName of propSpecs
                 throw new Meteor.Error "#{componentName} has no prop #{JSON.stringify propName}.
@@ -162,7 +166,17 @@ J._defineComponent = (componentName, componentSpec) ->
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
             @_props[propName] = new J.Var @props[propName],
-                propSpec.same ? J.util.equals
+                tag:
+                    component: @
+                    tag: "#{@toString}.prop.#{propName}"
+                onChange: (oldValue, newValue) =>
+                    if propSpec.onChange?
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+                        propSpec.onChange.call @, oldValue, newValue
+
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
 
@@ -201,38 +215,49 @@ J._defineComponent = (componentName, componentSpec) ->
                 initialValue = stateFieldSpec.default ? null
 
             initialState[stateFieldName] = new J.Var initialValue,
-                stateFieldSpec.same ? J.util.equals
+                tag:
+                    component: @
+                    tag: "#{@toString()}.state.#{stateFieldName}"
+                onChange: (oldValue, newValue) =>
+                    if stateFieldSpec.onChange?
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+                        stateFieldSpec.onChange.call @, oldValue, newValue
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of reactiveSpecByName
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
-                J.AutoVar "#{@toString()}.#{reactiveName}", =>
-                    _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
-                    if componentDebug
-                        console.debug _getDebugPrefix(@), "!#{reactiveName}()"
-                        _debugDepth += 1
+                J.AutoVar(
+                    component: @
+                    tag: "#{@toString()}.reactives.#{reactiveName}",
 
-                    try
-                        ret = reactiveSpec.val.call @
-                    finally
+                    =>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
-                            console.debug _getDebugPrefix(), ret
-                            _debugDepth -= 1
-                        _popDebugFlag()
+                            console.debug _getDebugPrefix(@), "!#{reactiveName}()"
+                            _debugDepth += 1
 
-                    ret
-                ,
+                        try
+                            retValue = reactiveSpec.val.call @
+                        finally
+                            if componentDebug
+                                console.debug _getDebugPrefix(), ret
+                                _debugDepth -= 1
+                            _popDebugFlag()
+
+                        retValue
+
                     if reactiveSpec.onChange? then (oldValue, newValue) =>
-                        J.assert not Tracker.active
                         if componentDebug
                             console.debug "    #{@toString()}.#{reactiveName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
                         reactiveSpec.onChange.call @, oldValue, newValue
                     else null
-                ,
-                    reactiveSpec.same?.bind(@) ? J.util.equals
+                )
 
         # Return initialState to React
         initialState
@@ -255,25 +280,7 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         for propName, newValue of nextProps
-            propSpec = componentSpec.props?[propName]
-            unless propSpec?
-                if propName is 'className'
-                    propSpec = type: React.PropTypes.string
-                else if propName is 'children'
-                    propSpec = type: React.PropTypes.oneOfType [
-                        React.PropTypes.element
-                        React.PropTypes.arrayOf(React.PropTypes.element)
-                    ]
-
-            equalsFunc = propSpec.same ? J.util.equals
-            oldValue = Tracker.nonreactive => @_props[propName].get()
-
             @_props[propName].set newValue
-
-            unless equalsFunc oldValue, newValue
-                if propSpec.onChange?
-                    if componentDebug then console.debug _getDebugPrefix(@), "props.#{propName}.onChange!", oldValue, newValue
-                    propSpec.onChange.call @, oldValue, newValue
 
 
     reactSpec.componentDidMount = ->
@@ -328,8 +335,6 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components don't allow
                     forceUpdate(). Use reactive expressions instead."
 
-        element = undefined
-
         # Transform J.List to array anywhere in the element children hierarchy
         transformedElement = (elem) =>
             if React.isValidElement elem
@@ -344,6 +349,8 @@ J._defineComponent = (componentName, componentSpec) ->
                 transformedElement e for e in elem
             else
                 elem
+
+        element = undefined
 
         Tracker.autorun (c) =>
             if c.firstRun
@@ -376,7 +383,7 @@ J._defineComponent = (componentName, componentSpec) ->
             try
                 element = transformedElement componentSpec.render.apply @
             catch e
-                throw e unless Meteor.isClient and e is J.fetching.FETCH_IN_PROGRESS
+                throw e unless e instanceof J.VALUE_NOT_READY
             finally
                 if componentDebug
                     console.debug _getDebugPrefix(), element

@@ -1,53 +1,19 @@
 ###
-    A few things to augment Meteor's Tracker
+    A few things to augment Meteor's Tracker.
+
+    We monkey patch the tracker package because
+    we want other Meteor packages like "mongo"
+    to use the same global object.
 ###
-
-class J.Dependency
-    ###
-        Like Tracker.Dependency except that a "creator computation",
-        i.e. a reactive data source, should be able to freely read
-        its own reactive values as it's mutating them without
-        invalidating itself.
-        But the creator should still invalidate if it reads
-        its own values which other objects then mutate.
-    ###
-
-    constructor: (@creator = Tracker.currentComputation) ->
-        @_dependentsById = {}
-
-
-    depend: (computation) ->
-        if not computation?
-            return false if not Tracker.active
-            computation = Tracker.currentComputation
-
-        id = computation._id
-        if id of @_dependentsById
-            false
-        else
-            @_dependentsById[id] = computation
-            computation.onInvalidate =>
-                delete @_dependentsById[id]
-            true
-
-
-    changed: ->
-        for id, computation of @_dependentsById
-            unless computation is Tracker.currentComputation is @creator
-                @_dependentsById[id].invalidate()
-
-
-    hasDependents: ->
-        not _.isEmpty @_dependentsById
-
 
 
 `
-Tracker = {};
-
-Tracker.active = false;
-
-Tracker.currentComputation = null;
+var dummyComputation = Tracker.autorun(function() {});
+if (dummyComputation._id !== 1) {
+    // A computation was already created by one of the packages that jframework
+    // uses, which means it may be too late for our monkey patch to work right.
+    console.warn("JFramework's attempt to monkey patch Tracker might not work.");
+}
 
 var setCurrentComputation = function (c) {
     Tracker.currentComputation = c;
@@ -368,3 +334,42 @@ Tracker.afterFlush = function (f, sortKey) {
     requireFlush();
 };
 `
+
+
+class Tracker.Dependency
+    ###
+        Like Meteor's Tracker.Dependency except that a "creator",
+        i.e. a reactive data source, should be able to freely read
+        its own reactive values as it's mutating them without
+        invalidating itself.
+        But the creator should still invalidate if it reads
+        its own values which other objects then mutate.
+    ###
+
+    constructor: (@creator = Tracker.currentComputation) ->
+        @_dependentsById = {}
+
+
+    depend: (computation) ->
+        if not computation?
+            return false if not Tracker.active
+            computation = Tracker.currentComputation
+
+        id = computation._id
+        if id of @_dependentsById
+            false
+        else
+            @_dependentsById[id] = computation
+            computation.onInvalidate =>
+                delete @_dependentsById[id]
+            true
+
+
+    changed: ->
+        for id, computation of @_dependentsById
+            unless computation is Tracker.currentComputation is @creator
+                @_dependentsById[id].invalidate()
+
+
+    hasDependents: ->
+        not _.isEmpty @_dependentsById

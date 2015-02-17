@@ -11,66 +11,39 @@ log = ->
         console.log.apply console, arguments
 
 
-Tinytest.addAsync "publishing basics", (test, onComplete) ->
-    console.log "pubbasics"
-    onComplete()
-
-
-
-Tinytest.addAsync "weird problem", (test, onComplete) ->
-    if Meteor.isServer
-        onComplete()
-        return
-    onComplete()
-    return
-
+addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
     console.info "begin weird problem"
 
     a = J.AutoVar 'a',
         ->
-            console.info 1
-
-            tagLists = J.AutoVar 'tagLists',
+            b = J.AutoVar 'b',
                 ->
-                    console.info 2
                     x = $$.Foo.fetchOne()
-                    console.info 3
-                    al = J.AutoList(
+                    J.AutoList(
+                        'al'
                         ->
-                            console.info 4
                             2
                         (key) ->
-                            console.trace()
-                            console.info 5
                             'three'
                     )
-                    console.info 6
-                    al.tag = 'al'
-                    al
 
             outerTester = J.AutoVar 'outerTester',
                 (ot) ->
-                    console.info 7
-                    ret = tagLists.get()
-                    console.info 8
-                    ret
+                    b.get()
 
-            console.info 9
             outerTester.get()
 
             ['fake1', 'fake2']
 
-
     aVal = a.get()
     test.isUndefined aVal
-    console.log 'waiting...'
     setTimeout(
         ->
-            console.log 'getting aVal2'
             aVal2 = a.get()
-            console.log "got: ", aVal2
+            test.isTrue aVal2?
+            a.stop()
             onComplete()
-        2000
+        1000
     )
 
 
@@ -448,7 +421,6 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
 
 
 Tinytest.addAsync "_lastTest2", (test, onComplete) ->
-    return
     setTimeout(
         -> onComplete()
         1000

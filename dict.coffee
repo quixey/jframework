@@ -42,7 +42,7 @@ class J.Dict
 
         @_fields = {}
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
-        @_keysDep = new J.Dependency @creator
+        @_keysDep = new Tracker.Dependency @creator
 
         @readOnly = false
 
@@ -195,7 +195,7 @@ class J.Dict
 
     hasKey: (key) ->
         if Tracker.active
-            @_hasKeyDeps[key] ?= new J.Dependency @creator
+            @_hasKeyDeps[key] ?= new Tracker.Dependency @creator
             @_hasKeyDeps[key].depend()
 
         key of @_fields

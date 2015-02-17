@@ -1,5 +1,5 @@
 Package.describe({
-    summary: "J Framework for Meteor + React",
+    summary: "JFramework for Meteor + React",
     version: "0.0.1"
 });
 
@@ -13,14 +13,42 @@ Package.onUse(function(api) {
         // '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
     );
 
+
+    /*
+        For used packages like "mongo" which use Tracker, we monkey patch it to
+        use our version of the Tracker.* functions.
+        For users of jframework, they only see our exported version of Tracker.
+    */
+    api.use("tracker");
+
     api.use([
+        "meteor",
+        "webapp",
+        "logging",
+        "ddp",
+        "mongo",
+        "check",
         "underscore",
+        "jquery",
+        "random",
+        "ejson",
         "coffeescript",
+        "reload",
+        "autoupdate",
         "quixey:react"
     ]);
 
     api.imply([
+        "meteor",
+        "webapp",
+        "logging",
+        "ddp",
+        "mongo",
+        "check",
         "underscore",
+        "jquery",
+        "random",
+        "ejson",
         "quixey:react"
     ]);
 
@@ -50,7 +78,6 @@ Package.onUse(function(api) {
         "fetching.coffee"
     ], "client");
 
-
     api.export("Tracker");
     api.export("J");
     api.export("$$");
@@ -58,10 +85,10 @@ Package.onUse(function(api) {
 
 Package.onTest(function(api) {
     api.use([
-        "insecure",
         "tinytest",
+        "jframework",
         "coffeescript",
-        "jframework"
+        "insecure"
     ]);
 
     api.imply([
@@ -80,6 +107,6 @@ Package.onTest(function(api) {
     ], "client");
 
     api.addFiles([
-        // "tests/jframework-client-tests.coffee"
+        "tests/jframework-client-tests.coffee"
     ], "client");
 });
