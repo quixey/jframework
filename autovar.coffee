@@ -85,7 +85,7 @@ class J.AutoVar
                 @_invalidated = true
                 # console.log "invalidated", @toString()
 
-            console.log "Recomputing ", @toString()
+            # console.log "Recomputing ", @toString()
             try
                 # ValueFunc may either return or throw J.Var.NOT_READY
                 # or throw J.COMPUTING. It may not return undefined.
@@ -97,7 +97,7 @@ class J.AutoVar
                     return
 
                 else if e is J.AutoVar.COMPUTING
-                    console.log "...", @toString(), "got COMPUTING"
+                    # console.log "...", @toString(), "got COMPUTING"
                     # We want @_valueComp to invalidate itself, but we want
                     # the recalculation to happen at the end of the flush
                     # queue (FIFO flushing), not right away. That's why
@@ -138,12 +138,12 @@ class J.AutoVar
             return @valueFunc.call null, @
 
         if not @_valueComp?
-            console.log "GET", @toString(), "[first time]"
+            # console.log "GET", @toString(), "[first time]"
             # Getting a lazy AutoVar for the first time
             @_setupValueComp()
             if @_valueComp.invalidated then console.log "#{@toString()} invalidated during first get!"
         else
-            console.log "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
+            # console.log "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
 
         if @currentValueMightChange()
             if Tracker.active

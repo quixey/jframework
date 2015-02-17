@@ -100,7 +100,9 @@ class J.AutoDict extends J.Dict
 
         @_active = true
         if Tracker.active
-            Tracker.onInvalidate => @stop()
+            Tracker.onInvalidate =>
+                console.log 'INVALIDATED', @toString()
+                @stop()
 
         if @_keysList?
             @_keysList.forEach (key) => @_setupGetterSetter key
@@ -162,8 +164,7 @@ class J.AutoDict extends J.Dict
 
     forceGet: (key) ->
         unless @isActive()
-            @logDebugInfo()
-            throw new Meteor.Error "AutoDict(#{@tag ? ''}) is stopped.
+            throw new Meteor.Error "#{@toString()} is stopped.
                 Current computation: #{Tracker.currentComputation?.tag}"
         super
 
@@ -214,8 +215,9 @@ class J.AutoDict extends J.Dict
 
     stop: ->
         if @_active
+            console.log "STOPPING", @toString()
+            fieldComp.stop() for key, fieldComp of @_fields
             @_keysVar.stop()
-            @_fields[key].stop() for key of @_fields
             @_active = false
 
 

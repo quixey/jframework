@@ -50,7 +50,7 @@ if Meteor.isClient and ReactRouter?
 
 
 if Meteor.isClient then Meteor.startup ->
-    Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
+    J._dataSubscription = Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
         if J._routeGenerator?
             rootRoute = J._routeGenerator()
 

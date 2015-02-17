@@ -87,16 +87,12 @@ var withNoYieldsAllowed = function (f) {
     if ((typeof Meteor === 'undefined') || Meteor.isClient) {
         return f;
     } else {
-        // XXX J Framework is currently allowing yields
-        // for easy inefficient server-side deps.
-        return f;
-
-        //return function () {
-        //    var args = arguments;
-        //    Meteor._noYieldsAllowed(function () {
-        //        f.apply(null, args);
-        //    });
-        //};
+        return function () {
+            var args = arguments;
+            Meteor._noYieldsAllowed(function () {
+                f.apply(null, args);
+            });
+        };
     }
 };
 
@@ -173,7 +169,7 @@ Tracker.Computation.prototype.onInvalidate = function (f) {
     if (typeof f !== 'function')
         throw new Error("onInvalidate requires a function");
 
-    // XXX J Framework wrapping bindEnvironment
+    // XXX JFramework wrapping with bindEnvironment
     if (Meteor.isServer) {
         f = Meteor.bindEnvironment(f);
     }
@@ -280,7 +276,7 @@ Tracker.flush = function (_opts) {
             }
 
             if (afterFlushCallbacks.length) {
-                // XXX J framework feature
+                // XXX JFramework feature
                 J.util.sortByKey(afterFlushCallbacks, function (afc) {
                     return afc.sortKey;
                 });
@@ -315,7 +311,7 @@ Tracker.autorun = function (f) {
     if (typeof f !== 'function')
         throw new Error('Tracker.autorun requires a function argument');
 
-    // XXX J framework wrapping bindEnvironment
+    // XXX JFramework wrapping with bindEnvironment
     if (Meteor.isServer) {
         f = Meteor.bindEnvironment(f);
     }
@@ -352,7 +348,7 @@ Tracker.onInvalidate = function (f) {
 
 
 Tracker.afterFlush = function (f, sortKey) {
-    // XXX Adding sortKey for J framework
+    // XXX Adding sortKey for JFramework
 
     if (sortKey == null) {
         sortKey = 0.5;
@@ -362,6 +358,7 @@ Tracker.afterFlush = function (f, sortKey) {
     }
 
     if (Meteor.isServer) {
+        // XXX JFramework wrapping with bindEnvironment
         func = Meteor.bindEnvironment(f);
     } else {
         func = f;
@@ -370,5 +367,4 @@ Tracker.afterFlush = function (f, sortKey) {
     afterFlushCallbacks.push({func: func, sortKey: sortKey});
     requireFlush();
 };
-
 `

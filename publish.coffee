@@ -1,4 +1,4 @@
-Future = Npm.require 'fibers/future'
+Fiber = Npm.require 'fibers'
 
 J._inMethod = new Meteor.EnvironmentVariable
 
@@ -16,6 +16,7 @@ J.methods = (methods) ->
 
 ###
     dataSessionId: J.Dict
+        updateObserversFiber: <Fiber>
         querySpecSet: {qsString: true}
         mergedQuerySpecs: [
             {
@@ -27,9 +28,25 @@ J.methods = (methods) ->
                 limit:
             }
         ]
-        currentQuery: <Future>
 ###
 dataSessions = {}
+
+###
+    Stores Meteor's publisher functions
+    sessionId:
+        userId
+        added
+        changed
+        removed
+        ...etc
+###
+dataSessionPublisherContexts = {}
+
+###
+    The set of active cursors and exactly what each has sent to the client
+    dataSessionId: modelName: docId: fieldName: querySpecString: value
+###
+dataSessionFieldsByModelIdQuery = {}
 
 
 Meteor.methods
@@ -54,6 +71,7 @@ Meteor.methods
                 throw new Meteor.Error "Invalid modelName in querySpec:
                     #{J.util.toString querySpec}"
 
+        # Apply the diff to session.querySpecSet()
         actualAdded = []
         actualDeleted = []
         for querySpec in deletedQuerySpecs
@@ -67,113 +85,82 @@ Meteor.methods
                 actualAdded.push qsString
                 session.querySpecSet().setOrAdd qsString, true
 
-        if actualAdded.length or actualDeleted.length
-            # This part is instead of using the DDP write fence. The problem is that
-            # Meteor's write fence only blocks this method from returning. It still
-            # unblocks in the sense that other methods can start running, and that's
-            # a problem for a data query.
-            session.currentQuery = new Future()
-            # The afterFlush sortKey of 0.8 gives the publish function time to stop
-            # and start observers to achieve its new set of merged cursors, plus have
-            # those cursors send their initial data to the client.
-            Tracker.afterFlush(
-                -> session.currentQuery.return()
-                0.8
-            )
-            session.currentQuery.wait()
+        Tracker.flush()
+
+        session.updateObserversFiber = Fiber.current
+        updateObservers.call dataSessionPublisherContexts[dataSessionId], dataSessionId
+        session.updateObserversFiber = null
 
         log '..._updateDataQueries done'
 
 
 Meteor.publish '_jdata', (dataSessionId) ->
-    # Run the publisher in a computation so we can stop all its
-    # AutoVars with a single command.
+    check dataSessionId, String
 
-    sessionComp = Tracker.autorun (sessionComp) =>
-        if not sessionComp.firstRun
-            throw new Meteor.Error "Nothing should invalidate the
-                publisher computation (other than stopping it)."
-
-        publishJData.call @, dataSessionId
-
-    @onStop =>
-        console.log "[#{dataSessionId}] STOPPED"
-        sessionComp.stop()
-        delete dataSessions[dataSessionId]
-
-    @ready()
-
-
-publishJData = (dataSessionId) ->
     log = ->
         newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
         console.log.apply console, newArgs
 
     log 'publish _jdata'
 
-    check dataSessionId, String
+    session = dataSessions[dataSessionId] = J.AutoDict(
+        "dataSessions[#{dataSessionId}]"
 
-    # The set of active cursors and exactly what each has sent to the client
-    fieldsByModelIdQuery = {} # modelName: docId: fieldName: querySpecString: value
-
-    session = dataSessions[dataSessionId] = J.AutoDict "dataSessions[#{dataSessionId}]",
         querySpecSet: J.Dict() # qsString: true
 
         mergedQuerySpecs: => getMergedQuerySpecs session.querySpecSet()
 
-        observerByQsString: J.AutoDict(
-            "observerByQsString"
+        observerByQsString: J.Dict()
+    )
+    dataSessionPublisherContexts[dataSessionId] = @
+    dataSessionFieldsByModelIdQuery[dataSessionId] = {}
 
-            => session.mergedQuerySpecs().map (specDict) => EJSON.stringify specDict.toObj()
+    @onStop =>
+        console.log "[#{dataSessionId}] PUBLISHER STOPPED"
+        session.stop()
 
-            (qsString) => makeObserver EJSON.parse qsString
+        if session.updateObserversFiber?
+            console.warn "Uh oh, we were in the middle of updating observers."
+            session.updateObserversFiber.reset()
 
-            (qsString, oldObserver, newObserver) =>
-                querySpec = EJSON.parse qsString
-                if newObserver?
-                    J.assert oldObserver is undefined, "No reason for observer object to change."
-                    return
+        delete dataSessionFieldsByModelIdQuery[dataSessionId]
+        delete dataSessionPublisherContexts[dataSessionId]
+        delete dataSessions[dataSessionId]
 
-                # Stopped an observer due to remerging
-                log querySpec, "STOPPED"
+    @ready()
 
-                # Send updates to undo the effect that this cursor had on the client's
-                # view of the overall data set.
-                modelClass = J.models[querySpec.modelName]
-                for docId in _.keys fieldsByModelIdQuery[querySpec.modelName] ? {}
-                    cursorValues = fieldsByModelIdQuery[querySpec.modelName][docId]
 
-                    changedFields = {}
-                    for fieldName in _.keys cursorValues
-                        valueByQsString = cursorValues[fieldName]
-                        oldValue = _.values(valueByQsString)[0]
-                        delete valueByQsString[qsString]
-                        newValue = _.values(valueByQsString)[0]
-                        if not EJSON.equals oldValue, newValue
-                            changedFields[fieldName] = newValue
-                        if _.isEmpty valueByQsString
-                            delete cursorValues[fieldName]
+getMergedQuerySpecs = (querySpecSet) =>
+    mergedQuerySpecs = J.List()
+    querySpecSet.forEach (rawQsString) ->
+        # TODO: Fancier merge stuff
+        rawQuerySpec = EJSON.parse rawQsString
+        mergedQuerySpecs.push rawQuerySpec
+    mergedQuerySpecs
 
-                    if _.isEmpty cursorValues
-                        delete fieldsByModelIdQuery[querySpec.modelName][docId]
-                        log querySpec, "sending REMOVED", docId
-                        @removed modelClass.collection._name, docId
-                    else if not _.isEmpty changedFields
-                        log querySpec, "passing along CHANGED", docId, changedFields
-                        @changed modelClass.collection._name, id, changedFields
-        )
 
-    getMergedQuerySpecs = (querySpecSet) =>
-        log "getMergedQuerySpecs"
-        mergedQuerySpecs = J.List()
-        querySpecSet.forEach (rawQsString) ->
-            # TODO: Fancier merge stuff
-            rawQuerySpec = EJSON.parse rawQsString
-            mergedQuerySpecs.push rawQuerySpec
-        mergedQuerySpecs
+updateObservers = (dataSessionId) ->
+    log = ->
+        newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
+        console.log.apply console, newArgs
+    log "***********update observers"
 
-    makeObserver = (querySpec) =>
-        log "Make observer for: ", querySpec
+    session = dataSessions[dataSessionId]
+
+    oldQsStrings = session.observerByQsString().getKeys()
+    newQsStrings = session.mergedQuerySpecs().map(
+        (qs) => EJSON.stringify qs.toObj()
+    ).toArr()
+    qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
+
+    console.log "qsStringsDiff", qsStringsDiff
+
+    fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
+
+    qsStringsDiff.added.forEach (qsString) =>
+        querySpec = EJSON.parse qsString
+
+        log "Add observer for: ", querySpec
 
         modelClass = J.models[querySpec.modelName]
 
@@ -186,14 +173,12 @@ publishJData = (dataSessionId) ->
 
         cursor = modelClass.collection.find querySpec.selector, options
 
-        qsString = EJSON.stringify querySpec
-
-        cursor.observeChanges
+        observer = cursor.observeChanges
             added: (id, fields) =>
                 log querySpec, "server says ADDED:", id, fields
 
                 if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
-                    # log querySpec, "sending ADDED:", id, fields
+                    log querySpec, "sending ADDED:", id, fields
                     @added modelClass.collection._name, id, fields
 
                 fieldsByModelIdQuery[querySpec.modelName] ?= {}
@@ -240,3 +225,37 @@ publishJData = (dataSessionId) ->
                 else if not _.isEmpty changedFields
                     log querySpec, "sending CHANGED:", id
                     @changed modelClass.collection._name, id, changedFields
+
+        session.observerByQsString().setOrAdd qsString, observer
+
+    qsStringsDiff.deleted.forEach (qsString) =>
+        querySpec = EJSON.parse qsString
+
+        observer = session.observerByQsString().get qsString
+        observer.stop()
+        session.observerByQsString().delete qsString
+
+        # Send updates to undo the effect that this cursor had on the client's
+        # view of the overall data set.
+        modelClass = J.models[querySpec.modelName]
+        for docId in _.keys fieldsByModelIdQuery[querySpec.modelName] ? {}
+            cursorValues = fieldsByModelIdQuery[querySpec.modelName][docId]
+
+            changedFields = {}
+            for fieldName in _.keys cursorValues
+                valueByQsString = cursorValues[fieldName]
+                oldValue = _.values(valueByQsString)[0]
+                delete valueByQsString[qsString]
+                newValue = _.values(valueByQsString)[0]
+                if not EJSON.equals oldValue, newValue
+                    changedFields[fieldName] = newValue
+                if _.isEmpty valueByQsString
+                    delete cursorValues[fieldName]
+
+            if _.isEmpty cursorValues
+                delete fieldsByModelIdQuery[querySpec.modelName][docId]
+                log querySpec, "sending REMOVED", docId
+                @removed modelClass.collection._name, docId
+            else if not _.isEmpty changedFields
+                log querySpec, "passing along CHANGED", docId, changedFields
+                @changed modelClass.collection._name, id, changedFields
