@@ -104,11 +104,9 @@ class J.AutoVar
                     # we're using afterFlush.
                     @_invalidated = true
                     Tracker.afterFlush =>
-                        # Make sure we haven't already recomputed this.
-                        J.assert @_invalidated, "Nothing else should be able
-                            to invalidate this. The Vars it accessed should
-                            all have stable values."
-                        @_valueComp.invalidate()
+                        # Check if we're still invalidated because we might have
+                        # been recomputed already.
+                        if @_invalidated then @_valueComp.invalidate()
                     return
 
                 else

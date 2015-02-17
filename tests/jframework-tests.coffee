@@ -926,13 +926,6 @@ Tinytest.add "List - reverse", (test) ->
     test.equal lst.toArr(), [0, 1, 2, 3]
 
 
-Tinytest.add "AutoVar - don't allow AutoVar to return AutoVar", (test) ->
-    a = J.AutoVar -> J.AutoVar -> 5
-    v = undefined
-    try
-        v = a.get()
-    test.equal v, undefined
-
 Tinytest.add "List - getConcat", (test) ->
     lst1 = J.List [3, 5, 6]
     lst2 = J.List [7, 8]

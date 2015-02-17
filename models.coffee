@@ -61,7 +61,13 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        new @ EJSON.fromJSONValue doc
+        fields = EJSON.fromJSONValue doc
+
+        for fieldName of @fieldSpecs
+            if fieldName not of fields
+                fields[fieldName] = J.makeValueNotReadyObject()
+
+        new @ fields
 
 
     clone: ->
@@ -292,8 +298,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 throw new Meteor.Error "Invalid field #{JSON.stringify fieldName} passed
                     to #{modelClass.name} constructor"
 
-        @_fields = J.Dict nonIdInitFields
-        @_fields.replaceKeys _.keys @modelClass.fieldSpecs
+        @_fields = J.Dict()
+        for fieldName of @modelClass.fieldSpecs
+            @_fields.setOrAdd fieldName, null
+        @_fields.set nonIdInitFields
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
             unless @_id is @key()
@@ -362,7 +370,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
 
 
-
     # Set up class methods for collection operations
     if collectionName?
         if Meteor.isClient
@@ -378,6 +385,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
             collection.find().observeChanges
                 added: (id, fields) ->
+                    console.log "ADDED", id, fields
                     doc = _.clone fields
                     doc._id = id
                     instance = modelClass.fromDoc doc
