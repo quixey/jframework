@@ -58,13 +58,13 @@ class J.AutoVar
         if @onChange
             # Truthy onChange means do a non-lazy first run
             # of valueFunc.
-            Tracker.afterFlush J.bindEnvironment =>
+            Tracker.afterFlush =>
                 if @isActive() and not @_valueComp?
                     @_setupValueComp()
 
 
     _setupValueComp: ->
-        Tracker.nonreactive => Tracker.autorun J.bindEnvironment (c) =>
+        Tracker.nonreactive => Tracker.autorun (c) =>
             if c.firstRun
                 # Important to do this here in case @stop() is called during the
                 # first run of the computation.
@@ -119,7 +119,10 @@ class J.AutoVar
 
             # console.log "...", @toString(), "recomputed: ", value
 
-            @_var.set value
+            if @_valueComp.stopped
+                # It's kosher for a valueFunc to call stop() on its own AutoVar.
+            else
+                @_var.set value
 
 
 

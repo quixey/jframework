@@ -180,72 +180,83 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
 
 
 
-Tinytest.addAsync "AfterAf - Basics", (test, onComplete) ->
+Tinytest.addAsync "AfterFlush - sortKey basics", (test, onComplete) ->
     afCount = 0
     aafCount = 0
-    J.afterAf ->
+    Tracker.afterFlush(->
         aafCount += 1
         test.equal aafCount, 1, 'fail 1'
-    J.afterAf ->
+    , 0.7)
+    Tracker.afterFlush(->
         aafCount += 1
         test.equal aafCount, 2, 'fail 2'
-        J.afterAf ->
+        Tracker.afterFlush(->
             aafCount += 1
             test.equal afCount, 2, 'fail 3'
             test.equal aafCount, 3, 'fail 4'
-            J.afterAf ->
+            Tracker.afterFlush(->
                 aafCount += 1
-            J.afterAf ->
+            , 0.7)
+            Tracker.afterFlush(->
                 test.equal aafCount, 4, 'fail 5'
                 aafCount += 1
-                J.afterAf ->
+                Tracker.afterFlush(->
                     test.equal aafCount, 6, 'fail 6'
                     onComplete()
-            J.afterAf ->
+                , 0.7)
+            , 0.7)
+            Tracker.afterFlush(->
                 test.equal aafCount, 5, 'fail 7'
                 aafCount += 1
+            , 0.7)
             test.equal afCount, 2, 'fail 8'
             test.equal aafCount, 3, 'fail 9'
-        Tracker.afterFlush J.bindEnvironment ->
+        , 0.7)
+        Tracker.afterFlush ->
             afCount += 1
             test.equal afCount, 1, 'fail 10'
             test.equal aafCount, 2, 'fail 11'
-        Tracker.afterFlush J.bindEnvironment ->
+        Tracker.afterFlush ->
             afCount += 1
             test.equal afCount, 2, 'fail 12'
             test.equal aafCount, 2, 'fail 13'
         test.equal afCount, 0, 'fail 14'
         test.equal aafCount, 2, 'fail 15'
+    , 0.7)
     test.equal aafCount, 0, 'fail 16'
 
 
-Tinytest.addAsync "AfterAf - trigger after all onChange handlers", (test, onComplete) ->
+Tinytest.addAsync "AfterFlush - trigger high sortKey funcs after all onChange handlers", (test, onComplete) ->
     v = J.Var 6
     onChangeCount = 0
-    J.afterAf ->
+    Tracker.afterFlush(->
         test.equal onChangeCount, 1, 'fail 1'
+    , 0.7)
     a = J.AutoVar('a',
         -> v.get()
         (oldA, newA) ->
             onChangeCount += 1
     )
-    J.afterAf ->
-        test.equal onChangeCount, 3, 'fail 2'
+    Tracker.afterFlush(->
+        test.equal onChangeCount, 1, 'fail 2'
+    , 0.7)
     test.equal onChangeCount, 0, 'fail 3'
     Tracker.flush()
     test.equal onChangeCount, 1, 'fail 4'
-    J.afterAf ->
+    Tracker.afterFlush(->
         test.equal onChangeCount, 3, 'fail 5'
+    , 0.7)
     b = J.AutoVar('b',
         -> v.get() - v.get() % 2
-        (oldA, newA) ->
+        (oldB, newB) ->
             onChangeCount += 1
     )
-    J.afterAf ->
+    Tracker.afterFlush(->
         test.equal onChangeCount, 3, 'fail 6'
         a.stop()
         b.stop()
         onComplete()
+    , 0.7)
     v.set 7
     test.equal onChangeCount, 1, 'fail 7'
 
@@ -792,7 +803,6 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
             sizeFuncRunCount += 1
             size.get()
         (i) ->
-            console.warn "al recalculating", i
             valueFuncRunCount += 1
             i * coef.get()
     )
@@ -919,8 +929,9 @@ Tinytest.add "List - reverse", (test) ->
 Tinytest.add "AutoVar - don't allow AutoVar to return AutoVar", (test) ->
     a = J.AutoVar -> J.AutoVar -> 5
     v = undefined
-    test.throws -> v = a.get()
-    test.isUndefined v
+    try
+        v = a.get()
+    test.equal v, undefined
 
 Tinytest.add "List - getConcat", (test) ->
     lst1 = J.List [3, 5, 6]

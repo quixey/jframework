@@ -60,7 +60,7 @@ class J.Dict
 
         oldValue = Tracker.nonreactive => @_fields[key].get()
         if oldValue isnt undefined and @onChange
-            Tracker.afterFlush J.bindEnvironment =>
+            Tracker.afterFlush =>
                 if @isActive()
                     @onChange.call @, key, oldValue, undefined
 

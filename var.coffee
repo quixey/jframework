@@ -124,7 +124,7 @@ class J.Var
             oldValue = @_previousReadyValue
             newValue = @_value
 
-            Tracker.afterFlush J.bindEnvironment =>
+            Tracker.afterFlush =>
                 # Only call onChange if we're still active, even though
                 # there may be multiple onChange calls queued up from when
                 # we were still active.

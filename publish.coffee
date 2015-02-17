@@ -73,11 +73,13 @@ Meteor.methods
             # unblocks in the sense that other methods can start running, and that's
             # a problem for a data query.
             session.currentQuery = new Future()
-            J.afterAf ->
-                # J.AfterAf gives the publish function time to stop and start observers
-                # to achieve its new set of merged cursors, plus have those cursors
-                # send their initial data to the client.
-                session.currentQuery.return()
+            # The afterFlush sortKey of 0.8 gives the publish function time to stop
+            # and start observers to achieve its new set of merged cursors, plus have
+            # those cursors send their initial data to the client.
+            Tracker.afterFlush(
+                -> session.currentQuery.return()
+                0.8
+            )
             session.currentQuery.wait()
 
         log '..._updateDataQueries done'

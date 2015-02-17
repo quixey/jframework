@@ -2,28 +2,6 @@
     A few things to augment Meteor's Tracker
 ###
 
-J._aafQueue = []
-J._flushAfterAfQueue = ->
-    console.debug 'J.afterAf!'
-    if J._aafQueue.length
-        func = J._aafQueue.shift()
-        wasEmpty = J._aafQueue.length is 0
-        func()
-        if not wasEmpty
-            Tracker.afterFlush J.bindEnvironment ->
-                Meteor.setTimeout J._flushAfterAfQueue, 1
-
-J.afterAf = (f) ->
-    ###
-        Run f at the soonest possible time after afterFlush
-    ###
-    J._aafQueue.push J.bindEnvironment f
-    if J._aafQueue.length is 1
-        Tracker.afterFlush J.bindEnvironment ->
-            Meteor.setTimeout J._flushAfterAfQueue, 1
-
-
-
 class J.Dependency
     ###
         Like Tracker.Dependency except that a "creator computation",
@@ -84,7 +62,8 @@ var _debugFunc = function () {
 };
 
 var _throwOrLog = function (from, e) {
-    if (throwFirstError) {
+    if (true || throwFirstError) {
+        // XXX JFramework - always take this branch
         throw e;
     } else {
         var messageAndStack;
@@ -188,14 +167,16 @@ Tracker.Computation = function (f, parent) {
     }
 };
 
-Tracker.yo = "hi"
-
-
 Tracker.Computation.prototype.onInvalidate = function (f) {
     var self = this;
 
     if (typeof f !== 'function')
         throw new Error("onInvalidate requires a function");
+
+    // XXX J Framework wrapping bindEnvironment
+    if (Meteor.isServer) {
+        f = Meteor.bindEnvironment(f);
+    }
 
     if (self.invalidated) {
         Tracker.nonreactive(function () {
@@ -299,11 +280,16 @@ Tracker.flush = function (_opts) {
             }
 
             if (afterFlushCallbacks.length) {
+                // XXX J framework feature
+                J.util.sortByKey(afterFlushCallbacks, function (afc) {
+                    return afc.sortKey;
+                });
+
                 // call one afterFlush callback, which may
                 // invalidate more computations
-                var func = afterFlushCallbacks.shift();
+                var afc = afterFlushCallbacks.shift();
                 try {
-                    func();
+                    afc.func.call(null);
                 } catch (e) {
                     _throwOrLog("afterFlush", e);
                 }
@@ -328,6 +314,11 @@ Tracker.flush = function (_opts) {
 Tracker.autorun = function (f) {
     if (typeof f !== 'function')
         throw new Error('Tracker.autorun requires a function argument');
+
+    // XXX J framework wrapping bindEnvironment
+    if (Meteor.isServer) {
+        f = Meteor.bindEnvironment(f);
+    }
 
     constructingComputation = true;
     var c = new Tracker.Computation(f, Tracker.currentComputation);
@@ -360,8 +351,23 @@ Tracker.onInvalidate = function (f) {
 };
 
 
-Tracker.afterFlush = function (f) {
-    afterFlushCallbacks.push(f);
+Tracker.afterFlush = function (f, sortKey) {
+    // XXX Adding sortKey for J framework
+
+    if (sortKey == null) {
+        sortKey = 0.5;
+    }
+    if (!(_.isNumber(sortKey) && 0 <= sortKey && sortKey <= 1)) {
+        throw new Error("afterFlush sortKey must be a number between 0 and 1 (lower comes first)");
+    }
+
+    if (Meteor.isServer) {
+        func = Meteor.bindEnvironment(f);
+    } else {
+        func = f;
+    }
+
+    afterFlushCallbacks.push({func: func, sortKey: sortKey});
     requireFlush();
 };
 

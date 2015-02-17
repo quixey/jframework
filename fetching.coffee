@@ -101,8 +101,7 @@ J.fetching =
 
                 # There may be changes to @_requestersByQs that we couldn't act on
                 # until this request was done.
-                J.afterAf =>
-                    @remergeQueries()
+                Tracker.afterFlush @remergeQueries, 0.8
 
 
     requestQuery: (querySpec) ->
@@ -126,8 +125,7 @@ J.fetching =
                         if _.isEmpty @_requestersByQs[qsString]
                             delete @_requestersByQs[qsString]
                     @_requestsChanged = true
-                    J.afterAf =>
-                        @remergeQueries()
+                    Tracker.afterFlush @remergeQueries, 0.8
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
@@ -138,8 +136,7 @@ J.fetching =
 
         if Tracker.active
             @_requestsChanged = true
-            J.afterAf =>
-                @remergeQueries()
+            Tracker.afterFlush @remergeQueries, 0.8
             throw J.makeValueNotReadyObject()
         else
             undefined
