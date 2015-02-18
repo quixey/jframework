@@ -355,59 +355,75 @@ J._defineComponent = (componentName, componentSpec) ->
 
         element = undefined
 
-        Tracker.autorun(
-            (c) =>
-                if c.firstRun
-                    @_renderComp = c
-                    @_renderComp.tag = "#{@toString()}.render!"
+        Tracker.autorun((c) =>
+            if c.firstRun
+                @_renderComp = c
+                @_renderComp.tag = "#{@toString()}.render!"
 
-                else
-                    if componentDebug
-                        console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                            "Invalidated #{@toString()}", c._id
-
-                    # This autorun was just here to let us respond to an invalidation
-                    # at flush time once. The @forceUpdate() call will now stop this
-                    # computation and create a new one.
-                    @_renderComp.stop()
-                    @_renderComp = null
-
-                    # If we start the new @_renderComp inside this stopped @_renderComp,
-                    # Meteor will automatically stop it.
-                    Tracker.nonreactive => @forceUpdate()
-
-                    return
-
-                _pushDebugFlag componentSpec.debug
+            else
                 if componentDebug
                     console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                        "#{@toString()} render!", c._id
-                    _debugDepth += 1
+                        "Invalidated #{@toString()}", c._id
 
+                # This autorun was just here to let us respond to an invalidation
+                # at flush time once. The @forceUpdate() call will now stop this
+                # computation and create a new one.
+                @_renderComp.stop()
+                @_renderComp = null
+
+                # If we start the new @_renderComp inside this stopped @_renderComp,
+                # Meteor will automatically stop it.
+                Tracker.nonreactive => @forceUpdate()
+
+                return
+
+            _pushDebugFlag componentSpec.debug
+            if componentDebug
+                console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
+                    "#{@toString()} render!", c._id
+                _debugDepth += 1
+
+            element =
                 try
-                    element = transformedElement componentSpec.render.apply @
+                    transformedElement componentSpec.render.apply @
                 catch e
-                    throw e unless e instanceof J.VALUE_NOT_READY
+                    # If the component is computing or not ready, we'll keep
+                    # element undefined for now and show nothing or a loading
+                    # message.
+                    if e instanceof J.VALUE_NOT_READY
+                        $$ ('div'),
+                            style:
+                                textAlign: 'center'
+                                opacity: 0.5
+                            ("#{@toString()} loading...")
+                    else if e instanceof J.AutoVar.COMPUTING
+                        # We want c to invalidate itself, but we want the
+                        # recalculation to happen at the end of the flush
+                        # queue (FIFO flushing), not right away. That's why
+                        # we're using afterFlush.
+                        Tracker.afterFlush(
+                            => c.invalidate()
+                            10 + @_componentId
+                        )
+                        $$ ('div'),
+                            style:
+                                textAlign: 'center'
+                                opacity: 0.5
+                            ("#{@toString()} computing...")
+                    else
+                        throw e
                 finally
                     if componentDebug
                         console.debug _getDebugPrefix(), element
                         _debugDepth -= 1
                     _popDebugFlag()
 
-            # It's important to re-render components in topological-sorted order.
-            # If we get the re-rendering order wrong, the child's props may have
-            # been inactivated by the parent's invalidation.
-            # Using @_id as the autorun sortKey ensures that parent components
-            # get re-rendered before their children.
-            @_componentId
-        )
-
-        if element is undefined then element =
-            $$ ('div'),
-                style:
-                    textAlign: 'center'
-                    opacity: 0.5
-                ("#{@toString()} loading...")
+        # It's important to re-render components in topological-sorted order.
+        # If we get the re-rendering order wrong, the child's props may have
+        # been inactivated by the parent's invalidation.
+        # Using @_id as the autorun sortKey ensures that parent components
+        # get re-rendered before their children.
+        10 + @_componentId)
 
         element
 

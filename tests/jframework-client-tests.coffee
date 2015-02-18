@@ -64,6 +64,14 @@ Tinytest.add "Component basics", (test) ->
 
 
 Tinytest.add "Component with map", (test) ->
+    x = J.Var 5
+    a = J.AutoVar 'a', -> x.get()
+    b = J.AutoVar 'b', -> a.get()
+    c = J.AutoVar 'c', -> b.get()
+    c.get()
+    x.set 6
+
+
     J._defineComponent 'MapTest',
         render: ->
             $$ ('div'),
@@ -99,63 +107,16 @@ Tinytest.add "Component with map", (test) ->
                                     verticalAlign: 'top'
                                     paddingLeft: 20
 
-                                if false
-                                    console.log 1
-                                    a5 = J.AutoVar(
-                                        ->
-                                            $$.Foo.fetchOne b: 5
-                                        true
-                                    )
-                                    console.log 2
+                                if true
+                                    console.log "trying to get c"
+                                    null
 
-                                    a6 = J.AutoVar(
-                                        ->
-                                            $$.Foo.fetchOne b: 6
-                                        true
-                                    )
-                                    console.log 3
-
-                                    ("a5: #{a5.get()}, a6: #{a6.get()}")
-
-                                console.log 4
-
-                                if false
-                                    al = J.AutoList(
-                                        -> 3
-                                        (i) ->
-                                            bVal = i + 5
-                                            console.log 'al computing', bVal
-                                            ret = $$ ('div'),
-                                                key: bVal
-                                                style:
-                                                    background: 'yellow'
-                                                    padding: 8
-                                                    border: '1px solid #ccc'
-                                                    marginBottom: 8
-                                                ("A foo with b=#{bVal} is #{$$.Foo.fetchOne(b: bVal)?._id ? "[none]"}")
-                                            console.log 6
-                                            ret
-                                        true
-                                    )
-                                    console.log 'got al', al
-                                    al
+                                ("Now C is: ")
+                                (c.get())
 
                                 if true
-                                    mapAl = J.List([
-                                        5
-                                        6
-                                        7
-                                    ]).map (bVal) ->
-                                        $$ ('div'),
-                                            style:
-                                                background: 'lightBlue'
-                                                padding: 8
-                                                border: '1px solid #ccc'
-                                                marginBottom: 8
-                                            ("A foo with b=#{bVal} is #{$$.Foo.fetchOne(b: bVal)?._id ? "[none]"}")
-
-                                    mapAl
-
+                                    console.log "done"
+                                    null
 
     addComponent 'Component with map', $$ ('MapTest')
 

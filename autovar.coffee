@@ -1,5 +1,15 @@
 class J.AutoVar
-    @COMPUTING: {name: "J.AutoVar.COMPUTING"}
+    class @COMPUTING extends Error
+        constructor: ->
+            @name = "J.AutoVar.COMPUTING"
+            @message = "Value will be available later in the computation."
+
+    @makeComputingObject: ->
+        e = Error()
+        obj = new @COMPUTING
+        obj.isServer = Meteor.isServer
+        obj.stack = e.stack
+        obj
 
     constructor: (tag, valueFunc, onChange, options) ->
         ###
@@ -88,7 +98,7 @@ class J.AutoVar
             # console.log "Recomputing ", @toString()
             try
                 # ValueFunc may either return or throw J.Var.NOT_READY
-                # or throw J.COMPUTING. It may not return undefined.
+                # or throw @COMPUTING. It may not return undefined.
                 value = @valueFunc.call null, @
 
             catch e
@@ -96,7 +106,7 @@ class J.AutoVar
                     @_var.set e
                     return
 
-                else if e is J.AutoVar.COMPUTING
+                else if e instanceof @constructor.COMPUTING
                     # console.log "...", @toString(), "got COMPUTING"
                     # We want @_valueComp to invalidate itself, but we want
                     # the recalculation to happen at the end of the flush
@@ -147,7 +157,7 @@ class J.AutoVar
             if Tracker.active
                 # Add a dependency to the @_var in case its value changes
                 # when the recompute is done.
-                throw J.AutoVar.COMPUTING
+                throw @constructor.makeComputingObject()
             else
                 return undefined
 

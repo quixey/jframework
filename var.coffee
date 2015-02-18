@@ -1,5 +1,6 @@
 class J.VALUE_NOT_READY extends Error
     constructor: ->
+        @name = "J.VALUE_NOT_READY"
         @message = "Value not ready."
 
 J.makeValueNotReadyObject = ->
