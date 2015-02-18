@@ -107,13 +107,16 @@ class J.List
 
 
     filter: (f = _.identity) ->
-        J.List(
-            _.filter @map().getValues(), f
+        # Parallelize running the filter function
+        filterOutputs = @map f
+        filtered = J.List [],
             tag:
                 filteredFrom: @
                 filterFunc: f
                 tag: "filtering of #{@toString()}"
-        )
+        @forEach (v, i) ->
+            if filterOutputs.get i then filtered.push v
+        filtered
 
 
     forEach: (f) ->
