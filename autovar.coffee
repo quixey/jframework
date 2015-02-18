@@ -11,6 +11,17 @@ class J.AutoVar
         obj.stack = e.stack
         obj
 
+    @getFirstActiveAncestor = (comp) ->
+        if comp is null
+            null
+        else if not comp.stopped
+            comp
+        else if comp.autoVar
+            @getFirstActiveAncestor comp.creator
+        else
+            null
+
+
     constructor: (tag, valueFunc, onChange, options) ->
         ###
             AutoVars default to being "lazy", i.e. not calculated
@@ -146,20 +157,10 @@ class J.AutoVar
             # array becomes J.List.
             return J.Var(@valueFunc.call null, @).get()
 
-        firstRunningAncestor = (comp) ->
-            if comp is null
-                null
-            else if not comp.stopped
-                comp
-            else if comp.autoVar
-                firstRunningAncestor comp.creator
-            else
-                null
-
         if not @isActive()
-            ancestorComp = firstRunningAncestor @creator
+            ancestorComp = @constructor.getFirstActiveAncestor @creator
             if ancestorComp
-                # There's a running ancestor, so there's a chance
+                # There's an active ancestor, so there's a chance
                 # that the function trying to get us will succeed
                 # next time. That's why we can say we're "computing".
                 if Tracker.active

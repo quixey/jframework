@@ -132,7 +132,7 @@ J.fetching =
             options = {}
             for optionName in ['fields', 'sort', 'skip', 'limit']
                 if querySpec[optionName]? then options[optionName] = querySpec[optionName]
-            return modelClass.find(querySpec.selector, options).fetch()
+            return J.List modelClass.find(querySpec.selector, options).fetch()
 
         if Tracker.active
             @_requestsChanged = true

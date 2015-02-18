@@ -88,7 +88,7 @@ class J.Model
 
 
     get: (fieldName) ->
-        unless @alive
+        if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
         @_fields.forceGet fieldName
@@ -428,20 +428,20 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     else
                         docIdsOrQuery
                 instances = @fetch query
-                instanceById = {}
-                for instance in instances
-                    instanceById[instance._id] = instance
+                instanceById = J.Dict()
+                instances.forEach (instance) ->
+                    instanceById.setOrAdd instance._id, instance
                 instanceById
 
             fetchIds: (docIds, includeHoles = false) ->
                 instanceDict = @fetchDict docIds
-                instanceArr = []
+                instanceList = J.List()
                 for docId in docIds
-                    if instanceDict[docId]?
-                        instanceArr.push instanceDict[docId]
+                    if instanceDict.get(docId)?
+                        instanceList.push instanceDict.get(docId)
                     else if includeHoles
-                        instanceArr.push null
-                instanceArr
+                        instanceList.push null
+                instanceList
 
             fetch: (selector = {}, options = {}) ->
                 if selector instanceof J.Dict
@@ -475,14 +475,14 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 results = @fetch selector, options
                 if results is undefined
                     undefined
-                else if results.length is 0
+                else if results.size() is 0
                     # Note that a normal Mongo cursor would
                     # return undefined, but for us null means
                     # "definitely doesn't exist" while undefined
                     # means "fetching in progress".
                     null
                 else
-                    results[0]
+                    results.get 0
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
