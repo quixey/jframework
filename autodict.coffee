@@ -2,9 +2,9 @@ class J.AutoDict extends J.Dict
     constructor: (tag, keysFunc, valueFunc, onChange) ->
         ###
             Overloads
-            (1) J.AutoDict [tag], keysFunc, valueFunc, onChange
-            (2) J.AutoDict [tag], keysList, valueFunc, onChange
-            (3) J.AutoDict [tag], fieldSpecs, onChange
+            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange]
+            (2) J.AutoDict [tag], keysList, valueFunc, [onChange]
+            (3) J.AutoDict [tag], fieldSpecs, [onChange]
         ###
 
         unless @ instanceof J.AutoDict
@@ -18,7 +18,7 @@ class J.AutoDict extends J.Dict
             _.isArray(tag) or tag instanceof J.List or
             (
                 (J.util.isPlainObject(tag) or tag instanceof J.Dict) and
-                _.isFunction(keysFunc) and not valueFunc?
+                (not keysFunc? or _.isFunction(keysFunc)) and not valueFunc?
             )
         )
             # tag argument not provided

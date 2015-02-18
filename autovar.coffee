@@ -143,7 +143,9 @@ class J.AutoVar
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
         if Meteor.isServer and J._inMethod.get()
-            return @valueFunc.call null, @
+            # We're just using the Var to wrap the value, e.g.
+            # array becomes J.List.
+            return J.Var(@valueFunc.call null, @).get()
 
         if not @_valueComp?
             # console.log "GET", @toString(), "[first time]"

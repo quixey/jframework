@@ -108,14 +108,14 @@ class J.List
 
     filter: (f = _.identity) ->
         # Parallelize running the filter function
-        filterOutputs = @map f
+        filterOutputs = @forEach f
         filtered = J.List [],
             tag:
                 filteredFrom: @
                 filterFunc: f
-                tag: "filtering of #{@toString()}"
+                tag: "filtered #{@toString()}"
         @forEach (v, i) ->
-            if filterOutputs.get i then filtered.push v
+            if filterOutputs[i] then filtered.push v
         filtered
 
 
@@ -161,10 +161,16 @@ class J.List
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
         sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues()
-        items = _.map @getValues(), (v, i) -> index: i, value: v
-        J.List _.map(
-            J.util.sortByKey items, (item) -> sortKeys[item.index]
-            (item) -> item.value
+        items = _.map @getValues(), (v, i) => index: i, value: v
+        J.List(
+            _.map(
+                J.util.sortByKey items, (item) => sortKeys[item.index]
+                (item) => item.value
+            )
+            tag:
+                sortedFrom: @
+                sortKeySpec: keySpec
+                tag: "sorted #{@toString()}"
         )
 
 
@@ -205,14 +211,13 @@ class J.List
                 @
             else
                 mappedAl = J.AutoList(
+                    "mapped #{@toString()}"
                     => @size()
                     (i) => f @get(i), i
                     true # This makes it not lazy
                 )
-                mappedAl.tag = "mapped (#{@toString()})"
-                mappedAl
         else
-            J.List @getValues().map f
+            J.List @getValues().map(f), "mapped #{@toString()}"
 
 
     push: (value) ->
