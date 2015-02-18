@@ -101,7 +101,7 @@ class J.AutoDict extends J.Dict
         @_active = true
         if Tracker.active
             Tracker.onInvalidate =>
-                console.log 'INVALIDATED', @toString()
+                # console.log 'INVALIDATED', @toString()
                 @stop()
 
         if @_keysList?
@@ -215,7 +215,7 @@ class J.AutoDict extends J.Dict
 
     stop: ->
         if @_active
-            console.log "STOPPING", @toString()
+            # console.log "STOPPING", @toString()
             fieldComp.stop() for key, fieldComp of @_fields
             @_keysVar.stop()
             @_active = false

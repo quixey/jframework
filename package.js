@@ -4,13 +4,13 @@ Package.describe({
 });
 
 Npm.depends({
-    // "react-router": "0.11.6"
+    "react-router": "0.11.6"
 });
 
 Package.onUse(function(api) {
     // Sets up window.ReactRouter
     api.addFiles(
-        // '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
+        '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
     );
 
 
@@ -55,8 +55,8 @@ Package.onUse(function(api) {
     api.addFiles([
         "lib/date.js",
         "lib/URI.js",
-        "j.coffee",
         "tracker.coffee",
+        "j.coffee",
         "util.coffee",
         "var.coffee",
         "autovar.coffee",

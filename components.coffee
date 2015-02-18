@@ -244,7 +244,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             retValue = reactiveSpec.val.call @
                         finally
                             if componentDebug
-                                console.debug _getDebugPrefix(), ret
+                                console.debug _getDebugPrefix(), retValue
                                 _debugDepth -= 1
                             _popDebugFlag()
 
@@ -355,7 +355,7 @@ J._defineComponent = (componentName, componentSpec) ->
         Tracker.autorun (c) =>
             if c.firstRun
                 @_renderComp = c
-                c.tag = "#{@toString()}.render!"
+                @_renderComp.tag = "#{@toString()}.render!"
 
             else
                 if componentDebug

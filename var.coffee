@@ -63,7 +63,7 @@ class J.Var
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
-        @_value = @constructor.wrap value
+        @_value = @wrap value
 
 
     get: ->
@@ -100,7 +100,7 @@ class J.Var
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 
         previousValue = @_value
-        @_value = @constructor.wrap value
+        @_value = @wrap value
 
         if previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
@@ -144,17 +144,11 @@ class J.Var
         J.util.tryGet => @get()
 
 
-    @isValidValue: (value) ->
-        not (
-            value is undefined or
-            value instanceof J.AutoVar
-        )
-
-    @wrap: (value) ->
+    wrap: (value) ->
         if value is undefined
-            throw new Meteor.Error "Can't set Var value to undefined. Use
-                null or new J.VALUE_NOT_READY instead."
-        else if not @isValidValue value
+            throw new Meteor.Error "Can't set #{@toString()} value to undefined.
+                Use null or new J.VALUE_NOT_READY instead."
+        else if not @constructor.isValidValue value
             throw new Meteor.Error "Invalid value for Var: #{value}"
 
         if value instanceof J.VALUE_NOT_READY
@@ -172,3 +166,10 @@ class J.Var
                 e
         else
             value
+
+
+    @isValidValue: (value) ->
+        not (
+            value is undefined or
+                value instanceof J.AutoVar
+        )
