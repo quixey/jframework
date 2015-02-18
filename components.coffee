@@ -355,43 +355,52 @@ J._defineComponent = (componentName, componentSpec) ->
 
         element = undefined
 
-        Tracker.autorun (c) =>
-            if c.firstRun
-                @_renderComp = c
-                @_renderComp.tag = "#{@toString()}.render!"
+        Tracker.autorun(
+            (c) =>
+                if c.firstRun
+                    @_renderComp = c
+                    @_renderComp.tag = "#{@toString()}.render!"
 
-            else
+                else
+                    if componentDebug
+                        console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
+                            "Invalidated #{@toString()}", c._id
+
+                    # This autorun was just here to let us respond to an invalidation
+                    # at flush time once. The @forceUpdate() call will now stop this
+                    # computation and create a new one.
+                    @_renderComp.stop()
+                    @_renderComp = null
+
+                    # If we start the new @_renderComp inside this stopped @_renderComp,
+                    # Meteor will automatically stop it.
+                    Tracker.nonreactive => @forceUpdate()
+
+                    return
+
+                _pushDebugFlag componentSpec.debug
                 if componentDebug
                     console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                        "Invalidated #{@toString()}", c._id
+                        "#{@toString()} render!", c._id
+                    _debugDepth += 1
 
-                # This autorun was just here to let us respond to an invalidation
-                # at flush time once. The @forceUpdate() call will now stop this
-                # computation and create a new one.
-                @_renderComp.stop()
-                @_renderComp = null
+                try
+                    element = transformedElement componentSpec.render.apply @
+                catch e
+                    throw e unless e instanceof J.VALUE_NOT_READY
+                finally
+                    if componentDebug
+                        console.debug _getDebugPrefix(), element
+                        _debugDepth -= 1
+                    _popDebugFlag()
 
-                # If we start the new @_renderComp inside this stopped @_renderComp,
-                # Meteor will automatically stop it.
-                Tracker.nonreactive => @forceUpdate()
-
-                return
-
-            _pushDebugFlag componentSpec.debug
-            if componentDebug
-                console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                    "#{@toString()} render!", c._id
-                _debugDepth += 1
-
-            try
-                element = transformedElement componentSpec.render.apply @
-            catch e
-                throw e unless e instanceof J.VALUE_NOT_READY
-            finally
-                if componentDebug
-                    console.debug _getDebugPrefix(), element
-                    _debugDepth -= 1
-                _popDebugFlag()
+            # It's important to re-render components in topological-sorted order.
+            # If we get the re-rendering order wrong, the child's props may have
+            # been inactivated by the parent's invalidation.
+            # Using @_id as the autorun sortKey ensures that parent components
+            # get re-rendered before their children.
+            @_componentId
+        )
 
         if element is undefined then element =
             $$ ('div'),

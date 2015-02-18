@@ -9,6 +9,15 @@ J.makeValueNotReadyObject = ->
     obj.stack = e.stack
     obj
 
+J.tryGet = (func, defaultValue = undefined) ->
+    # If value is ready then return it, otherwise
+    # return undefined (rather than throwing)
+    try
+        func()
+    catch e
+        throw e unless e instanceof J.VALUE_NOT_READY
+        defaultValue
+
 
 class J.Var
     ###
@@ -141,7 +150,7 @@ class J.Var
 
 
     tryGet: ->
-        J.util.tryGet => @get()
+        J.tryGet => @get()
 
 
     wrap: (value) ->

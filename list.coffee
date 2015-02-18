@@ -288,7 +288,7 @@ class J.List
 
     tryGet: (index) ->
         if @_dict.hasKey "#{index}"
-            J.util.tryGet => @get index
+            J.tryGet => @get index
         else
             undefined
 

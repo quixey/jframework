@@ -310,9 +310,3 @@ J.util =
             tag
         else
             @stringify tag
-
-    tryGet: (getFunc) ->
-        try
-            getFunc()
-        catch e
-            throw e unless e instanceof J.VALUE_NOT_READY

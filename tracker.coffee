@@ -187,6 +187,8 @@ Tracker.flush = (_opts) ->
         while pendingComputations.length or afterFlushCallbacks.length
             # Recompute all pending computations
             while pendingComputations.length
+                J.util.sortByKey pendingComputations,
+                    (c) -> c.sortKey
                 comp = pendingComputations.shift()
                 comp._recompute()
 
@@ -212,7 +214,7 @@ Tracker.flush = (_opts) ->
         willFlush = false
         inFlush = false
 
-Tracker.autorun = (f) ->
+Tracker.autorun = (f, sortKey = 0.5) ->
     if not _.isFunction f
         throw new Error "Tracker.autorun requires a function argument"
 
@@ -221,6 +223,7 @@ Tracker.autorun = (f) ->
 
     constructingComputation = true
     c = new Tracker.Computation f, Tracker.currentComputation
+    c.sortKey = sortKey
 
     if Tracker.active
         Tracker.onInvalidate -> c.stop()
@@ -245,8 +248,8 @@ Tracker.afterFlush = (f, sortKey = 0.5) ->
     if Meteor.isServer
         f = Meteor.bindEnvironment f
 
-    unless _.isNumber(sortKey) and 0 <= sortKey <= 1
-        throw new Error "afterFlush sortKey must be a number between 0 and 1 (lower comes first)"
+    unless _.isNumber(sortKey)
+        throw new Error "afterFlush sortKey must be a number (lower comes first)"
 
     afterFlushCallbacks.push func: f, sortKey: sortKey
     requireFlush()

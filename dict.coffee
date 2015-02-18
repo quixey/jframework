@@ -84,7 +84,8 @@ class J.Dict
     _get: (key, force) ->
         canGet = @isActive()
         if not canGet
-            throw new Meteor.Error "Can't get value of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Can't get key #{JSON.stringify key}
+                of inactive #{@constructor.name}: #{@}"
 
         # The @hasKey call is necessary to reactively invalidate
         # the computation if and when this field gets added/deleted.
@@ -288,7 +289,7 @@ class J.Dict
 
 
     tryGet: (key) ->
-        J.util.tryGet => @get key
+        J.tryGet => @get key
 
 
     toString: ->

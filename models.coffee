@@ -495,9 +495,9 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             upsert: collection.upsert.bind collection
             remove: collection.remove.bind collection
             tryFetch: (selector = {}, options = {}) ->
-                J.util.tryGet => @fetch selector, options
+                J.tryGet => @fetch selector, options
             tryFetchOne: (selector = {}, options = {}) ->
-                J.util.tryGet => @fetchOne selector, options
+                J.tryGet => @fetchOne selector, options
 
 
     J.models[modelName] = modelClass
