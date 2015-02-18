@@ -136,7 +136,12 @@ class J.AutoDict extends J.Dict
                 tag: "#{@toString()}._fields[#{J.util.stringify key}]"
             )
 
-            => @valueFunc.call null, key, @
+            =>
+                # This is to make sure that if @_keysVar is invalidated, we
+                # recompute that first.
+                @hasKey key
+
+                @valueFunc.call null, key, @
 
             if _.isFunction @onChange
                 (oldValue, newValue) => @onChange.call @, key, oldValue, newValue
