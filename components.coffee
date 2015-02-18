@@ -359,6 +359,7 @@ J._defineComponent = (componentName, componentSpec) ->
             if c.firstRun
                 @_renderComp = c
                 @_renderComp.tag = "#{@toString()}.render!"
+                @_renderComp.component = @
 
             else
                 if componentDebug

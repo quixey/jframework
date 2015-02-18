@@ -162,13 +162,6 @@ class J.AutoDict extends J.Dict
         throw new Meteor.Error "There is no AutoDict.delete"
 
 
-    forceGet: (key) ->
-        unless @isActive()
-            throw new Meteor.Error "#{@toString()} is stopped.
-                Current computation: #{Tracker.currentComputation?.tag}"
-        super
-
-
     getFields: (keys = @getKeys()) ->
         if keys is undefined
             undefined

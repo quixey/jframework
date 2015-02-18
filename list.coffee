@@ -92,6 +92,14 @@ class J.List
         @indexOf(value) >= 0
 
 
+    debug: ->
+        console.log @toString()
+        for key, v of @_dict._fields
+            console.group key
+            v.debug()
+            console.groupEnd()
+
+
     extend: (values) ->
         size = Tracker.nonreactive => @size()
         adder = {}
@@ -108,7 +116,7 @@ class J.List
 
     filter: (f = _.identity) ->
         # Parallelize running the filter function
-        filterOutputs = @forEach f
+        filterOutputs = @map(f).getValues()
         filtered = J.List [],
             tag:
                 filteredFrom: @
@@ -120,14 +128,19 @@ class J.List
 
 
     forEach: (f) ->
-        # Like @map but:
-        # - Lets you return undefined
-        # - Returns an array, not an AutoList
-
+        ###
+            Use when f has side effects.
+            Like @map except:
+            - Lets f return undefined
+            - Returns an array, not an AutoList
+            - Invalidates when @getValues() changes,
+              not when the returned array changes.
+        ###
         UNDEFINED = new J.Dict()
         mappedList = @map (v, i) ->
             ret = f v, i
             if ret is undefined then UNDEFINED else ret
+        @getValues() # For reactivity
         for value in mappedList.getValues()
             if value is UNDEFINED then undefined else value
 

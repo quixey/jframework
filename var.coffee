@@ -76,6 +76,10 @@ class J.Var
         @_value = @wrap value
 
 
+    debug: ->
+        console.log @toString()
+
+
     get: ->
         getter = Tracker.currentComputation
 
@@ -156,11 +160,13 @@ class J.Var
 
     wrap: (value) ->
         if value is undefined
-            throw new Meteor.Error "Can't set #{@toString()} value to undefined.
-                Use null or new J.VALUE_NOT_READY instead."
+            if Tracker.active
+                throw new Meteor.Error "Can't set #{@toString()} value to undefined.
+                    Use null or new J.VALUE_NOT_READY instead."
+            else
+                J.makeValueNotReadyObject()
         else if not @constructor.isValidValue value
             throw new Meteor.Error "Invalid value for Var: #{value}"
-
         if value instanceof J.VALUE_NOT_READY
             value
         else if J.util.isPlainObject value

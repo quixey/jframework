@@ -55,15 +55,6 @@ class J.AutoList extends J.List
         throw new Meteor.Error "There is no AutoList.clear"
 
 
-    get: ->
-        getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw new Meteor.Error "Can't get field of inactive #{@constructor.name}: #{@}"
-
-        super
-
-
     push: ->
         throw new Meteor.Error "There is no AutoList.push"
 

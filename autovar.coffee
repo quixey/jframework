@@ -133,12 +133,11 @@ class J.AutoVar
                 @_var.set value
 
 
+    debug: ->
+        console.log @toString()
+
 
     get: ->
-        unless @isActive()
-            console.error()
-            throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
-
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
@@ -146,6 +145,30 @@ class J.AutoVar
             # We're just using the Var to wrap the value, e.g.
             # array becomes J.List.
             return J.Var(@valueFunc.call null, @).get()
+
+        firstRunningAncestor = (comp) ->
+            if comp is null
+                null
+            else if not comp.stopped
+                comp
+            else if comp.autoVar
+                firstRunningAncestor comp.creator
+            else
+                null
+
+        if not @isActive()
+            ancestorComp = firstRunningAncestor @creator
+            if ancestorComp
+                # There's a running ancestor, so there's a chance
+                # that the function trying to get us will succeed
+                # next time. That's why we can say we're "computing".
+                if Tracker.active
+                    throw @constructor.makeComputingObject()
+                else
+                    return undefined
+            else
+                console.error()
+                throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
 
         if not @_valueComp?
             # console.log "GET", @toString(), "[first time]"
@@ -157,8 +180,6 @@ class J.AutoVar
 
         if @currentValueMightChange()
             if Tracker.active
-                # Add a dependency to the @_var in case its value changes
-                # when the recompute is done.
                 throw @constructor.makeComputingObject()
             else
                 return undefined
@@ -171,7 +192,7 @@ class J.AutoVar
 
 
     currentValueMightChange: (knownDependents = {}) ->
-        # Returns true @_var.value might change between now
+        # Returns true if @_var.value might change between now
         # and the end of the current flush (or the end of
         # hypothetically calling Tracker.flush() now).
         # Note that true doesn't mean the current value

@@ -7,6 +7,7 @@
 ###
 
 
+
 dummyComputation = Tracker.autorun ->
 if dummyComputation._id isnt 1
     # A computation was already created by one of the packages that jframework
@@ -49,7 +50,6 @@ withNoYieldsAllowed = (f) ->
         args = arguments
         Meteor._noYieldsAllowed -> f.apply null, args
 
-nextId = 1
 pendingComputations = []
 
 # true if a Tracker.flush is scheduled, or if we are in Tracker.flush now
@@ -94,7 +94,9 @@ Tracker.Computation = (f, parent) ->
 
     @firstRun = true
 
-    @_id = nextId++
+    @_id = J.getNextId()
+    if J.debugGraph then J.graph[@_id] = @
+
     @_onInvalidateCallbacks = []
 
     @_parent = parent
@@ -157,6 +159,17 @@ Tracker.Computation::_compute = ->
     finally
         setCurrentComputation previous
         inCompute = previousInCompute
+
+
+Tracker.Computation::debug = ->
+    console.group "Computation[#{@_id}]"
+    if @autoVar
+        @autoVar.debug()
+    else if @component
+        @component.debug()
+    console.groupEnd()
+
+
 
 Tracker.Computation::_recompute = ->
     @_recomputing = true

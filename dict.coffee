@@ -84,8 +84,8 @@ class J.Dict
     _get: (key, force) ->
         canGet = @isActive()
         if not canGet
-            throw new Meteor.Error "Can't get key #{JSON.stringify key}
-                of inactive #{@constructor.name}: #{@}"
+            throw new Meteor.Error "Computation[#{Tracker.currentComputation?._id}]
+                can't get key #{JSON.stringify key} of inactive #{@constructor.name}: #{@}"
 
         # The @hasKey call is necessary to reactively invalidate
         # the computation if and when this field gets added/deleted.
@@ -159,6 +159,14 @@ class J.Dict
         )
 
 
+    debug: ->
+        console.log @toString()
+        for key, v of @_fields
+            console.group key
+            v.debug()
+            console.groupEnd()
+
+
     delete: (key) ->
         if key of @_fields
             @_delete key
@@ -179,9 +187,11 @@ class J.Dict
 
 
     getFields: (keys = @getKeys()) ->
+        keysList = J.List.wrap keys
+        valuesList = keysList.map (key) => @get key
         fields = {}
-        for key in keys
-            fields[key] = @get key
+        keysList.forEach (key, i) ->
+            fields[key] = valuesList.get i
         fields
 
 
