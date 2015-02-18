@@ -93,9 +93,10 @@ class J.List
 
 
     extend: (values) ->
+        size = Tracker.nonreactive => @size()
         adder = {}
         for value, i in @constructor.unwrap values
-            adder["#{@size() + i}"] = value
+            adder["#{size + i}"] = value
         @_dict.setOrAdd adder
 
 
@@ -119,6 +120,7 @@ class J.List
         # Like @map but:
         # - Lets you return undefined
         # - Returns an array, not an AutoList
+
         UNDEFINED = new J.Dict()
         mappedList = @map (v, i) ->
             ret = f v, i
@@ -215,11 +217,12 @@ class J.List
 
 
     pop: ->
-        if @size() is 0
+        size = Tracker.nonreactive => @size()
+        if size is 0
             undefined
         else
-            lastValue = @get @size() - 1
-            @_dict.delete "#{@size() - 1}"
+            lastValue = @get size - 1
+            @_dict.delete "#{size - 1}"
             lastValue
 
 

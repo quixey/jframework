@@ -74,6 +74,12 @@ class J.Model
         # Nonreactive because the clone's fields are
         # their own new piece of application state.
         doc = Tracker.nonreactive => @toDoc false
+
+        # Note that clones substitute null for undefined.
+        for fieldName, value of doc
+            if value is undefined
+                doc[fieldName] = null
+
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
 
@@ -227,7 +233,7 @@ class J.Model
 
     toString: ->
         if @alive
-            EJSON.stringify @
+            Tracker.nonreactive => EJSON.stringify @
         else
             "<#{@modelClass.name} ##{@_id} DEAD>"
 

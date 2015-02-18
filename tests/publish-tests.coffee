@@ -419,6 +419,21 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
             if completeCount is 3 then onComplete()
     )
 
+addTest "Programming patterns - mutation in a forEach with fetching", (test, onComplete) ->
+    J.AutoVar 'a', (a) ->
+        myList = J.List()
+        J.List(['a', 'b', 'c']).map(
+            (x) ->
+                "#{x}-#{$$.Foo.fetchOne(x)}"
+        ).toArr().forEach(
+            (y) -> myList.push y
+        )
+        test.equal myList.toArr(), ['a-null', 'b-null', 'c-null']
+        a.stop()
+        onComplete()
+        null
+    , true
+
 
 Tinytest.addAsync "_lastTest2", (test, onComplete) ->
     setTimeout(

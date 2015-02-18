@@ -169,7 +169,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 tag:
                     component: @
                     tag: "#{@toString}.prop.#{propName}"
-                onChange: (oldValue, newValue) =>
+                onChange: do (propName, propSpec) => (oldValue, newValue) =>
                     if propSpec.onChange?
                         if componentDebug
                             console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
@@ -218,7 +218,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 tag:
                     component: @
                     tag: "#{@toString()}.state.#{stateFieldName}"
-                onChange: (oldValue, newValue) =>
+                onChange: do (stateFieldName, stateFieldSpec) => (oldValue, newValue) =>
                     if stateFieldSpec.onChange?
                         if componentDebug
                             console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
@@ -336,12 +336,15 @@ J._defineComponent = (componentName, componentSpec) ->
                     forceUpdate(). Use reactive expressions instead."
 
         # Transform J.List to array anywhere in the element children hierarchy
+        # and J.Dicts to plain objects in the case of the "style" property
         transformedElement = (elem) =>
             if React.isValidElement elem
                 if _.isArray elem.props.children
                     elem.props.children = (transformedElement e for e in elem.props.children)
                 else if elem.props.children?
                     elem.props.children = transformedElement elem.props.children
+                if elem.props.style instanceof J.Dict
+                    elem.props.style = elem.props.style.toObj()
                 elem
             else if elem instanceof J.List
                 transformedElement e for e in elem.toArr()

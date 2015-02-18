@@ -1286,8 +1286,13 @@ Tinytest.add "AutoVar - Invalidation non-propagation", (test) ->
     test.isFalse 'd' in history
 
 
+Tinytest.add "Programming patterns - Mutation in a forEach", (test) ->
+    mySet = {}
 
+    J.List(['a', 'b', 'c']).forEach (x) ->
+        mySet[x] = true
 
+    test.equal mySet, a: true, b: true, c: true
 
 
 
