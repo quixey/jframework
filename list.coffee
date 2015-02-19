@@ -136,11 +136,19 @@ class J.List
             - Invalidates when @getValues() changes,
               not when the returned array changes.
         ###
+        callerComp = Tracker.currentComputation
         UNDEFINED = new J.Dict()
         mappedList = @map (v, i) ->
+            if callerComp
+                # There's no such thing as partially invalidating
+                # the output of a forEach, since the whole thing
+                # is supposed to cause one big side effect.
+                # If a value of this list changes, or another
+                # reactive input to f changes, then the caller
+                # of the forEach should get invalidated.
+                Tracker.onInvalidate -> callerComp.invalidate()
             ret = f v, i
             if ret is undefined then UNDEFINED else ret
-        @getValues() # For reactivity
         for value in mappedList.getValues()
             if value is UNDEFINED then undefined else value
 

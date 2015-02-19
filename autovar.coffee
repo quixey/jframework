@@ -141,7 +141,7 @@ class J.AutoVar
                     return
 
                 else if e instanceof @constructor.COMPUTING
-                    console.log "...", @toString(), "got COMPUTING"
+                    # console.log "...", @toString(), "got COMPUTING"
                     # We want @_valueComp to invalidate itself, but we want
                     # the recalculation to happen at the end of the flush
                     # queue (FIFO flushing), not right away. That's why

@@ -451,7 +451,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 options = J.Dict(options).toObj()
 
                 if Meteor.isServer
-                    return @find(selector, options).fetch()
+                    return J.List @find(selector, options).fetch()
 
                 querySpec =
                     modelName: modelName
