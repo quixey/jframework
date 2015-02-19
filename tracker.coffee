@@ -129,8 +129,18 @@ Tracker.Computation::invalidate = ->
         # If we're currently in _recompute(), don't enqueue
         # ourselves, since we'll rerun immediately anyway
         if not @_recomputing and not @stopped
-            requireFlush()
             pendingComputations.push @
+
+            if pendingComputations.length > 1 and (
+                @sortKey < pendingComputations[pendingComputations.length - 1].sortKey
+            )
+                J.inc 'pcSort'
+                pendingComputations.sort (a, b) ->
+                    if a.sortKey < b.sortKey then -1
+                    else if a.sortKey > b.sortKey then 1
+                    else 0
+
+            requireFlush()
 
         @invalidated = true
 
@@ -195,41 +205,34 @@ Tracker.flush = (_opts) ->
     willFlush = true
     throwFirstError = _opts?._throwfirstError ? false
 
-    finishedTry = false
-    try
-        while pendingComputations.length or afterFlushCallbacks.length
-            # Recompute all pending computations
-            while pendingComputations.length
-                pendingComputations.sort (a, b) ->
-                    if a.sortKey < b.sortKey then -1
-                    else if a.sortKey > b.sortKey then 1
-                    else 0
-                comp = pendingComputations.shift()
-                comp._recompute()
+    # XXX JFramework is disabling Meteor's try-finally for performance.
+    # finishedTry = false
+    # try
+    while pendingComputations.length or afterFlushCallbacks.length
+        # Recompute all pending computations
+        while pendingComputations.length
+            comp = pendingComputations.shift()
+            comp._recompute()
+            J.inc 'recompute'
 
-            if afterFlushCallbacks.length
-                afterFlushCallbacks.sort (a, b) ->
-                    if a.sortKey < b.sortKey then -1
-                    else if a.sortKey > b.sortKey then 1
-                    else 0
+        if afterFlushCallbacks.length
+            J.inc 'afterFlush'
 
-                # Call one afterFlush callback, which may
-                # invalidate more computations
-                afc = afterFlushCallbacks.shift()
-                try
-                    afc.func.call null
-                catch e
-                    _throwOrLog "afterFlush", e
-
-        finishedTry = true
-
-    finally
-        if not finishedTry
-            # We're erroring
-            inFlush = false # needed before calling Tracker.flush() again
-            Tracker.flush _throwFirstError: false # finished flushing
-        willFlush = false
-        inFlush = false
+            # Call one afterFlush callback, which may
+            # invalidate more computations
+            afc = afterFlushCallbacks.shift()
+            # try
+            afc.func.call null
+            # catch e
+            #     _throwOrLog "afterFlush", e
+    # finishedTry = true
+    # finally
+    #     if not finishedTry
+    #         # We're erroring
+    #         inFlush = false # needed before calling Tracker.flush() again
+    #         Tracker.flush _throwFirstError: false # finished flushing
+    willFlush = false
+    inFlush = false
 
 Tracker.autorun = (f, sortKey = 0.5) ->
     if not _.isFunction f
@@ -269,6 +272,15 @@ Tracker.afterFlush = (f, sortKey = 0.5) ->
         throw new Error "afterFlush sortKey must be a number (lower comes first)"
 
     afterFlushCallbacks.push func: f, sortKey: sortKey
+
+    if afterFlushCallbacks.length > 1 and (
+        sortKey < afterFlushCallbacks[afterFlushCallbacks.length - 2].sortKey
+    )
+        afterFlushCallbacks.sort (a, b) ->
+            if a.sortKey < b.sortKey then -1
+            else if a.sortKey > b.sortKey then 1
+            else 0
+
     requireFlush()
 
 

@@ -204,8 +204,7 @@ class J.AutoVar
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
 
-        J.counts.recursionDepths[depth] ?= 0
-        J.counts.recursionDepths[depth] += 1
+        J.inc 'currentValueMightChange' + depth
 
         if not @_valueComp or @_invalidated
             return true
