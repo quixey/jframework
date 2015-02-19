@@ -200,14 +200,18 @@ Tracker.flush = (_opts) ->
         while pendingComputations.length or afterFlushCallbacks.length
             # Recompute all pending computations
             while pendingComputations.length
-                J.util.sortByKey pendingComputations,
-                    (c) -> c.sortKey
+                pendingComputations.sort (a, b) ->
+                    if a.sortKey < b.sortKey then -1
+                    else if a.sortKey > b.sortKey then 1
+                    else 0
                 comp = pendingComputations.shift()
                 comp._recompute()
 
             if afterFlushCallbacks.length
-                J.util.sortByKey afterFlushCallbacks,
-                    (afc) -> afc.sortKey
+                afterFlushCallbacks.sort (a, b) ->
+                    if a.sortKey < b.sortKey then -1
+                    else if a.sortKey > b.sortKey then 1
+                    else 0
 
                 # Call one afterFlush callback, which may
                 # invalidate more computations

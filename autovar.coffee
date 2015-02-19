@@ -5,10 +5,12 @@ class J.AutoVar
             @message = "Value will be available later in the computation."
 
     @makeComputingObject: ->
-        e = Error()
+        # The commented-out lines are kinda helpful
+        # for debugging but slow as hell.
+        # e = Error()
         obj = new @COMPUTING
         obj.isServer = Meteor.isServer
-        obj.stack = e.stack
+        # obj.stack = e.stack
         obj
 
     @getFirstActiveAncestor = (comp) ->
@@ -192,7 +194,7 @@ class J.AutoVar
         @_active
 
 
-    currentValueMightChange: (knownDependents = {}) ->
+    currentValueMightChange: (knownDependents = {}, depth = 0) ->
         # Returns true if @_var.value might change between now
         # and the end of the current flush (or the end of
         # hypothetically calling Tracker.flush() now).
@@ -202,7 +204,10 @@ class J.AutoVar
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
 
-        if @_invalidated
+        J.counts.recursionDepths[depth] ?= 0
+        J.counts.recursionDepths[depth] += 1
+
+        if not @_valueComp or @_invalidated
             return true
 
         if @_id of knownDependents
@@ -211,7 +216,7 @@ class J.AutoVar
 
         knownDependents[@_id] = true
         for varId, v of @_valueComp.gets
-            if v.tag?.autoVar?.currentValueMightChange knownDependents
+            if v.tag?.autoVar?.currentValueMightChange knownDependents, depth + 1
                 return true
         delete knownDependents[@_id]
         false

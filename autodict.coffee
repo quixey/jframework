@@ -109,6 +109,7 @@ class J.AutoDict extends J.Dict
         else if @_fieldSpecs?
             @_fieldSpecs.getKeys().forEach (key) => @_setupGetterSetter key
 
+
     _delete: (key) ->
         fieldAutoVar = @_fields[key]
         super
@@ -137,9 +138,10 @@ class J.AutoDict extends J.Dict
             )
 
             =>
-                # This is to make sure that if @_keysVar is invalidated, we
-                # recompute that first.
-                @hasKey key
+                # If @_keysVar needs recomputing, this @hasKey call will throw
+                # a COMPUTING. Then this field-autovar may or may not be left
+                # standing to recompute and continue past the assert.
+                J.assert @hasKey key
 
                 @valueFunc.call null, key, @
 
@@ -150,7 +152,6 @@ class J.AutoDict extends J.Dict
 
             creator: @creator
         )
-
         super
 
 
@@ -175,13 +176,18 @@ class J.AutoDict extends J.Dict
 
 
     getKeys: ->
-        keysList = @_keysVar.get()
-        if keysList is undefined then undefined else keysList.getValues()
+        @_keysVar.get()?.getValues()
 
 
     hasKey: (key) ->
-        keys = @_keysVar.get()
-        if keys is undefined then undefined else keys.contains key
+        if @_keysVar.currentValueMightChange()
+            # This might have a special @_replaceKeys side effect
+            # which then makes the logic in super work
+            keysList = Tracker.nonreactive => @_keysVar.get()
+            if keysList is undefined
+                if Tracker.active then throw J.AutoVar.makeComputingObject()
+                else return undefined
+        super
 
 
     isActive: ->

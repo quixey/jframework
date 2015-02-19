@@ -15,14 +15,10 @@ J.util =
             3. reject weird cases like comparing plain objects
         ###
 
-        if arguments.length isnt 2
-            throw 'Compare needs 2 arguments'
-
         if a instanceof J.List
             a = a.getValues()
         if b instanceof J.List
             b = b.getValues()
-
 
         if a is undefined or b is undefined
             if a is undefined and b is undefined then 0

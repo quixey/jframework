@@ -1,6 +1,10 @@
 J = {}
 J.stores = {}
 
+J.counts =
+    recompute: 0
+    afterFlush: 0
+    recursionDepths: {}
 
 J.g = J.graph = {} # jid: object
 J.debugGraph = true

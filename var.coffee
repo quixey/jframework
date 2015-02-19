@@ -4,10 +4,12 @@ class J.VALUE_NOT_READY extends Error
         @message = "Value not ready."
 
 J.makeValueNotReadyObject = ->
-    e = Error()
+    # The commented-out lines are kinda helpful
+    # for debugging but slow as hell.
+    # e = Error()
     obj = new J.VALUE_NOT_READY
     obj.isServer = Meteor.isServer
-    obj.stack = e.stack
+    # obj.stack = e.stack
     obj
 
 J.tryGet = (func, defaultValue = undefined) ->

@@ -515,6 +515,7 @@ Tinytest.add "List - extend", (test) ->
     Tracker.flush()
     test.equal valFuncHistory, ['two', 'three']
     lst = J.List ['zero', 'one']
+    d.stop()
 
     runCount = 0
     c = Tracker.autorun ->
