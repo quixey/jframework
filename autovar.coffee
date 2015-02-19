@@ -72,6 +72,8 @@ class J.AutoVar
         # invalidates itself, it schedules it to happen at afterFlush time.
         @_invalidated = false
 
+        @_invalidAncestors = {} # autoVarId: autoVar
+
         @_active = true
         @creator?.onInvalidate =>
             @stop()
@@ -84,6 +86,18 @@ class J.AutoVar
             Tracker.afterFlush =>
                 if @isActive() and not @_valueComp?
                     @_setupValueComp()
+
+
+    _addInvalidAncestor: (autoVar) ->
+        @_invalidAncestors[autoVar._id] = autoVar
+        for compId, comp of @_var._getters
+            comp.autoVar?._addInvalidAncestor autoVar
+
+
+    _removeInvalidAncestor: (autoVar) ->
+        delete @_invalidAncestors[autoVar._id]
+        for compId, comp of @_var._getters
+            comp.autoVar?._removeInvalidAncestor autoVar
 
 
     _setupValueComp: ->
@@ -103,10 +117,16 @@ class J.AutoVar
                     onChange: if _.isFunction @onChange then @onChange
 
             @_invalidated = false
+
             @_valueComp.onInvalidate =>
                 # A different computation invalidated this one
                 @_invalidated = true
+
                 # console.log "invalidated", @toString()
+
+                @_invalidAncestors = {}
+                if @_active
+                    @_addInvalidAncestor @
 
             # console.log "Recomputing ", @toString()
             try
@@ -116,11 +136,12 @@ class J.AutoVar
 
             catch e
                 if e instanceof J.VALUE_NOT_READY
+                    @_removeInvalidAncestor @
                     @_var.set e
                     return
 
                 else if e instanceof @constructor.COMPUTING
-                    # console.log "...", @toString(), "got COMPUTING"
+                    console.log "...", @toString(), "got COMPUTING"
                     # We want @_valueComp to invalidate itself, but we want
                     # the recalculation to happen at the end of the flush
                     # queue (FIFO flushing), not right away. That's why
@@ -140,6 +161,7 @@ class J.AutoVar
 
             # console.log "...", @toString(), "recomputed: ", value
 
+            @_removeInvalidAncestor @
             if @_valueComp.stopped
                 # It's kosher for a valueFunc to call stop() on its own AutoVar.
             else
@@ -177,9 +199,9 @@ class J.AutoVar
             # console.log "GET", @toString(), "[first time]"
             # Getting a lazy AutoVar for the first time
             @_setupValueComp()
-            if @_valueComp.invalidated then console.log "#{@toString()} invalidated during first get!"
+            # if @_valueComp.invalidated then console.log "#{@toString()} invalidated during first get!"
         else
-            # console.log "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
+            # console.log J.util.stringifyTag(Tracker.currentComputation?.tag), "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
 
         if @currentValueMightChange()
             if Tracker.active
@@ -194,7 +216,7 @@ class J.AutoVar
         @_active
 
 
-    currentValueMightChange: (knownDependents = {}, depth = 0) ->
+    currentValueMightChange: ->
         # Returns true if @_var.value might change between now
         # and the end of the current flush (or the end of
         # hypothetically calling Tracker.flush() now).
@@ -204,21 +226,14 @@ class J.AutoVar
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
 
-        J.inc 'currentValueMightChange' + depth
+        ret = not (@_valueComp? and _.isEmpty @_invalidAncestors)
 
-        if not @_valueComp or @_invalidated
-            return true
+        if ret
+            J.inc 'cmvcTrue'
+        else
+            J.inc 'cmvcFalse'
 
-        if @_id of knownDependents
-            throw new Meteor.Error "Cycle detected in AutoVar
-                dependency graph involving #{@toString()}"
-
-        knownDependents[@_id] = true
-        for varId, v of @_valueComp.gets
-            if v.tag?.autoVar?.currentValueMightChange knownDependents, depth + 1
-                return true
-        delete knownDependents[@_id]
-        false
+        ret
 
 
     set: ->

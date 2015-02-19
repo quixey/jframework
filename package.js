@@ -99,14 +99,12 @@ Package.onTest(function(api) {
     api.addFiles([
         "tests/util-tests.coffee",
         "tests/test-models.coffee",
-        "tests/jframework-tests.coffee"
+        "tests/jframework-tests.coffee",
+        "tests/autovar-tests.coffee"
     ]);
 
     api.addFiles([
-        "tests/publish-tests.coffee"
-    ], "client");
-
-    api.addFiles([
+        "tests/publish-tests.coffee",
         "tests/jframework-client-tests.coffee"
     ], "client");
 });

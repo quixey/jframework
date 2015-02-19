@@ -19,6 +19,9 @@ Tinytest.add "xxx", (test) ->
 
 
 Tinytest.add "AutoVar - dependency cycle", (test) ->
+    test.isTrue false, "Not implemented yet"
+    return
+
     firstRun = J.Var true
     runCount = 0
 
@@ -47,6 +50,7 @@ Tinytest.add "AutoVar - invalidation of parent computation", (test) ->
     v.set 6
     test.equal a.get(), undefined
     Tracker.flush()
+    console.log 'a is', a.get()
     test.equal a.get(), 6
 
 Tinytest.add "AutoVar - invalidation of parent computation 2", (test) ->
@@ -161,7 +165,9 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
         al
         (key) -> "#{key}-v"
     )
+    test.equal ad.hasKey('3-k'), true
     test.equal ad.get('3-k'), '3-k-v'
+    test.equal ad.get('1-k'), '1-k-v'
     test.equal ad.getFields(),
         '0-k': '0-k-v'
         '1-k': '1-k-v'
@@ -273,10 +279,11 @@ Tinytest.add "AutoVar - Topological invalidation order", (test) ->
 
     c = J.AutoVar(
         'c'
-        ->
+        (c) ->
             hist.push 'c'
+            if hist.length > 30 then crash
             a = J.AutoVar('a'
-                ->
+                (a) ->
                     hist.push 'a'
                     x.get()
                 true
@@ -287,11 +294,12 @@ Tinytest.add "AutoVar - Topological invalidation order", (test) ->
 
     d = J.AutoVar(
         'd'
-        ->
+        (d) ->
             hist.push 'd'
+            if hist.length > 30 then crash
 
             b = J.AutoVar('b'
-                ->
+                (b) ->
                     hist.push 'b'
                     x.get()
                 true
@@ -305,6 +313,9 @@ Tinytest.add "AutoVar - Topological invalidation order", (test) ->
         'e'
         ->
             hist.push 'e'
+            if hist.length > 30 then crash
+            a.get()
+            d.get()
             a.get() + d.get()
         true
     )
@@ -312,7 +323,6 @@ Tinytest.add "AutoVar - Topological invalidation order", (test) ->
     Tracker.flush()
     test.equal hist, ['c', 'a', 'd', 'b', 'e']
     test.equal c.get(), 5
-    hist = []
     x.set 6
     Tracker.flush()
     test.equal c.get(), 6
