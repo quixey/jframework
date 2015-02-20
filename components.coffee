@@ -175,7 +175,15 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-                        propSpec.onChange.call @, oldValue, newValue
+
+                        # If the onChange functions use not-ready/computing values,
+                        # we want that to be an error (unless they use J.tryGet).
+                        # So wrap the call in a computation.
+                        Tracker.autorun (c) =>
+                            try
+                                propSpec.onChange.call @, oldValue, newValue
+                            finally
+                                c.stop()
 
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
@@ -224,7 +232,15 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-                        stateFieldSpec.onChange.call @, oldValue, newValue
+
+                        # If the onChange functions use not-ready/computing values,
+                        # we want that to be an error (unless they use J.tryGet).
+                        # So wrap the call in a computation.
+                        Tracker.autorun (c) =>
+                            try
+                                stateFieldSpec.onChange.call @, oldValue, newValue
+                            finally
+                                c.stop()
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
@@ -255,7 +271,16 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "    #{@toString()}.#{reactiveName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-                        reactiveSpec.onChange.call @, oldValue, newValue
+
+                        # If the onChange functions use not-ready/computing values,
+                        # we want that to be an error (unless they use J.tryGet).
+                        # So wrap the call in a computation.
+                        Tracker.autorun (c) =>
+                            try
+                                reactiveSpec.onChange.call @, oldValue, newValue
+                            finally
+                                c.stop()
+
                     else null
                 )
 

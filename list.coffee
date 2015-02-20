@@ -154,8 +154,13 @@ class J.List
 
 
     get: (index) ->
-        unless _.isNumber(index)
-            throw new Meteor.Error "Index must be a number"
+        unless _.isNumber(index) and parseInt(index) is index
+            throw new Meteor.Error "Index must be an int"
+
+        if index < 0
+            unless -index < @size()
+                throw new Meteor.Error "List index out of range"
+            index = @size() + index
 
         @_dict.forceGet "#{index}"
 
@@ -263,6 +268,12 @@ class J.List
         reversedArr = Tracker.nonreactive => @getReversed().toArr()
         @set i, reversedArr[i] for i in [0...reversedArr.length]
         null
+
+
+    rFind: (f = _.identity) ->
+        for i in [@size() - 1..0]
+            x = @get i
+            return x if f x
 
 
     set: (index, value) ->
