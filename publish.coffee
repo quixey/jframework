@@ -57,9 +57,9 @@ Meteor.methods
 
         log '_updateDataQueries'
         if addedQuerySpecs.length
-            if false then log '    added:', J.util.stringify addedQuerySpecs
+            log '    added:', J.util.stringify qs for qs in addedQuerySpecs
         if deletedQuerySpecs.length
-            if false then log '    deleted:', J.util.stringify deletedQuerySpecs
+            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
 
         session = dataSessions[dataSessionId]
         if not session?

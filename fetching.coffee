@@ -22,21 +22,61 @@ J.fetching =
     _mergedQsSet: {} # mergedQuerySpecString: true
 
 
+    _getIdsForSimpleIdQs: (qs) ->
+        if _.isString(qs.selector) and not qs.fields?
+            [qs.selector]
+        else if _.size(qs.selector) is 1 and qs.selector._id? and not qs.fields?
+            if _.isString qs.selector._id
+                [qs.selector._id]
+            else if _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
+            qs.selector._id.$in? and not qs.fields? and not qs.skip? and not qs.limit?
+                qs.selector._id.$in
+
+
     isQueryReady: (querySpec) ->
-        ###
-            TODO: Smart isQueryReady
-            Synchronously figure out if it's implied by both @_mergedQuerySet
-            and @_nexMergedQuerySet. If so, return true.
-            Once this is done, we can probably get rid of the @_unmergedQsSet
-            and @_nextUnmergedQuerySet variables.
-        ###
-        qsString = EJSON.stringify querySpec
-        qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
+        querySpecString = EJSON.stringify querySpec
+        simpleIds = @_getIdsForSimpleIdQs querySpec
+
+        _isQueryReady = (readyQsSet) =>
+            return querySpecString of readyQsSet if not simpleIds?
+
+            for readyQsString of readyQsSet
+                readyQs = EJSON.parse readyQsString
+                continue if readyQs.modelName isnt querySpec.modelName
+
+                readySimpleIds = @_getIdsForSimpleIdQs readyQs
+                continue if not readySimpleIds?
+
+                return true if _.all(id in readySimpleIds for id in simpleIds)
+
+            false
+
+        _isQueryReady(@_mergedQsSet) and _isQueryReady(@_nextMergedQsSet)
 
 
     getMerged: (querySpecs) ->
-        # TODO: Client-side query merging
-        _.clone querySpecs
+        requestedIdsByModel = {} # modelName: {id: true}
+
+        mergedQuerySpecs = []
+
+        for qs in querySpecs
+            simpleIds = @_getIdsForSimpleIdQs qs
+            if simpleIds?.length
+                # We'll add a merged version of it later
+                requestedIdsByModel[qs.modelName] ?= {}
+                for id in simpleIds
+                    requestedIdsByModel[qs.modelName][id] = true
+            else
+                mergedQuerySpecs.push qs
+
+        _.forEach requestedIdsByModel, (requestedIdSet, modelName) ->
+            return if _.isEmpty requestedIdSet
+            mergedQuerySpecs.push
+                modelName: modelName
+                selector: _id: $in: _.keys(requestedIdSet).sort()
+
+        mergedQuerySpecs
+
 
     remergeQueries: ->
         return if @_requestInProgress or not @_requestsChanged

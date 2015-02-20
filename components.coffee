@@ -348,7 +348,7 @@ J._defineComponent = (componentName, componentSpec) ->
                     elem.props.style = elem.props.style.toObj()
                 elem
             else if elem instanceof J.List
-                transformedElement e for e in elem.toArr()
+                transformedElement e for e in elem.getValues()
             else if _.isArray elem
                 transformedElement e for e in elem
             else
