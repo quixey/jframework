@@ -13,6 +13,21 @@ nextComponentId = 0
 # must be defined before all components.
 componentDefinitionQueue = []
 
+componentDebug = Meteor.settings?.public?.jframework?.debug?.components ? false
+componentDebugStack = []
+_pushDebugFlag = (flag = null) ->
+    componentDebugStack.push componentDebug
+    componentDebug = flag ? componentDebug
+_popDebugFlag = ->
+    J.assert componentDebugStack.length > 0
+    componentDebug = componentDebugStack.pop()
+
+_debugDepth = 0
+_getDebugPrefix = (component = null, tabWidth = 4) ->
+    numSpaces = Math.max 0, tabWidth * (_debugDepth + 1) - 1
+    "#{(' 'for i in [0...numSpaces]).join('')}#{if component? and _debugDepth is 0 then component.toString() else ''}"
+
+
 J.dc = J.defineComponent = (componentName, componentSpec) ->
     componentDefinitionQueue.push
         name: componentName
@@ -28,7 +43,7 @@ J._defineComponent = (componentName, componentSpec) ->
         'componentWillUpdate'
     ]
         if memberName of componentSpec
-            throw new Meteor.Error "Unnecessary to define #{memberName} for J Framework components
+            throw new Meteor.Error "Unnecessary to define #{memberName} for JFramework components
                 (in #{componentName})"
 
     unless _.isFunction componentSpec.render
@@ -38,6 +53,16 @@ J._defineComponent = (componentName, componentSpec) ->
     delete reactSpec.props
     delete reactSpec.state
     delete reactSpec.reactives
+    delete reactSpec.debug
+
+    propSpecs = _.clone componentSpec.props ? {}
+    propSpecs.className ?=
+        type: React.PropTypes.string
+    propSpecs.children ?=
+        type: React.PropTypes.oneOfType [
+            React.PropTypes.element
+            React.PropTypes.arrayOf(React.PropTypes.element)
+        ]
 
     reactSpec.displayName = componentName
 
@@ -55,7 +80,15 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
-                @state[stateFieldName].get()
+                _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
+
+                ret = @state[stateFieldName].get()
+
+                if componentDebug
+                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", ret
+                _popDebugFlag()
+
+                ret
             else
                 # Setter
                 stateFields = {}
@@ -64,7 +97,37 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     # Make reactive getters for @reactives, e.g. @a gets/sets @reactives.a
-    for reactiveName, reactiveSpec of componentSpec.reactives ? {}
+
+    # For J.Routable components, make an automatic _route reactive
+    reactiveSpecByName = _.clone componentSpec.reactives ? {}
+    if J.Routable in (componentSpec.mixins ? [])
+        reactiveSpecByName.route ?=
+            type: J.$object
+            val: ->
+                params: {}
+                query: {}
+
+        pushNewRoute = (oldRouteSpec, newRouteSpec) ->
+            currentRoutes = @getRoutes()
+            lastRoute = currentRoutes[currentRoutes.length - 1]
+            isLastRoute = lastRoute.handler.displayName is @constructor.displayName
+
+            if isLastRoute and lastRoute.name?
+                newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
+                if newPath isnt URI().resource()
+                    # TODO: Block the re-rendering here; it's completely unnecessary.
+                    # console.debug 'PUSH', newPath
+                    ReactRouter.HistoryLocation.push newPath
+
+        origOnChange = reactiveSpecByName.route.onChange
+        if origOnChange?
+            reactiveSpecByName.route.onChange = (oldRouteSpec, newRouteSpec) ->
+                origOnChange.call @, oldRouteSpec, newRouteSpec
+                pushNewRoute.call @, oldRouteSpec, newRouteSpec
+        else
+            reactiveSpecByName.route.onChange = pushNewRoute
+
+    for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
             throw new Meteor.Error "Name conflict between #{componentName}.#{reactiveName} and
                 #{componentName}.reactives.#{reactiveName}"
@@ -77,9 +140,12 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.getDefaultProps = ->
         defaultProps = {}
-        for propName, propSpec of componentSpec.props
-            if 'default' of propSpec
-                defaultProps[propName] = propSpec.default
+        for propName, propSpec of propSpecs
+            defaultProps[propName] =
+                if 'default' of propSpec
+                    propSpec.default
+                else
+                    null
         defaultProps
 
 
@@ -91,50 +157,36 @@ J._defineComponent = (componentName, componentSpec) ->
         J._componentsByName[componentName][@_componentId] = @
 
         # Check for invalid prop names in @props
-        propSpecs = _.clone componentSpec.props ? {}
-        propSpecs.className ?=
-            type: React.PropTypes.string
-        propSpecs.children ?=
-            type: React.PropTypes.oneOfType [
-                React.PropTypes.element
-                React.PropTypes.arrayOf(React.PropTypes.element)
-            ]
         for propName, value of @props
             unless propName of propSpecs
                 throw new Meteor.Error "#{componentName} has no prop #{JSON.stringify propName}.
                     Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
-        @_props = {} # ReactiveVars for the props
+        @_props = {} # Vars for the props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
-            @_props[propName] = new ReactiveVar @props[propName],
-                propSpec.same ? J.util.equals
-            @prop[propName] = do (propName) => =>
-                @_props[propName].get()
+            @_props[propName] = new J.Var @props[propName],
+                tag:
+                    component: @
+                    tag: "#{@toString}.prop.#{propName}"
+                onChange: do (propName, propSpec) => (oldValue, newValue) =>
+                    if propSpec.onChange?
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+                        propSpec.onChange.call @, oldValue, newValue
 
-        # Set up @reactives
-        @reactives = {} # reactiveName: autoVar
-        depth = 0
-        for reactiveName, reactiveSpec of componentSpec.reactives ? {}
-            @reactives[reactiveName] = do (reactiveName, reactiveSpec) => J.AutoVar(
-                =>
-                    dots = "....................".substring(0, depth * 4)
-                    spaces = "                    ".substring(0, depth * 4)
-                    # console.log "#{dots} #{@toString()}.#{reactiveName}()"
-                    depth += 1
-                    ret = reactiveSpec.val.call @
-                    depth -= 1
-                    # console.log "#{spaces}    =", ret
-                    ret
-                (
-                    if reactiveSpec.onChange? then =>
-                        J.assert not Tracker.active
-                        # console.log "#{@toString()}.#{reactiveName}.onChange", arguments
-                        reactiveSpec.onChange.apply @, arguments
-                    else null
-                )
-                reactiveSpec.same?.bind(@) ? J.util.equals
-            )
+            @prop[propName] = do (propName, propSpec) => =>
+                _pushDebugFlag propSpec.debug ? componentSpec.debug
+
+                ret = @_props[propName].get()
+
+                if componentDebug
+                    console.debug _getDebugPrefix(@), "prop.#{propName}()", ret
+                _popDebugFlag()
+
+                ret
 
         # Set up @state
         initialState = {}
@@ -144,17 +196,70 @@ J._defineComponent = (componentName, componentSpec) ->
             else
                 {}
         for stateFieldName, stateFieldSpec of componentSpec.state
-            initialValue =
-                if stateFromRoute[stateFieldName] isnt undefined
-                    stateFromRoute[stateFieldName]
-                else if _.isFunction stateFieldSpec.default
-                    # TODO: If the type is J.$function then use the other if-branch
-                    stateFieldSpec.default.apply @
-                else
-                    stateFieldSpec.default
-            initialState[stateFieldName] = new ReactiveVar initialValue,
-                stateFieldSpec.same ? J.util.equals
+            if stateFromRoute[stateFieldName] isnt undefined
+                initialValue = stateFromRoute[stateFieldName]
+            else if _.isFunction stateFieldSpec.default
+                # TODO: If the type is J.$function then use the other if-branch
+                _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
+                if componentDebug
+                    console.debug _getDebugPrefix(@), "#{stateFieldName} !default()"
+                    _debugDepth += 1
 
+                initialValue = stateFieldSpec.default.apply @
+
+                if componentDebug
+                    console.debug _getDebugPrefix(), initialValue
+                    _debugDepth -= 1
+                _popDebugFlag()
+            else
+                initialValue = stateFieldSpec.default ? null
+
+            initialState[stateFieldName] = new J.Var initialValue,
+                tag:
+                    component: @
+                    tag: "#{@toString()}.state.#{stateFieldName}"
+                onChange: do (stateFieldName, stateFieldSpec) => (oldValue, newValue) =>
+                    if stateFieldSpec.onChange?
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+                        stateFieldSpec.onChange.call @, oldValue, newValue
+
+        # Set up @reactives
+        @reactives = {} # reactiveName: autoVar
+        for reactiveName, reactiveSpec of reactiveSpecByName
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
+                J.AutoVar(
+                    component: @
+                    tag: "#{@toString()}.reactives.#{reactiveName}",
+
+                    =>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "!#{reactiveName}()"
+                            _debugDepth += 1
+
+                        try
+                            retValue = reactiveSpec.val.call @
+                        finally
+                            if componentDebug
+                                console.debug _getDebugPrefix(), retValue
+                                _debugDepth -= 1
+                            _popDebugFlag()
+
+                        retValue
+
+                    if reactiveSpec.onChange? then (oldValue, newValue) =>
+                        if componentDebug
+                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+                        reactiveSpec.onChange.call @, oldValue, newValue
+                    else null
+                )
+
+        # Return initialState to React
         initialState
 
 
@@ -175,23 +280,7 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         for propName, newValue of nextProps
-            propSpec = componentSpec.props?[propName]
-            unless propSpec?
-                if propName is 'className'
-                    propSpec = type: React.PropTypes.string
-                else if propName is 'children'
-                    propSpec = type: React.PropTypes.oneOfType [
-                        React.PropTypes.element
-                        React.PropTypes.arrayOf(React.PropTypes.element)
-                    ]
-
-            equalsFunc = propSpec.same ? J.util.equals
-            oldValue = Tracker.nonreactive => @_props[propName].get()
-
             @_props[propName].set newValue
-
-            unless equalsFunc oldValue, newValue
-                propSpec.onChange?.call @, oldValue, newValue
 
 
     reactSpec.componentDidMount = ->
@@ -203,20 +292,15 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
-        if @_renderComp.invalidated
-            @_renderComp.stop()
-            @_renderComp = null
-            true
-        else
-            false
+        @_renderComp?.invalidated
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
-        componentSpec.componentDidUpdate?.call @, prevProps, prevState
-
         prevSetCallbacks = @_setCallbacks ? []
         delete @_setCallbacks
         callback() for callback in prevSetCallbacks
+
+        componentSpec.componentDidUpdate?.call @, prevProps, prevState
 
 
     reactSpec.componentWillUnmount = ->
@@ -227,9 +311,8 @@ J._defineComponent = (componentName, componentSpec) ->
 
         delete @_setCallbacks
 
-        if @_renderComp?
-            @_renderComp.stop()
-            @_renderComp = null
+        @_renderComp.stop()
+        delete @_renderComp
 
         for reactiveName, autoVar of @reactives
             autoVar.stop()
@@ -239,61 +322,112 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.render = ->
         ###
-            There are three times at which a component may be re-rendered:
-
-            1. Synchronously by React's rendering algorithm
-                This happens in the React lifecycle between the time a parent
-                component's render function has returned and the time
-                componentDidUpdate gets called on that parent. It's important
-                for child components to render synchronously during this
-                window because:
-                a. It's presumably more efficient to run React's DOM diff algorithm
-                   once on parent + children together, rather than once for the parent
-                   followed by once per child.
-                b. If the parent is setting the current component's @prop.children,
-                   the parent expects its @refs to be set up synchronously when its
-                   componentDidUpdate gets called (a.k.a. the time when any callbacks
-                   it passed to @set get called).
-
-            2. Asynchronously by Meteor's invalidated-computation flush
-                This is the only way a component can re-render in reaction to
-                something other than a change in props during a parent's re-render.
-
-            3. The application calls @forceUpdate()
-
-            @_renderComp's whole purpose is to invalidate, which means "let's
-            rerender at the earliest time (1) or (2)".
+            Note: The following code is not elegant.
+            It would be much better to have an AutoVar which
+            always computes the latest version of the element. Unfortunately,
+            in order for React to set up refs properly, we need to do the
+            rendering at the right synchronous time.
         ###
-        renderedComponent = null
+
         if @_renderComp?
-            # We must be at time (3), a forceUpdate call.
             if @_renderComp.invalidated
-                # We must be at time (2) and (3) simultaneously.
-                console.warn "It looks like you're unnecessarily calling forceUpdate()
-                    in #{@toString()}.render"
-            @_renderComp.stop()
+                @_renderComp.stop()
+            else
+                throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components don't allow
+                    forceUpdate(). Use reactive expressions instead."
 
-        @_renderComp = Tracker.autorun =>
-            renderedComponent = componentSpec.render.apply @
+        # Transform J.List to array anywhere in the element children hierarchy
+        # and J.Dicts to plain objects in the case of the "style" property
+        transformedElement = (elem) =>
+            if React.isValidElement elem
+                if _.isArray elem.props.children
+                    elem.props.children = (transformedElement e for e in elem.props.children)
+                else if elem.props.children?
+                    elem.props.children = transformedElement elem.props.children
+                if elem.props.style instanceof J.Dict
+                    elem.props.style = elem.props.style.toObj()
+                elem
+            else if elem instanceof J.List
+                transformedElement e for e in elem.toArr()
+            else if _.isArray elem
+                transformedElement e for e in elem
+            else
+                elem
 
-        @_renderComp.onInvalidate (c) =>
-            return if c.stopped
+        element = undefined
 
-            @_renderComp.stop()
+        Tracker.autorun((c) =>
+            if c.firstRun
+                @_renderComp = c
+                @_renderComp.tag = "#{@toString()}.render!"
+                @_renderComp.component = @
 
-            Tracker.afterFlush =>
-                # The component may have unmounted
-                return unless @isMounted()
+            else
+                if componentDebug
+                    console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
+                        "Invalidated #{@toString()}", c._id
 
-                # Between c's invalidation time and now, the component may
-                # have been re-rendered at time (1) - see comment above - in
-                # which case there would be a new @_renderComp
-                return unless c is @_renderComp
-
+                # This autorun was just here to let us respond to an invalidation
+                # at flush time once. The @forceUpdate() call will now stop this
+                # computation and create a new one.
+                @_renderComp.stop()
                 @_renderComp = null
-                @forceUpdate()
 
-        renderedComponent
+                # If we start the new @_renderComp inside this stopped @_renderComp,
+                # Meteor will automatically stop it.
+                Tracker.nonreactive => @forceUpdate()
+
+                return
+
+            _pushDebugFlag componentSpec.debug
+            if componentDebug
+                console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
+                    "#{@toString()} render!", c._id
+                _debugDepth += 1
+
+            element =
+                try
+                    transformedElement componentSpec.render.apply @
+                catch e
+                    # If the component is computing or not ready, we'll keep
+                    # element undefined for now and show nothing or a loading
+                    # message.
+                    if e instanceof J.VALUE_NOT_READY
+                        $$ ('div'),
+                            style:
+                                textAlign: 'center'
+                                opacity: 0.5
+                            $$ ('Loader')
+                    else if e instanceof J.AutoVar.COMPUTING
+                        # We want c to invalidate itself, but we want the
+                        # recalculation to happen at the end of the flush
+                        # queue (FIFO flushing), not right away. That's why
+                        # we're using afterFlush.
+                        Tracker.afterFlush(
+                            => c.invalidate()
+                            10 + @_componentId
+                        )
+                        $$ ('div'),
+                            style:
+                                textAlign: 'center'
+                                opacity: 0.5
+                            ("#{@toString()} computing...")
+                    else
+                        throw e
+                finally
+                    if componentDebug
+                        console.debug _getDebugPrefix(), element
+                        _debugDepth -= 1
+                    _popDebugFlag()
+
+        # It's important to re-render components in topological-sorted order.
+        # If we get the re-rendering order wrong, the child's props may have
+        # been inactivated by the parent's invalidation.
+        # Using @_id as the autorun sortKey ensures that parent components
+        # get re-rendered before their children.
+        10 + @_componentId)
+
+        element
 
 
     reactSpec.toString = ->

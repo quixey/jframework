@@ -1,14 +1,33 @@
 J = {}
 J.stores = {}
 
-if Meteor.isServer
-    Meteor.startup ->
-        # The point of "init" is to let the client wait
-        # until the initial subscription is ready.
-        # Stuff that can load in jerky pieces doesn't
-        # need to go here.
+J.counts = {}
+J.inc = (countName) ->
+    J.counts[countName] ?= 0
+    J.counts[countName] += 1
 
-        # If the server has already defined an "init"
-        # publisher, this is a no-op.
-        Meteor.publish 'init', ->
-            @ready()
+J.g = J.graph = {} # jid: object
+J.debugGraph = Meteor.settings?.public?.jframework?.debug?.graph ? false
+J._nextId = 0
+J.getNextId = ->
+    jid = J._nextId
+    J._nextId += 1
+    jid
+
+
+if Meteor.isServer
+    cslLog = console.log
+    console.log = ->
+        cslLog.apply console, arguments
+    console.debug = ->
+        cslLog.apply console, arguments
+    console.info = ->
+        cslLog.apply console, arguments
+    console.warn = ->
+        cslLog.apply console, arguments
+    console.groupCollapsed = ->
+        cslLog.apply console, arguments
+    console.groupEnd = ->
+        cslLog.apply console, arguments
+    console.group = ->
+        cslLog.apply console, arguments

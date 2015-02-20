@@ -6,6 +6,40 @@
     with a field type system to have a special value to indicate when _id is computed,
     like a "key" type for the _id, as opposed to being its own entropy.
     It's saying whether "_id" is part of the Normalized Kernel.
+
+  *
+    fetch and fetchOne - like find and findOne
+        * Acts like a Reactive, throwing a notReadyError
+        * Supports
+        * Being ready means
+            * More info from the server wouldn't change the query result
+        * fetchOne returns null (not undefined) meaning "Doesn't currently exist on source"
+        * Return Lists
+        * Supports recursive "fields"
+
+  *
+    Model instance field getters like .name():
+        If this is an attached instance, treat it like a Reactive's get
+            whose val is -> @fetchOne(@_id, fields: name: true)
+        Otherwise naively return the value, even if it's undefined, like a tryGet.
+
+  *
+    Each field can have a default include: true/false
+
+
+Notes about the difference between reactives and normal functions:
+    * Reactives should be pure functions of the database and the current time
+        * No outside inputs - not the current user's ID or the current UI state
+        * Time is okay because we want to allow stuff like User.latestPosts
+        * That means the only notReadyError should be ultimately propagated
+          from a fetch call somewhere in the AutoVar stack. No not-ready external calls.
+    * When a normal function throws a notReady error, the system knows to fetch
+      any non-ready fetch objects that were instantiated during the partially-run
+      code. When a J.Model Reactive throws a notReady error, the system also
+      knows to @modelClass.fetchOne @_id, fields: reactiveName: true
+      i.e. anticipate all data in that reactive.
+    * Reactives can have include: true, or even include: {name: true, posts: {votes: true}},
+      just like fields.
 ###
 
 
@@ -27,13 +61,25 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        new @ EJSON.fromJSONValue doc
+        fields = EJSON.fromJSONValue doc
+
+        for fieldName of @fieldSpecs
+            if fieldName not of fields
+                fields[fieldName] = J.makeValueNotReadyObject()
+
+        new @ fields
 
 
     clone: ->
         # Nonreactive because the clone's fields are
         # their own new piece of application state.
         doc = Tracker.nonreactive => @toDoc false
+
+        # Note that clones substitute null for undefined.
+        for fieldName, value of doc
+            if value is undefined
+                doc[fieldName] = null
+
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
 
@@ -42,7 +88,7 @@ class J.Model
 
 
     get: (fieldName) ->
-        unless @alive
+        if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
         @_fields.forceGet fieldName
@@ -164,7 +210,7 @@ class J.Model
 
         doc = toPrimitiveEjsonObj @_fields.toObj()
 
-        if denormalize and @modelClass.fieldSpecs._id is J.PropTypes.key
+        if denormalize and @modelClass.idSpec is J.PropTypes.key
             key = @key()
             J.assert not @_id? or @_id is key
             doc._id = key
@@ -186,7 +232,10 @@ class J.Model
 
 
     toString: ->
-        EJSON.stringify @
+        if @alive
+            Tracker.nonreactive => EJSON.stringify @
+        else
+            "<#{@modelClass.name} ##{@_id} DEAD>"
 
 
     typeName: ->
@@ -216,16 +265,15 @@ J.m = J.models = {}
 # must be defined before all components.
 modelDefinitionQueue = []
 
-J.dm = J.defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
+J.dm = J.defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelDefinitionQueue.push
         modelName: modelName
         collectionName: collectionName
-        fieldSpecs: fieldSpecs
         members: members,
         staticMembers: staticMembers
 
 
-J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members = {}, staticMembers = {}) ->
+J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelConstructor = (initFields = {}, @collection = @modelClass.collection) ->
         @_id = initFields._id ? null
 
@@ -250,14 +298,26 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
-        nonIdFieldSpecs = _.clone fieldSpecs
-        delete nonIdFieldSpecs._id
-        @_fields = J.Dict nonIdInitFields
-        @_fields.replaceKeys _.keys nonIdFieldSpecs
 
-        if @_id? and @modelClass.fieldSpecs._id is J.PropTypes.key
+        for fieldName, value of nonIdInitFields
+            if fieldName not of @modelClass.fieldSpecs
+                throw new Meteor.Error "Invalid field #{JSON.stringify fieldName} passed
+                    to #{modelClass.name} constructor"
+
+        @_fields = J.Dict()
+        for fieldName of @modelClass.fieldSpecs
+            @_fields.setOrAdd fieldName, null
+        @_fields.set nonIdInitFields
+
+        if @_id? and @modelClass.idSpec is J.PropTypes.key
             unless @_id is @key()
-                console.warn "#{@modelName}._id is #{@_id} but key() is #{@key()}"
+                console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{@key()}"
+
+        @reactives = {} # reactiveName: autoVar
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
+                J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
+                    => reactiveSpec.val.call @
 
         null
 
@@ -274,21 +334,27 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
     _.extend modelClass, J.Model
     _.extend modelClass, staticMembers
     modelClass.collection = null
-    modelClass.fieldSpecs = fieldSpecs
+
+    memberSpecs = _.clone members
+    modelClass.idSpec = memberSpecs._id
+    delete memberSpecs._id
+    modelClass.fieldSpecs = memberSpecs.fields
+    delete memberSpecs.fields
+    modelClass.reactiveSpecs = memberSpecs.reactives
+    delete memberSpecs.reactives
 
     modelClass.prototype = new J.Model()
-    _.extend modelClass.prototype, members
+    _.extend modelClass.prototype, memberSpecs
     modelClass.prototype.modelClass = modelClass
 
+    throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
-    # Wire up instance methods for getting/setting fields
+    # Set up instance methods for getting/setting fields
+    for fieldName, fieldSpec of modelClass.fieldSpecs
+        if fieldName is '_id'
+            throw new Meteor.Error "_id is not a valid field name for #{modelName}"
 
-    throw new Meteor.Error "#{modelName} fieldSpecs missing _id" unless '_id' of fieldSpecs
-
-    for fieldName, fieldSpec of fieldSpecs
-        continue if fieldName is '_id'
-
-        modelClass.prototype[fieldName] ?= do (fieldName) -> (value) ->
+        modelClass.prototype[fieldName] ?= do (fieldName, fieldSpec) -> (value) ->
             if arguments.length is 0
                 # Getter
                 @get fieldName
@@ -297,9 +363,20 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
                 setter[fieldName] = value
                 @set setter
 
+    # Set up reactives
+    for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+        if reactiveName of modelClass.fieldSpecs
+            throw new Meteor.Error "#{modelClass}.reactive can't have same name as field: #{reactiveName}"
 
-    # Wire up class methods for collection operations
+        unless reactiveSpec.val?
+            throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
+        modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
+            @reactives[reactiveName].get()
+
+
+
+    # Set up class methods for collection operations
     if collectionName?
         if Meteor.isClient
             # The client has attached instances which power
@@ -346,25 +423,66 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
             collection: collection,
             fetchDict: (docIdsOrQuery) ->
                 query =
-                    if _.isArray docIdsOrQuery
+                    if docIdsOrQuery instanceof J.List or _.isArray docIdsOrQuery
                         _id: $in: docIdsOrQuery
                     else
                         docIdsOrQuery
-                instances = @find(query).fetch()
-                instanceById = {}
-                for instance in instances
-                    instanceById[instance._id] = instance
+                instances = @fetch query
+                instanceById = J.Dict()
+                instances.forEach (instance) ->
+                    instanceById.setOrAdd instance._id, instance
                 instanceById
 
             fetchIds: (docIds, includeHoles = false) ->
                 instanceDict = @fetchDict docIds
-                instanceArr = []
+                instanceList = J.List()
                 for docId in docIds
-                    if instanceDict[docId]?
-                        instanceArr.push instanceDict[docId]
+                    if instanceDict.get(docId)?
+                        instanceList.push instanceDict.get(docId)
                     else if includeHoles
-                        instanceArr.push null
-                instanceArr
+                        instanceList.push null
+                instanceList
+
+            fetch: (selector = {}, options = {}) ->
+                if selector instanceof J.Dict
+                    selector = selector.toObj()
+                else if J.util.isPlainObject selector
+                    selector = J.Dict(selector).toObj()
+                options = J.Dict(options).toObj()
+
+                if Meteor.isServer
+                    return J.List @find(selector, options).fetch()
+
+                querySpec =
+                    modelName: modelName
+                    selector: selector
+                    fields: options.fields
+                    sort: options.sort
+                    skip: options.skip
+                    limit: options.limit
+
+                J.fetching.requestQuery querySpec
+
+            fetchOne: (selector = {}, options = {}) ->
+                if selector instanceof J.Dict
+                    selector = selector.toObj()
+                else if J.util.isPlainObject selector
+                    selector = J.Dict(selector).toObj()
+                options = J.Dict(options).toObj()
+
+                options = _.clone options
+                options.limit = 1
+                results = @fetch selector, options
+                if results is undefined
+                    undefined
+                else if results.size() is 0
+                    # Note that a normal Mongo cursor would
+                    # return undefined, but for us null means
+                    # "definitely doesn't exist" while undefined
+                    # means "fetching in progress".
+                    null
+                else
+                    results.get 0
 
             find: collection.find.bind collection
             findOne: collection.findOne.bind collection
@@ -376,6 +494,11 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
             update: collection.update.bind collection
             upsert: collection.upsert.bind collection
             remove: collection.remove.bind collection
+            tryFetch: (selector = {}, options = {}) ->
+                J.tryGet => @fetch selector, options
+            tryFetchOne: (selector = {}, options = {}) ->
+                J.tryGet => @fetchOne selector, options
+
 
     J.models[modelName] = modelClass
     $$[modelName] = modelClass
@@ -385,6 +508,6 @@ J._defineModel = (modelName, collectionName, fieldSpecs = {_id: null}, members =
 
 Meteor.startup ->
     for modelDef in modelDefinitionQueue
-        J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.fieldSpecs, modelDef.members, modelDef.staticMembers
+        J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.members, modelDef.staticMembers
 
     modelDefinitionQueue = null

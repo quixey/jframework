@@ -15,8 +15,10 @@ J.util =
             3. reject weird cases like comparing plain objects
         ###
 
-        if arguments.length isnt 2
-            throw 'Compare needs 2 arguments'
+        if a instanceof J.List
+            a = a.getValues()
+        if b instanceof J.List
+            b = b.getValues()
 
         if a is undefined or b is undefined
             if a is undefined and b is undefined then 0
@@ -55,6 +57,21 @@ J.util =
     containsId: (objOrIdArr, objOrId) ->
         J.util.flattenId(objOrId) in J.util.flattenIds objOrIdArr
 
+    consolify: (x) ->
+        # Copy of an object that looks nicer in the console
+        if x instanceof J.Dict
+            if x instanceof J.AutoDict and not x.active
+                x
+            else
+                _.extend {_: x.constructor.name}, x.toObj()
+        else if x instanceof J.List
+            if x instanceof J.AutoList and not x.active
+                x
+            else
+                [x.constructor.name].concat x.toArr()
+        else
+            x
+
     equals: (a, b) ->
         # Go one level deep into arrays because some reactive expressions
         # seem to make good use of this.
@@ -82,6 +99,16 @@ J.util =
 
         else
             false
+
+    diffStrings: (arrA, arrB) ->
+        unless _.all(_.isString(x) for x in arrA) and _.all(_.isString(x) for x in arrB)
+            throw new Meteor.Error "Diff only works on arrays of strings. Got:
+                #{arrA}, #{arrB}"
+
+        setA = J.util.makeDictSet arrA
+        setB = J.util.makeDictSet arrB
+        added: _.filter arrB, (x) -> x not of setA
+        deleted: _.filter arrA, (x) -> x not of setB
 
     filter: (list, predicate = _.identity, context) ->
         _.filter list, predicate, context
@@ -154,10 +181,9 @@ J.util =
 
     invalidateAtTime: (ms) ->
         # TODO: ms can be a Date in the future too
-        dep = new Deps.Dependency()
-        dep.depend()
-        setTimeout(
-            => dep.changed()
+        c = Tracker.currentComputation
+        if c? then Meteor.setTimeout(
+            => c.invalidate()
             ms
         )
 
@@ -228,15 +254,16 @@ J.util =
 
         obj[fieldSpecParts[fieldSpecParts.length - 1]] = value
 
-    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
-        keyFunc =
-            if _.isString keySpec
-                (x) -> J.util.getField x, keySpec
-            else if _.isFunction keySpec
-                keySpec
-            else
-                throw new Meteor.Error "Invalid keySpec: #{keySpec}"
+    _makeSortKeyFunc: (keySpec) ->
+        if _.isString keySpec
+            (x) -> J.util.getField x, keySpec
+        else if _.isFunction keySpec
+            keySpec
+        else
+            throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
+    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
+        keyFunc = @_makeSortKeyFunc keySpec
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
     sortKeyFunc: (x) ->
@@ -256,7 +283,9 @@ J.util =
         arr.reverse()
 
     stringify: (obj) ->
-        if obj is undefined
+        if obj instanceof J.VALUE_NOT_READY
+            '<NOT_READY>'
+        else if obj is undefined
             'undefined'
         else if (
             _.isString(obj) or _.isNumber(obj) or _.isBoolean(obj) or
@@ -270,48 +299,10 @@ J.util =
         else
             obj.toString()
 
-
-
-J.utilTests =
-    sorting: ->
-        J.assert J.util.compare(
-            [false, -2]
-            [1, -5, 6]
-        ) is -1
-        J.assert J.util.compare(
-            [1, 2, 3, 'test', 5]
-            [1, 2.0, 3, 'TeSt', 5.0]
-        ) is 0
-        J.assert J.util.compare(
-            {key: 6}
-            5
-        ) is 1
-        J.assert J.util.deepEquals(
-            ['G', 'f'].sort(J.util.compare)
-            ['f', 'G']
-        )
-
-    matchesUrlPattern: ->
-        J.assert J.util.matchesUrlPattern(
-            "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time=",
-            "func://yelp.com/search?cflt=restaurants&find_desc=chicken+wings&attrs=GoodForKids&find_loc=Mountain+View%2Cca&sortby=&open_time="
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?q=best+restaurants&loc={mountain+view,ca|}'
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?q=best+restaurants&loc={mountain\+view,ca|}'
-        )
-        J.assert not J.util.matchesUrlPattern(
-            'func://yelp.com/search?cflt=&q=best+restaurants&loc=mountain+view,CA',
-            'func://yelp.com/search?cflt=pizza&q=best+restaurants&loc={mountain+view,ca|}'
-        )
-        J.assert J.util.matchesUrlPattern(
-            'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements=',
-            'func://www.yellowpages.com/friendly-md/chicken-wings-restaurants?&refinements={a||b}'
-        )
-
-for funcName, testFunc of J.utilTests
-    testFunc()
+    stringifyTag: (tag) ->
+        if _.isObject(tag) and "tag" of tag
+            @stringifyTag tag.tag
+        else if _.isString tag
+            tag
+        else
+            @stringify tag
