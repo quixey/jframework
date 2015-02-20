@@ -57,9 +57,9 @@ Meteor.methods
 
         log '_updateDataQueries'
         if addedQuerySpecs.length
-            log '    added:', J.util.stringify addedQuerySpecs
+            if false then log '    added:', J.util.stringify addedQuerySpecs
         if deletedQuerySpecs.length
-            log '    deleted:', J.util.stringify deletedQuerySpecs
+            if false then log '    deleted:', J.util.stringify deletedQuerySpecs
 
         session = dataSessions[dataSessionId]
         if not session?
@@ -143,7 +143,7 @@ updateObservers = (dataSessionId) ->
     log = ->
         newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
         console.log.apply console, newArgs
-    log "***********update observers"
+    # log "Update observers"
 
     session = dataSessions[dataSessionId]
 
@@ -153,14 +153,14 @@ updateObservers = (dataSessionId) ->
     ).toArr()
     qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
 
-    console.log "qsStringsDiff", qsStringsDiff
+    # console.log "qsStringsDiff", qsStringsDiff
 
     fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
 
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
 
-        log "Add observer for: ", querySpec
+        # log "Add observer for: ", querySpec
 
         modelClass = J.models[querySpec.modelName]
 
@@ -175,10 +175,10 @@ updateObservers = (dataSessionId) ->
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                log querySpec, "server says ADDED:", id, fields
+                # log querySpec, "server says ADDED:", id, fields
 
                 if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
-                    log querySpec, "sending ADDED:", id, fields
+                    # log querySpec, "sending ADDED:", id, fields
                     @added modelClass.collection._name, id, fields
 
                 fieldsByModelIdQuery[querySpec.modelName] ?= {}
@@ -188,7 +188,7 @@ updateObservers = (dataSessionId) ->
                     fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
 
             changed: (id, fields) =>
-                log querySpec, "server says CHANGED:", id, fields
+                # log querySpec, "server says CHANGED:", id, fields
 
                 changedFields = {}
 
@@ -201,11 +201,11 @@ updateObservers = (dataSessionId) ->
                         changedFields[fieldName] = value
 
                 if not _.isEmpty changedFields
-                    log querySpec, "sending CHANGED:", id, changedFields
+                    # log querySpec, "sending CHANGED:", id, changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                log querySpec, "server says REMOVED:", id
+                # log querySpec, "server says REMOVED:", id
 
                 changedFields = {}
 
@@ -220,10 +220,10 @@ updateObservers = (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    log querySpec, "sending REMOVED:", id
+                    # log querySpec, "sending REMOVED:", id
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    log querySpec, "sending CHANGED:", id
+                    # log querySpec, "sending CHANGED:", id
                     @changed modelClass.collection._name, id, changedFields
 
         session.observerByQsString().setOrAdd qsString, observer
@@ -254,8 +254,8 @@ updateObservers = (dataSessionId) ->
 
             if _.isEmpty cursorValues
                 delete fieldsByModelIdQuery[querySpec.modelName][docId]
-                log querySpec, "sending REMOVED", docId
+                # log querySpec, "sending REMOVED", docId
                 @removed modelClass.collection._name, docId
             else if not _.isEmpty changedFields
-                log querySpec, "passing along CHANGED", docId, changedFields
+                # log querySpec, "passing along CHANGED", docId, changedFields
                 @changed modelClass.collection._name, id, changedFields

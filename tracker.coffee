@@ -193,7 +193,7 @@ Tracker.Computation::_recompute = ->
         @_recomputing = false
 
 Tracker.flush = (_opts) ->
-    console.debug "Tracker.flush!"
+    # console.debug "Tracker.flush!"
 
     if inFlush
         throw new Error "Can't call Tracker.flush while flushing"
@@ -295,7 +295,13 @@ class Tracker.Dependency
         its own values which other objects then mutate.
     ###
 
-    constructor: (@creator = Tracker.currentComputation) ->
+    constructor: (creator) ->
+        @creator =
+            if creator is undefined
+                Tracker.currentComputation
+            else
+                creator
+
         @_dependentsById = {}
 
 

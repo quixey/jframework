@@ -312,6 +312,7 @@ J._defineComponent = (componentName, componentSpec) ->
         delete @_setCallbacks
 
         @_renderComp.stop()
+        delete @_renderComp
 
         for reactiveName, autoVar of @reactives
             autoVar.stop()
@@ -396,7 +397,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             style:
                                 textAlign: 'center'
                                 opacity: 0.5
-                            ("#{@toString()} loading...")
+                            $$ ('Loader')
                     else if e instanceof J.AutoVar.COMPUTING
                         # We want c to invalidate itself, but we want the
                         # recalculation to happen at the end of the flush

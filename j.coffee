@@ -7,7 +7,7 @@ J.inc = (countName) ->
     J.counts[countName] += 1
 
 J.g = J.graph = {} # jid: object
-J.debugGraph = true
+J.debugGraph = Meteor.settings?.public?.jframework?.debug?.graph ? false
 J._nextId = 0
 J.getNextId = ->
     jid = J._nextId

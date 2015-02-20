@@ -71,6 +71,17 @@ Package.onUse(function(api) {
     ]);
 
     api.addFiles([
+        "components/Button.coffee",
+        "components/CancelButton.coffee",
+        "components/DeleteButton.coffee",
+        "components/KeyValueTable.coffee",
+        "components/LinkButton.coffee",
+        "components/Loader.coffee",
+        "components/SubmitCancelDelete.coffee",
+        "components/TableRow.coffee"
+    ]);
+
+    api.addFiles([
         "publish.coffee"
     ], "server");
 

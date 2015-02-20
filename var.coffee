@@ -92,10 +92,10 @@ class J.Var
         if getter? and getter._id not of @_getters
             if getter._id not of @_getters
                 @_getters[getter._id] = getter
-                getter.gets ?= {} # computationId: computation
-                getter.gets[@_id] = @
+                # getter.gets ?= {} # computationId: computation
+                # getter.gets[@_id] = @
                 getter.onInvalidate =>
-                    delete getter.gets[@_id]
+                    # delete getter.gets[@_id]
                     delete @_getters[getter._id]
 
         if @_value instanceof J.VALUE_NOT_READY

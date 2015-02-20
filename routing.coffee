@@ -50,12 +50,15 @@ if Meteor.isClient and ReactRouter?
 
 
 if Meteor.isClient then Meteor.startup ->
-    J._dataSubscription = Meteor.subscribe '_jdata', J.fetching.SESSION_ID, ->
-        if J._routeGenerator?
-            rootRoute = J._routeGenerator()
+    J._dataSubscription = Meteor.subscribe '_jdata', J.fetching.SESSION_ID,
+        onReady: ->
+            if J._routeGenerator?
+                rootRoute = J._routeGenerator()
 
-            ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-                React.render $$(Handler), document.body
+                ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
+                    React.render $$(Handler), document.body
 
-        else
-            console.warn "No router defined. Call J.defineRouter to define a router."
+            else
+                console.warn "No router defined. Call J.defineRouter to define a router."
+        onError: ->
+            console.log "Subscription stopped!"
