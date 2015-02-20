@@ -10,7 +10,7 @@ J.dc 'KeyValueTable',
 
 
     render: ->
-        keys = _.keys @prop.obj()
+        keys = @prop.obj().getKeys()
         if @prop.sortKeys() then keys.sort J.util.compare
 
         $$ ('table'),
@@ -21,7 +21,7 @@ J.dc 'KeyValueTable',
                 {}
 
             for key in keys
-                value = @prop.obj()[key]
+                value = @prop.obj().get(key)
 
                 $$ ('tr'),
                     key: key
@@ -41,7 +41,7 @@ J.dc 'KeyValueTable',
                         if React.isValidElement value
                             value
 
-                        else if J.util.isPlainObject value
+                        else if value instanceof J.Dict
                             $$ ('KeyValueTable'),
                                 obj: value
 
