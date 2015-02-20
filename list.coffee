@@ -281,6 +281,18 @@ class J.List
             @_dict.setReadOnly @readOnly, deep
 
 
+    slice: (startIndex, endIndex = @size()) ->
+        if Tracker.active
+            J.AutoList(
+                =>
+                    Math.max 0,
+                        Math.min(@size(), endIndex) - startIndex
+                (i) => @get startIndex + i
+            )
+        else
+            J.List @getValues().slice startIndex, endIndex
+
+
     sort: (keySpec = J.util.sortKeyFunc) ->
         sortedArr = Tracker.nonreactive => @getSorted(keySpec).toArr()
         @set i, sortedArr[i] for i in [0...sortedArr.length]

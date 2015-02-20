@@ -18,7 +18,10 @@ class J.AutoList extends J.List
             onChange: null # doesn't support onChange=true
             tag: tag
 
-        @sizeFunc = sizeFunc
+        if _.isNumber(sizeFunc)
+            @sizeFunc = -> sizeFunc
+        else
+            @sizeFunc = sizeFunc
         @valueFunc = valueFunc
         @onChange = onChange
 

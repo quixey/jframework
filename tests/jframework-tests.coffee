@@ -1306,9 +1306,31 @@ Tinytest.add "Programming patterns - Mutation in a forEach", (test) ->
     test.equal mySet, a: true, b: true, c: true
 
 
-
-
-
+Tinytest.add "List - slice", (test) ->
+    lst = J.List ['zero', 'one', 'two', 'three', 'four']
+    runCount = 0
+    s = J.AutoVar(
+        's'
+        ->
+            runCount += 1
+            lst.slice 1, 2
+    )
+    test.equal s.get().size(), 1
+    test.equal s.get().get(0), 'one'
+    s.get()
+    s.get()
+    lst.set 1, 'ONE'
+    Tracker.flush()
+    test.equal s.get().get(0), 'ONE'
+    s.get()
+    s.get()
+    test.equal runCount, 1
+    lst.set 2, 'TWO'
+    Tracker.flush()
+    lst.set 4, 'FOUR'
+    Tracker.flush()
+    test.equal s.get().get(0), 'ONE'
+    test.equal runCount, 1
 
 
 
