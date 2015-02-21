@@ -29,6 +29,9 @@ class J.AutoDict extends J.Dict
 
         if _.isArray(keysFunc) or keysFunc instanceof J.List
             # Overload (2) -> (1)
+            # Passing an array seems like good evidence that
+            # the creator might want to call a fieldFunc.
+            withFieldFuncs = _.isArray keysFunc
             @_keysList = J.List.wrap keysFunc
             keysFunc = => @_keysList
 
@@ -41,6 +44,11 @@ class J.AutoDict extends J.Dict
             valueFunc = (key) =>
                 v = @_fieldSpecs.forceGet key
                 if _.isFunction v then v(key) else v
+            withFieldFuncs = true
+
+        else
+            # Overload (1)
+            withFieldFuncs = false
 
 
         unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
@@ -51,6 +59,7 @@ class J.AutoDict extends J.Dict
             creator: Tracker.currentComputation
             onChange: null # doesn't support onChange=true
             tag: tag
+            withFieldFuncs: withFieldFuncs
 
         @keysFunc = keysFunc
         @valueFunc = valueFunc
@@ -89,13 +98,14 @@ class J.AutoDict extends J.Dict
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
-                @_replaceKeys keys
+                @_replaceKeys keysArr
 
-                keys
+                keysArr
 
             if @onChange? then true else null
 
             creator: @creator
+            wrap: false
         )
 
         @_active = true
@@ -104,9 +114,10 @@ class J.AutoDict extends J.Dict
                 # console.log 'INVALIDATED', @toString()
                 @stop()
 
-        if @_keysList?
+        if @_keysList? and @withFieldFuncs
             @_keysList.forEach (key) => @_setupGetterSetter key
         else if @_fieldSpecs?
+            J.assert @withFieldFuncs
             @_fieldSpecs.getKeys().forEach (key) => @_setupGetterSetter key
 
 
@@ -176,15 +187,15 @@ class J.AutoDict extends J.Dict
 
 
     getKeys: ->
-        @_keysVar.get()?.getValues()
+        @_keysVar.get()
 
 
     hasKey: (key) ->
         if @_keysVar.currentValueMightChange()
             # This might have a special @_replaceKeys side effect
             # which then makes the logic in super work
-            keysList = Tracker.nonreactive => @_keysVar.get()
-            if keysList is undefined
+            keysArr = Tracker.nonreactive => @_keysVar.get()
+            if keysArr is undefined
                 if Tracker.active then throw J.AutoVar.makeComputingObject()
                 else return undefined
         super

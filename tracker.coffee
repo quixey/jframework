@@ -237,6 +237,8 @@ Tracker.flush = (_opts) ->
 Tracker.autorun = (f, sortKey = 0.5) ->
     if not _.isFunction f
         throw new Error "Tracker.autorun requires a function argument"
+    if not _.isNumber sortKey
+        throw new Error "Tracker.autorun sortKey must be a number"
 
     if Meteor.isServer
         f = Meteor.bindEnvironment f

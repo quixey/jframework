@@ -41,6 +41,8 @@ class J.Var
                 creator: The computation that "created" this var,
                     which makes this var not active when it
                     invalidates.
+                wrap: If true, wrap the argument to @set in a List
+                    or Dict if it's an array or plain object.
         ###
 
         if arguments.length is 0
@@ -66,6 +68,7 @@ class J.Var
             throw new Meteor.Error "Invalid Var onChange: #{options.onChange}"
         else
             @onChange = null
+        @wrap = options?.wrap ? true
 
         @_getters = {} # computationId: computation
 
@@ -75,7 +78,7 @@ class J.Var
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
-        @_value = @wrap value
+        @_value = @maybeWrap value
 
 
     debug: ->
@@ -116,7 +119,7 @@ class J.Var
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 
         previousValue = @_value
-        @_value = @wrap value
+        @_value = @maybeWrap value
 
         if previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
@@ -160,7 +163,7 @@ class J.Var
         J.tryGet => @get()
 
 
-    wrap: (value) ->
+    maybeWrap: (value) ->
         if value is undefined
             if Tracker.active
                 throw new Meteor.Error "Can't set #{@toString()} value to undefined.
@@ -171,9 +174,9 @@ class J.Var
             throw new Meteor.Error "Invalid value for Var: #{value}"
         if value instanceof J.VALUE_NOT_READY
             value
-        else if J.util.isPlainObject value
+        else if @wrap and J.util.isPlainObject value
             J.Dict value
-        else if _.isArray(value)
+        else if @wrap and _.isArray(value)
             J.List value
         else if value instanceof J.Var
             # Prevent any nested J.Var situation

@@ -7,6 +7,7 @@ class J.Dict
                     when it invalidates.
                 tag: A toString-able object for debugging
                 onChange: function(key, oldValue, newValue) or null
+                withFieldFuncs=true: Make @[fieldName]() getter/setter
         ###
 
         unless @ instanceof J.Dict
@@ -39,6 +40,7 @@ class J.Dict
         else
             @creator = options.creator
         @onChange = options?.onChange ? null
+        @withFieldFuncs = options?.withFieldFuncs ? true
 
         @_fields = {}
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
@@ -109,11 +111,9 @@ class J.Dict
                 dict: @
                 fieldKey: key
                 tag: "#{@toString()}._fields[#{J.util.stringify key}]"
-            onChange: if @onChange?
-                (oldValue, newValue) =>
-                    @onChange.call @, key, oldValue, newValue
+            onChange: @onChange?.bind(@, key) ? null
 
-        @_setupGetterSetter key
+        if @withFieldFuncs then @_setupGetterSetter key
 
         @_keysDep.changed()
         if @_hasKeyDeps[key]?

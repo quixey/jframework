@@ -56,6 +56,7 @@ class J.List
             onChange: if @onChange?
                 (key, oldValue, newValue) =>
                     @onChange.call @, parseInt(key), oldValue, newValue
+            withFieldFuncs: false
 
 
     _resize: (size) ->

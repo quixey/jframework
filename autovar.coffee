@@ -38,6 +38,7 @@ class J.AutoVar
 
             options:
                 creator: Set a different creator computation.
+                wrap: Same as Var.wrap
         ###
 
         unless @ instanceof J.AutoVar
@@ -67,6 +68,7 @@ class J.AutoVar
             @creator = Tracker.currentComputation
         else
             @creator = options.creator
+        @wrap = options?.wrap ? true
 
         # We can't use @_valueComp.invalidated because when @_valueComp
         # invalidates itself, it schedules it to happen at afterFlush time.
@@ -115,6 +117,7 @@ class J.AutoVar
                         tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
                     creator: @_valueComp
                     onChange: if _.isFunction @onChange then @onChange
+                    wrap: @wrap
 
             @_invalidated = false
 

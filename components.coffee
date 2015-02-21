@@ -165,7 +165,7 @@ J._defineComponent = (componentName, componentSpec) ->
         @_props = {} # Vars for the props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
-            @_props[propName] = new J.Var @props[propName],
+            @_props[propName] = J.Var @props[propName],
                 tag:
                     component: @
                     tag: "#{@toString}.prop.#{propName}"
@@ -222,7 +222,7 @@ J._defineComponent = (componentName, componentSpec) ->
             else
                 initialValue = stateFieldSpec.default ? null
 
-            initialState[stateFieldName] = new J.Var initialValue,
+            initialState[stateFieldName] = J.Var initialValue,
                 tag:
                     component: @
                     tag: "#{@toString()}.state.#{stateFieldName}"

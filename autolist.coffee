@@ -3,14 +3,21 @@ class J.AutoList extends J.List
         unless @ instanceof J.AutoList
             return new J.AutoList tag, sizeFunc, valueFunc, onChange
 
-        if _.isFunction tag
+        if _.isFunction(tag) or _.isNumber(tag)
             # Alternate signature: J.AutoList(sizeFunc, valueFunc, onChange)
             onChange = valueFunc
             valueFunc = sizeFunc
             sizeFunc = tag
             tag = undefined
 
-        unless _.isFunction(sizeFunc) and _.isFunction(valueFunc)
+        if _.isNumber(sizeFunc)
+            @sizeFunc = -> sizeFunc
+        else
+            @sizeFunc = sizeFunc
+
+        @valueFunc = valueFunc
+
+        unless _.isFunction(@sizeFunc) and _.isFunction(@valueFunc)
             throw new Meteor.Error "AutoList must be constructed with sizeFunc and valueFunc"
 
         super [],
@@ -18,11 +25,6 @@ class J.AutoList extends J.List
             onChange: null # doesn't support onChange=true
             tag: tag
 
-        if _.isNumber(sizeFunc)
-            @sizeFunc = -> sizeFunc
-        else
-            @sizeFunc = sizeFunc
-        @valueFunc = valueFunc
         @onChange = onChange
 
         @_dict = J.AutoDict(
