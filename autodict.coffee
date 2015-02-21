@@ -61,6 +61,8 @@ class J.AutoDict extends J.Dict
             tag: tag
             withFieldFuncs: withFieldFuncs
 
+        delete @_keysDep
+
         @keysFunc = keysFunc
         @valueFunc = valueFunc
 
@@ -120,11 +122,16 @@ class J.AutoDict extends J.Dict
             J.assert @withFieldFuncs
             @_fieldSpecs.getKeys().forEach (key) => @_setupGetterSetter key
 
+        @_hasKeyDeps = {} # realOrImaginedKey: Dependency
+
 
     _delete: (key) ->
         fieldAutoVar = @_fields[key]
         super
         fieldAutoVar.stop()
+        if @_hasKeyDeps[key]?
+            @_hasKeyDeps[key].changed()
+            delete @_hasKeyDeps[key]
 
 
     _get: (key, force) ->
@@ -163,7 +170,12 @@ class J.AutoDict extends J.Dict
 
             creator: @creator
         )
-        super
+
+        if @withFieldFuncs then @_setupGetterSetter key
+
+        if @_hasKeyDeps[key]?
+            @_hasKeyDeps[key].changed()
+            delete @_hasKeyDeps[key]
 
 
     clear: ->
@@ -198,7 +210,12 @@ class J.AutoDict extends J.Dict
             if keysArr is undefined
                 if Tracker.active then throw J.AutoVar.makeComputingObject()
                 else return undefined
-        super
+
+        if Tracker.active
+            @_hasKeyDeps[key] ?= new Tracker.Dependency @creator
+            @_hasKeyDeps[key].depend()
+
+        key of @_fields
 
 
     isActive: ->

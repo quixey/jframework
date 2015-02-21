@@ -16,7 +16,7 @@ class J.Dict
         @_id = J.getNextId()
         if J.debugGraph then J.graph[@_id] = @
 
-        @tag = options?.tag
+        @tag = if J.debugTags then options?.tag else null
 
         if fieldsOrKeys?
             if fieldsOrKeys instanceof J.Dict
@@ -43,7 +43,6 @@ class J.Dict
         @withFieldFuncs = options?.withFieldFuncs ? true
 
         @_fields = {}
-        @_hasKeyDeps = {} # realOrImaginedKey: Dependency
         @_keysDep = new Tracker.Dependency @creator
 
         @readOnly = false
@@ -69,10 +68,7 @@ class J.Dict
         delete @[key]
         delete @_fields[key]
 
-        @_keysDep.changed()
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
+        @_keysDep?.changed()
 
 
     _forceSet: (fields) ->
@@ -103,9 +99,7 @@ class J.Dict
 
 
     _initField: (key, value) ->
-        # This question mark is because a child class may have
-        # already initted this.
-        @_fields[key] ?= J.Var value,
+        @_fields[key] = J.Var value,
             creator: @creator
             tag:
                 dict: @
@@ -115,10 +109,7 @@ class J.Dict
 
         if @withFieldFuncs then @_setupGetterSetter key
 
-        @_keysDep.changed()
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
+        @_keysDep?.changed()
 
 
     _replaceKeys: (newKeys) ->
@@ -205,10 +196,7 @@ class J.Dict
 
 
     hasKey: (key) ->
-        if Tracker.active
-            @_hasKeyDeps[key] ?= new Tracker.Dependency @creator
-            @_hasKeyDeps[key].depend()
-
+        @_keysDep.depend()
         key of @_fields
 
 

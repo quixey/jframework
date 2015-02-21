@@ -61,7 +61,7 @@ class J.Var
         else
             throw new Meteor.Error "Invalid Var creator: #{options.creator}"
 
-        @tag = options?.tag
+        @tag = if J.debugTags then options?.tag else null
         if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?

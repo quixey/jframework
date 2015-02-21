@@ -8,6 +8,7 @@ J.inc = (countName) ->
 
 J.g = J.graph = {} # jid: object
 J.debugGraph = Meteor.settings?.public?.jframework?.debug?.graph ? false
+J.debugTags = Meteor.settings?.public?.jframework?.debug?.tags ? false
 J._nextId = 0
 J.getNextId = ->
     jid = J._nextId

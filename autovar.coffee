@@ -61,7 +61,7 @@ class J.AutoVar
         @_id = J.getNextId()
         if J.debugGraph then J.graph[@_id] = @
 
-        @tag = tag
+        @tag = if J.debugTags then tag else null
         @valueFunc = valueFunc
         @onChange = onChange ? null
         if options?.creator is undefined

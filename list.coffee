@@ -21,7 +21,7 @@ class J.List
         @_id = J.getNextId()
         if J.debugGraph then J.graph[@_id] = @
 
-        @tag = options?.tag
+        @tag = if J.debugTags then options?.tag else null
 
         if values instanceof J.List
             @tag ?=
@@ -139,17 +139,22 @@ class J.List
         ###
         callerComp = Tracker.currentComputation
         UNDEFINED = new J.Dict()
-        mappedList = @map (v, i) ->
-            if callerComp
-                # There's no such thing as partially invalidating
-                # the output of a forEach, since the whole thing
-                # is supposed to cause one big side effect.
-                # If a value of this list changes, or another
-                # reactive input to f changes, then the caller
-                # of the forEach should get invalidated.
-                Tracker.onInvalidate -> callerComp.invalidate()
-            ret = f v, i
-            if ret is undefined then UNDEFINED else ret
+        mappedList = @map(
+            (v, i) =>
+                if callerComp
+                    # There's no such thing as partially invalidating
+                    # the output of a forEach, since the whole thing
+                    # is supposed to cause one big side effect.
+                    # If a value of this list changes, or another
+                    # reactive input to f changes, then the caller
+                    # of the forEach should get invalidated.
+                    Tracker.onInvalidate -> callerComp.invalidate()
+                ret = f v, i
+                if ret is undefined then UNDEFINED else ret
+            tag: "forEach(#{@toString()})"
+            sourceList: @
+            mapFunc: f
+        )
         for value in mappedList.getValues()
             if value is UNDEFINED then undefined else value
 
@@ -220,31 +225,46 @@ class J.List
         @_dict.isActive()
 
 
-    lazyMap: (f = _.identity) ->
+    lazyMap: (f = _.identity, tag) ->
+        tag ?= (
+            tag: "mapped(#{@toString()})"
+            sourceList: @
+            mapFunc: f
+        )
         if Tracker.active
             J.AutoList(
+                (
+                    tag: tag
+                    sourceList: @
+                    mapFunc: f
+                )
                 => @size()
                 (i) => f @get(i), i
                 null # This makes it lazy
             )
         else
-            J.List @getValues().map f
+            J.List @getValues().map(f), tag: tag
 
 
-    map: (f = _.identity) ->
+    map: (f = _.identity, tag) ->
         # Enables parallel fetching
+        tag ?= (
+            tag: "mapped(#{@toString()})"
+            sourceList: @
+            mapFunc: f
+        )
         if Tracker.active
             if f is _.identity and @ instanceof J.AutoList and @onChange
                 @
             else
                 mappedAl = J.AutoList(
-                    "mapped #{@toString()}"
+                    tag
                     => @size()
                     (i) => f @get(i), i
                     true # This makes it not lazy
                 )
         else
-            J.List @getValues().map(f), "mapped #{@toString()}"
+            J.List @getValues().map(f), tag: tag
 
 
     push: (value) ->
