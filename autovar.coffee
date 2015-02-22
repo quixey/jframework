@@ -4,6 +4,7 @@ class J.AutoVar extends Tracker.Computation
             @name = "J.AutoVar.COMPUTING"
             @message = "Value will be available later in the computation."
 
+
     @makeComputingObject: ->
         # The commented-out lines are kinda helpful
         # for debugging but slow as hell.
@@ -12,6 +13,7 @@ class J.AutoVar extends Tracker.Computation
         obj.isServer = Meteor.isServer
         # obj.stack = e.stack
         obj
+
 
     @getFirstActiveAncestor = (comp) ->
         if comp is null
@@ -65,9 +67,9 @@ class J.AutoVar extends Tracker.Computation
 
         @valueFunc = valueFunc
         if Meteor.isServer
-            @_func = Meteor.bindEnvironment @_runValueFunc.bind(@)
+            @_func = Meteor.bindEnvironment @_runValueFunc.bind @
         else
-            @_func = @_runValueFunc.bind(@)
+            @_func = @_runValueFunc.bind @
 
         @onChange = onChange ? null
         if options?.creator is undefined
@@ -78,45 +80,40 @@ class J.AutoVar extends Tracker.Computation
 
         @sortKey = 0.3
         @invalidated = false
-        @_invalidAncestors = {} # autoVarId: autoVar
+        @_invalidAncestors = [] # autoVars
         @_onInvalidateCallbacks = []
         @stopped = false
 
         @creator?.onInvalidate =>
             @stop()
 
-        @_var = null
+        @_getters = [] # computations
+        @_previousReadyValue = undefined
+        @_value = undefined
 
         if @onChange
             # Truthy onChange means do a non-lazy first run
             # of valueFunc.
             Tracker.afterFlush =>
-                if not @_var? then @invalidate()
+                if @_value is undefined then @invalidate()
 
 
     _addInvalidAncestor: (autoVar) ->
-        @_invalidAncestors[autoVar._id] = autoVar
-        for compId, comp of @_var?._getters ? []
+        @_invalidAncestors.push autoVar
+        for comp in @_getters
             comp._addInvalidAncestor? autoVar
 
 
     _removeInvalidAncestor: (autoVar) ->
-        delete @_invalidAncestors[autoVar._id]
-        for compId, comp of @_var._getters
+        i = @_invalidAncestors.indexOf autoVar
+        if i >= 0 then @_invalidAncestors.splice i, 1
+        for comp in @_getters
             comp._removeInvalidAncestor? autoVar
 
 
     _runValueFunc: ->
-        @_var ?= J.Var J.makeValueNotReadyObject(),
-            tag:
-                autoVar: @
-                tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
-            creator: @
-            onChange: if _.isFunction @onChange then @onChange
-            wrap: @wrap
-
         @onInvalidate =>
-            @_invalidAncestors = {}
+            @_invalidAncestors = []
             if not @stopped
                 @_addInvalidAncestor @
 
@@ -140,57 +137,34 @@ class J.AutoVar extends Tracker.Computation
         @_removeInvalidAncestor @
 
         # It's kosher for a valueFunc to call stop() on its own AutoVar.
-        if not @stopped
-            @_var.set value
+        if not @stopped then @_set value
 
 
-    debug: ->
-        console.log @toString()
+    _set: (value) ->
+        previousValue = @_value
+        @_value = J.Var::maybeWrap.call @, value
 
+        if _.isFunction(@onChange) and previousValue not instanceof J.VALUE_NOT_READY
+            @_previousReadyValue = previousValue
 
-    get: ->
-        # console.log "GET", @toString(), @_var?, @currentValueMightChange()
+        if @_value isnt previousValue
+            getter.invalidate() for getter in _.clone @_getters
 
-        if arguments.length
-            throw new Meteor.Error "Can't pass argument to AutoVar.get"
-
-        if Meteor.isServer and J._inMethod.get()
-            # We're just using the Var to wrap the value, e.g.
-            # array becomes J.List.
-            return J.Var(@valueFunc.call null, @).get()
-
-        if @stopped
-            ancestorComp = @constructor.getFirstActiveAncestor @creator
-            if ancestorComp
-                # There's an active ancestor, so there's a chance
-                # that the function trying to get us will succeed
-                # next time. That's why we can say we're "computing".
-                if Tracker.active
-                    throw @constructor.makeComputingObject()
-                else
-                    return undefined
-            else
-                console.error()
-                throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
-
-        if not @_var?
-            @_compute()
-
-        if @currentValueMightChange()
-            if Tracker.active
-                throw J.AutoVar.makeComputingObject()
-            else
-                return undefined
-
-        @_var.get()
-
-
-    isActive: ->
-        not @stopped
+        if (
+            _.isFunction(@onChange) and
+            @_value not instanceof J.VALUE_NOT_READY and
+            @_value isnt @_previousReadyValue
+        )
+            # Need lexically scoped oldValue and newValue
+            oldValue = @_previousReadyValue
+            newValue = @_value
+            Tracker.afterFlush =>
+                if not @stopped
+                    @onChange.call @, oldValue, newValue
 
 
     currentValueMightChange: ->
-        # Returns true if @_var.value might change between now
+        # Returns true if @_value might change between now
         # and the end of the current flush (or the end of
         # hypothetically calling Tracker.flush() now).
         # Note that true doesn't mean the current value
@@ -198,7 +172,54 @@ class J.AutoVar extends Tracker.Computation
         # dependency values will recompute themselves to have
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
-        not @_var? or not _.isEmpty @_invalidAncestors
+        @_value is undefined or @_invalidAncestors.length
+
+
+    debug: ->
+        console.log @toString()
+
+
+    get: ->
+        if Meteor.isServer and J._inMethod.get()
+            # We're just using the Var to wrap the value, e.g.
+            # array becomes J.List.
+            return J.Var(@valueFunc.call null, @).get()
+
+        getter = Tracker.currentComputation
+
+        if @stopped
+            ancestorComp = @constructor.getFirstActiveAncestor @creator
+            if ancestorComp
+                # There's an active ancestor, so there's a chance
+                # that the function trying to get us will succeed
+                # next time. That's why we can say we're "computing".
+                if getter?
+                    throw @constructor.makeComputingObject()
+                else
+                    return undefined
+            else
+                console.error()
+                throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
+
+        if @_value is undefined
+            @_compute()
+
+        if @currentValueMightChange()
+            if getter?
+                throw J.AutoVar.makeComputingObject()
+            else
+                return undefined
+
+        if getter? and getter not in @_getters
+            @_getters.push getter
+            getter.onInvalidate =>
+                @_getters.splice @_getters.indexOf(getter), 1
+
+        if @_value instanceof J.VALUE_NOT_READY
+            throw @_value if getter
+            undefined
+        else
+            @_value
 
 
     set: ->
@@ -206,6 +227,6 @@ class J.AutoVar extends Tracker.Computation
 
 
     toString: ->
-        s = "AutoVar[#{J.util.stringifyTag @tag ? ''}##{@_id}]=#{J.util.stringify @_var?._value}"
-        if not @isActive() then s += " (inactive)"
+        s = "AutoVar[#{J.util.stringifyTag @tag ? ''}##{@_id}]=#{J.util.stringify @_value}"
+        if @stopped then s += " (stopped)"
         s

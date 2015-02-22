@@ -60,8 +60,8 @@ Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplet
     av2 = J.AutoVar "av2",
         -> av.get()
 
-    test.isTrue av.isActive()
-    test.isTrue av2.isActive()
+    test.isFalse av.stopped
+    test.isFalse av2.stopped
     test.isNull al
     Meteor.defer =>
         test.isNull al
@@ -69,11 +69,11 @@ Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplet
         Tracker.autorun (c) =>
             myAl = av2.get()
             test.isTrue al.isActive(), "al stopped prematurely"
-            test.isTrue myAl.isActive(), "myAl stopped prematurely"
+            test.isFalse myAl.stopped, "myAl stopped prematurely"
             av2.stop()
 
             test.isTrue myAl.isActive()
-            test.isTrue av.isActive()
+            test.isFalse av.stopped
             test.isTrue al.isActive()
             av.stop()
             test.isFalse al.isActive()

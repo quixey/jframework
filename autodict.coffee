@@ -111,10 +111,6 @@ class J.AutoDict extends J.Dict
         )
 
         @_active = true
-        if Tracker.active
-            Tracker.onInvalidate =>
-                # console.log 'INVALIDATED', @toString()
-                @stop()
 
         if @_keysList? and @withFieldFuncs
             @_keysList.forEach (key) => @_setupGetterSetter key
@@ -219,7 +215,7 @@ class J.AutoDict extends J.Dict
 
 
     isActive: ->
-        @_active
+        not @_keysVar?.stopped
 
 
     replaceKeys: ->
@@ -246,11 +242,8 @@ class J.AutoDict extends J.Dict
 
 
     stop: ->
-        if @_active
-            # console.log "STOPPING", @toString()
-            fieldVar.stop() for key, fieldVar of @_fields
-            @_keysVar.stop()
-            @_active = false
+        fieldVar.stop() for key, fieldVar of @_fields
+        @_keysVar.stop()
 
 
     toString: ->

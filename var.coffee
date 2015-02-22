@@ -93,16 +93,12 @@ class J.Var
             throw new Meteor.Error "Can't get value of inactive Var: #{@}"
 
         if getter? and getter._id not of @_getters
-            if getter._id not of @_getters
-                @_getters[getter._id] = getter
-                # getter.gets ?= {} # computationId: computation
-                # getter.gets[@_id] = @
-                getter.onInvalidate =>
-                    # delete getter.gets[@_id]
-                    delete @_getters[getter._id]
+            @_getters[getter._id] = getter
+            getter.onInvalidate =>
+                delete @_getters[getter._id]
 
         if @_value instanceof J.VALUE_NOT_READY
-            if getter then throw @_value
+            throw @_value if getter
             undefined
         else
             @_value
@@ -121,7 +117,7 @@ class J.Var
         previousValue = @_value
         @_value = @maybeWrap value
 
-        if previousValue not instanceof J.VALUE_NOT_READY
+        if @onChange? and previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
 
         if not J.util.equals previousValue, @_value
@@ -170,8 +166,9 @@ class J.Var
                     Use null or new J.VALUE_NOT_READY instead."
             else
                 J.makeValueNotReadyObject()
-        else if not @constructor.isValidValue value
-            throw new Meteor.Error "Invalid value for Var: #{value}"
+        else if value instanceof J.AutoVar
+            throw new Meteor.Error "Can't put an AutoVar inside #{@toString()}:
+                #{value}. Get its value with .get() first."
         if value instanceof J.VALUE_NOT_READY
             value
         else if @wrap and J.util.isPlainObject value
@@ -187,10 +184,3 @@ class J.Var
                 e
         else
             value
-
-
-    @isValidValue: (value) ->
-        not (
-            value is undefined or
-                value instanceof J.AutoVar
-        )
