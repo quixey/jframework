@@ -248,7 +248,7 @@ class J.AutoDict extends J.Dict
     stop: ->
         if @_active
             # console.log "STOPPING", @toString()
-            fieldComp.stop() for key, fieldComp of @_fields
+            fieldVar.stop() for key, fieldVar of @_fields
             @_keysVar.stop()
             @_active = false
 

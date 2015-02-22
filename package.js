@@ -110,8 +110,8 @@ Package.onTest(function(api) {
     api.addFiles([
         "tests/util-tests.coffee",
         "tests/test-models.coffee",
-        "tests/jframework-tests.coffee",
-        "tests/autovar-tests.coffee"
+        "tests/autovar-tests.coffee",
+        "tests/jframework-tests.coffee"
     ]);
 
     api.addFiles([

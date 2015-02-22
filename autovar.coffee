@@ -1,4 +1,4 @@
-class J.AutoVar
+class J.AutoVar extends Tracker.Computation
     class @COMPUTING extends Error
         constructor: ->
             @name = "J.AutoVar.COMPUTING"
@@ -18,7 +18,7 @@ class J.AutoVar
             null
         else if not comp.stopped
             comp
-        else if comp.autoVar
+        else if comp instanceof @
             @getFirstActiveAncestor comp.creator
         else
             null
@@ -62,7 +62,13 @@ class J.AutoVar
         if J.debugGraph then J.graph[@_id] = @
 
         @tag = if J.debugTags then tag else null
+
         @valueFunc = valueFunc
+        if Meteor.isServer
+            @_func = Meteor.bindEnvironment @_runValueFunc.bind(@)
+        else
+            @_func = @_runValueFunc.bind(@)
+
         @onChange = onChange ? null
         if options?.creator is undefined
             @creator = Tracker.currentComputation
@@ -70,105 +76,72 @@ class J.AutoVar
             @creator = options.creator
         @wrap = options?.wrap ? true
 
-        # We can't use @_valueComp.invalidated because when @_valueComp
-        # invalidates itself, it schedules it to happen at afterFlush time.
-        @_invalidated = false
-
+        @sortKey = 0.3
+        @invalidated = false
         @_invalidAncestors = {} # autoVarId: autoVar
+        @_onInvalidateCallbacks = []
+        @stopped = false
 
-        @_active = true
         @creator?.onInvalidate =>
             @stop()
 
         @_var = null
-        @_valueComp = null
+
         if @onChange
             # Truthy onChange means do a non-lazy first run
             # of valueFunc.
             Tracker.afterFlush =>
-                if @isActive() and not @_valueComp?
-                    @_setupValueComp()
+                if not @_var? then @invalidate()
 
 
     _addInvalidAncestor: (autoVar) ->
         @_invalidAncestors[autoVar._id] = autoVar
-        for compId, comp of @_var._getters
-            comp.autoVar?._addInvalidAncestor autoVar
+        for compId, comp of @_var?._getters ? []
+            comp._addInvalidAncestor? autoVar
 
 
     _removeInvalidAncestor: (autoVar) ->
         delete @_invalidAncestors[autoVar._id]
         for compId, comp of @_var._getters
-            comp.autoVar?._removeInvalidAncestor autoVar
+            comp._removeInvalidAncestor? autoVar
 
 
-    _setupValueComp: ->
-        Tracker.nonreactive => Tracker.autorun (c) =>
-            if c.firstRun
-                # Important to do this here in case @stop() is called during the
-                # first run of the computation.
-                @_valueComp = c
-                @_valueComp.autoVar = @
-                @_valueComp.tag = "#{@toString()} valueComp"
+    _runValueFunc: ->
+        @_var ?= J.Var J.makeValueNotReadyObject(),
+            tag:
+                autoVar: @
+                tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
+            creator: @
+            onChange: if _.isFunction @onChange then @onChange
+            wrap: @wrap
 
-                @_var = new J.Var J.makeValueNotReadyObject(),
-                    tag:
-                        autoVar: @
-                        tag: "Var for AutoVar[#{@_id}](#{J.util.stringifyTag @tag})"
-                    creator: @_valueComp
-                    onChange: if _.isFunction @onChange then @onChange
-                    wrap: @wrap
+        @onInvalidate =>
+            @_invalidAncestors = {}
+            if not @stopped
+                @_addInvalidAncestor @
 
-            @_invalidated = false
+        try
+            # ValueFunc may either return or throw J.Var.NOT_READY
+            # or throw @COMPUTING. It may not return undefined.
+            value = @valueFunc.call null, @
 
-            @_valueComp.onInvalidate =>
-                # A different computation invalidated this one
-                @_invalidated = true
-
-                # console.log "invalidated", @toString()
-
-                @_invalidAncestors = {}
-                if @_active
-                    @_addInvalidAncestor @
-
-            # console.log "Recomputing ", @toString()
-            try
-                # ValueFunc may either return or throw J.Var.NOT_READY
-                # or throw @COMPUTING. It may not return undefined.
-                value = @valueFunc.call null, @
-
-            catch e
-                if e instanceof J.VALUE_NOT_READY
-                    @_removeInvalidAncestor @
-                    @_var.set e
-                    return
-
-                else if e instanceof @constructor.COMPUTING
-                    # console.log "...", @toString(), "got COMPUTING"
-                    # We want @_valueComp to invalidate itself, but we want
-                    # the recalculation to happen at the end of the flush
-                    # queue (FIFO flushing), not right away. That's why
-                    # we're using afterFlush.
-                    @_invalidated = true
-                    Tracker.afterFlush =>
-                        # Check if we're still invalidated because we might have
-                        # been recomputed already.
-                        if @_invalidated then @_valueComp.invalidate()
-                    return
-
-                else
-                    throw e
-
-            if value is undefined
-                throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
-
-            # console.log "...", @toString(), "recomputed: ", value
-
-            @_removeInvalidAncestor @
-            if @_valueComp.stopped
-                # It's kosher for a valueFunc to call stop() on its own AutoVar.
+        catch e
+            if e instanceof J.AutoVar.COMPUTING
+                @invalidate()
+                return
+            else if e instanceof J.VALUE_NOT_READY
+                value = e
             else
-                @_var.set value
+                throw e
+
+        if value is undefined
+            throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
+
+        @_removeInvalidAncestor @
+
+        # It's kosher for a valueFunc to call stop() on its own AutoVar.
+        if not @stopped
+            @_var.set value
 
 
     debug: ->
@@ -176,6 +149,8 @@ class J.AutoVar
 
 
     get: ->
+        # console.log "GET", @toString(), @_var?, @currentValueMightChange()
+
         if arguments.length
             throw new Meteor.Error "Can't pass argument to AutoVar.get"
 
@@ -184,7 +159,7 @@ class J.AutoVar
             # array becomes J.List.
             return J.Var(@valueFunc.call null, @).get()
 
-        if not @isActive()
+        if @stopped
             ancestorComp = @constructor.getFirstActiveAncestor @creator
             if ancestorComp
                 # There's an active ancestor, so there's a chance
@@ -198,17 +173,12 @@ class J.AutoVar
                 console.error()
                 throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
 
-        if not @_valueComp?
-            # console.log "GET", @toString(), "[first time]"
-            # Getting a lazy AutoVar for the first time
-            @_setupValueComp()
-            # if @_valueComp.invalidated then console.log "#{@toString()} invalidated during first get!"
-        else
-            # console.log J.util.stringifyTag(Tracker.currentComputation?.tag), "GET", @toString() + (if @_valueComp.invalidated then "(invalidated)" else '')
+        if not @_var?
+            @_compute()
 
         if @currentValueMightChange()
             if Tracker.active
-                throw @constructor.makeComputingObject()
+                throw J.AutoVar.makeComputingObject()
             else
                 return undefined
 
@@ -216,7 +186,7 @@ class J.AutoVar
 
 
     isActive: ->
-        @_active
+        not @stopped
 
 
     currentValueMightChange: ->
@@ -228,25 +198,11 @@ class J.AutoVar
         # dependency values will recompute themselves to have
         # the same value, and thereby stop @_valueComp from
         # ever invalidating.
-
-        ret = not (@_valueComp? and _.isEmpty @_invalidAncestors)
-
-        if ret
-            J.inc 'cmvcTrue'
-        else
-            J.inc 'cmvcFalse'
-
-        ret
+        not @_var? or not _.isEmpty @_invalidAncestors
 
 
     set: ->
         throw new Meteor.Error "There is no AutoVar.set"
-
-
-    stop: ->
-        if @_active
-            @_active = false
-            @_valueComp?.stop()
 
 
     toString: ->

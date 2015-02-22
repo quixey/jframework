@@ -25,25 +25,6 @@ setCurrentComputation = (c) ->
 
 _debugFunc = -> Meteor?._debug ? console?.log ? ->
 
-_throwOrLog = (from, e) ->
-    if throwFirstError
-        throw e
-    else
-        if e.stack and e.message
-            idx = e.stack.indexOf e.message
-            if 0 <= idx <= 10
-                # Message is part of e.stack, as in Chrome
-                messageAndStack = e.stack
-            else
-                messageAndStack = e.message +
-                    (if e.stack.charAt(0) is '\n' then '' else '\n') +
-                    e.stack
-        else
-            messageAndStack = e.stack or e.message
-
-    _debugFunc() "Exception from Tracker #{from} function:",
-        messageAndStack, e
-
 withNoYieldsAllowed = (f) ->
     if not Meteor? or Meteor.isClient then f
     else ->
@@ -53,10 +34,10 @@ withNoYieldsAllowed = (f) ->
 pendingComputations = []
 
 # true if a Tracker.flush is scheduled, or if we are in Tracker.flush now
-willFlush = false
+Tracker.willFlush = false
 
 # true if we are in Tracker.flush now
-inFlush = false
+Tracker.inFlush = false
 
 # true if we are computing a computation now, either first time
 # or recompute.  This matches Tracker.active unless we are inside
@@ -64,52 +45,39 @@ inFlush = false
 # an enclosing computation may still be running.
 inCompute = false
 
-# true if the _throwFirstError option was passed in to the call
-# to Tracker.flush that we are in. When set, throw rather than log the
-# first error encountered while flushing. Before throwing the error,
-# finish flushing (from a finally block), logging any subsequent
-# errors.
-throwFirstError = false
-
 afterFlushCallbacks = []
 
 requireFlush = ->
-    if not willFlush
+    if not Tracker.willFlush
         setTimeout Tracker.flush, 1
-        willFlush = true
+        Tracker.willFlush = true
 
 # Tracker.Computation constructor is visible but private
 # (throws an error if you try to call it)
-constructingComputation = false;
+Tracker._constructingComputation = false;
 
-Tracker.Computation = (f, parent) ->
-    if not constructingComputation
+Tracker.Computation = (f, creator) ->
+    if not Tracker._constructingComputation
         throw new Error "Tracker.Computation constructor is private;
             use Tracker.autorun"
 
-    constructingComputation = false
+    Tracker._constructingComputation = false
 
     @stopped = false
     @invalidated = false
-
-    @firstRun = true
 
     @_id = J.getNextId()
     if J.debugGraph then J.graph[@_id] = @
 
     @_onInvalidateCallbacks = []
 
-    @_parent = parent
+    @creator = creator
     @_func = f
-    @_recomputing = false
 
-    errored = true
-    try
-        @_compute()
-        errored = false
-    finally
-        @firstRun = false
-        if errored then @stop()
+    @firstRun = true
+    @_compute()
+    @firstRun = false
+
 
 Tracker.Computation::onInvalidate = (f) ->
     unless _.isFunction f
@@ -119,42 +87,44 @@ Tracker.Computation::onInvalidate = (f) ->
         f = Meteor.bindEnvironment f
 
     if @invalidated
-        Tracker.nonreactive ->
+        Tracker.nonreactive =>
             withNoYieldsAllowed(f) @
     else
         @_onInvalidateCallbacks.push f
 
+
 Tracker.Computation::invalidate = ->
-    if not @invalidated
-        # If we're currently in _recompute(), don't enqueue
-        # ourselves, since we'll rerun immediately anyway
-        if not @_recomputing and not @stopped
-            pendingComputations.push @
+    return if @invalidated
 
-            if pendingComputations.length > 1 and (
-                @sortKey < pendingComputations[pendingComputations.length - 1].sortKey
-            )
-                J.inc 'pcSort'
-                pendingComputations.sort (a, b) ->
-                    if a.sortKey < b.sortKey then -1
-                    else if a.sortKey > b.sortKey then 1
-                    else 0
+    @invalidated = true
 
-            requireFlush()
+    if not @stopped
+        pendingComputations.push @
 
-        @invalidated = true
+        if pendingComputations.length > 1 and (
+            @sortKey < pendingComputations[pendingComputations.length - 1].sortKey
+        )
+            J.inc 'pcSort'
+            pendingComputations.sort (a, b) ->
+                if a.sortKey < b.sortKey then -1
+                else if a.sortKey > b.sortKey then 1
+                else 0
 
-        # Callbacks can't add callbacks, because
-        # self.invalidated is true
-        for f in @_onInvalidateCallbacks
-            Tracker.nonreactive -> withNoYieldsAllowed(f) @
+        requireFlush()
 
-        @_onInvalidateCallbacks = []
+    # Callbacks can't add callbacks, because
+    # self.invalidated is true
+    for f in @_onInvalidateCallbacks
+        Tracker.nonreactive => withNoYieldsAllowed(f) @
+
+    @_onInvalidateCallbacks = []
+
 
 Tracker.Computation::stop = ->
     if not @stopped
         @stopped = true
         @invalidate()
+
 
 Tracker.Computation::_compute = ->
     @invalidated = false
@@ -180,39 +150,23 @@ Tracker.Computation::debug = ->
     console.groupEnd()
 
 
-
-Tracker.Computation::_recompute = ->
-    @_recomputing = true
-    try
-        while @invalidated and not @stopped
-            try
-                @_compute()
-            catch e
-                _throwOrLog "recompute", e
-    finally
-        @_recomputing = false
-
 Tracker.flush = (_opts) ->
     # console.debug "Tracker.flush!"
 
-    if inFlush
+    if Tracker.inFlush
         throw new Error "Can't call Tracker.flush while flushing"
 
     if inCompute
         throw new Error "Can't flush inside Tracker.autorun"
 
-    inFlush = true
-    willFlush = true
-    throwFirstError = _opts?._throwfirstError ? false
+    Tracker.inFlush = true
+    Tracker.willFlush = true
 
-    # XXX JFramework is disabling Meteor's try-finally for performance.
-    # finishedTry = false
-    # try
     while pendingComputations.length or afterFlushCallbacks.length
         # Recompute all pending computations
         while pendingComputations.length
             comp = pendingComputations.shift()
-            comp._recompute()
+            comp._compute() unless comp.stopped
             J.inc 'recompute'
 
         if afterFlushCallbacks.length
@@ -221,18 +175,11 @@ Tracker.flush = (_opts) ->
             # Call one afterFlush callback, which may
             # invalidate more computations
             afc = afterFlushCallbacks.shift()
-            # try
             afc.func.call null
-            # catch e
-            #     _throwOrLog "afterFlush", e
-    # finishedTry = true
-    # finally
-    #     if not finishedTry
-    #         # We're erroring
-    #         inFlush = false # needed before calling Tracker.flush() again
-    #         Tracker.flush _throwFirstError: false # finished flushing
-    willFlush = false
-    inFlush = false
+
+    Tracker.willFlush = false
+    Tracker.inFlush = false
+
 
 Tracker.autorun = (f, sortKey = 0.5) ->
     if not _.isFunction f
@@ -243,7 +190,7 @@ Tracker.autorun = (f, sortKey = 0.5) ->
     if Meteor.isServer
         f = Meteor.bindEnvironment f
 
-    constructingComputation = true
+    @_constructingComputation = true
     c = new Tracker.Computation f, Tracker.currentComputation
     c.sortKey = sortKey
 
@@ -252,19 +199,21 @@ Tracker.autorun = (f, sortKey = 0.5) ->
 
     c
 
+
 Tracker.nonreactive = (f) ->
     previous = Tracker.currentComputation
     setCurrentComputation null
-    try
-        f()
-    finally
-        setCurrentComputation previous
+    ret = f()
+    setCurrentComputation previous
+    ret
+
 
 Tracker.onInvalidate = (f) ->
     if not Tracker.active
         throw new Error "Tracker.onInvalidate requires a currentComputation"
 
     Tracker.currentComputation.onInvalidate f
+
 
 Tracker.afterFlush = (f, sortKey = 0.5) ->
     if Meteor.isServer

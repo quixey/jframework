@@ -59,8 +59,11 @@ class J.Dict
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
-        oldValue = Tracker.nonreactive => @_fields[key].get()
-        if oldValue isnt undefined and @onChange
+        oldValue = Tracker.nonreactive =>
+            console.log @toString(), 'getting oldValue for', key
+            console.log 'got', @_fields[key].get()
+            return @_fields[key].get()
+        if oldValue isnt undefined and @onChange?
             Tracker.afterFlush =>
                 if @isActive()
                     @onChange.call @, key, oldValue, undefined
