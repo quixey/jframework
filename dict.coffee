@@ -154,7 +154,7 @@ class J.Dict
         console.log @toString()
         for key, v of @_fields
             console.group key
-            v.debug()
+            v?.debug()
             console.groupEnd()
 
 
@@ -267,6 +267,8 @@ class J.Dict
 
     size: ->
         # TODO: Finer-grained reactivity
+        if not @isActive()
+            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
 
         keys = @getKeys()
         if keys is undefined then undefined else keys.length

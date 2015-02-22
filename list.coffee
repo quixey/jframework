@@ -42,29 +42,57 @@ class J.List
             @creator = options.creator
         @onChange = options?.onChange ? null
 
+        @_arr = []
+        @_sizeDep = new Tracker.Dependency @creator
+
         @readOnly = false
 
-        fields = {}
-        for x, i in arr
-            fields[i] = x
+        @push x for x in arr
 
-        @_dict = J.Dict fields,
+
+    _get: (index) ->
+        if not @isActive()
+            throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
+                can't get index #{index} of inactive #{@constructor.name}: #{@}"
+
+        @_arr[index].get()
+
+
+    _pop: ->
+        size = @_arr.length
+        if size is 0
+            undefined
+        else
+            lastValue = undefined
+            Tracker.nonreactive =>
+                lastValue = @_arr[size - 1]._value
+                if lastValue is undefined or lastValue instanceof J.VALUE_NOT_READY
+                    lastValue = @_arr[size - 1]._previousReadyValue
+            if lastValue isnt undefined and _.isFunction @onChange
+                Tracker.afterFlush =>
+                    if @isActive()
+                        @onChange.call @, size - 1, lastValue, undefined
+            @_arr.pop()
+            @_sizeDep?.changed()
+            lastValue
+
+
+    _push: (value) ->
+        index = @_arr.length
+
+        @_arr.push J.Var value,
             creator: @creator
             tag:
                 list: @
-                tag: "#{@toString()}._dict"
-            onChange: if @onChange?
-                (key, oldValue, newValue) =>
-                    @onChange.call @, parseInt(key), oldValue, newValue
-            withFieldFuncs: false
+                index: index
+                tag: "#{@toString()}._arr[#{index}]"
+            onChange: @onChange?.bind(@, index) ? null
 
-
-    _resize: (size) ->
-        @_dict.replaceKeys ("#{i}" for i in [0...size])
+        @_sizeDep.changed()
 
 
     clear: ->
-        @resize 0
+        @pop() for i in [0...@_arr.length]
 
 
     clone: ->
@@ -95,18 +123,16 @@ class J.List
 
     debug: ->
         console.log @toString()
-        for key, v of @_dict._fields
-            console.group key
+        for v, i in arr
+            console.group i
             v.debug()
             console.groupEnd()
 
 
     extend: (values) ->
         size = Tracker.nonreactive => @size()
-        adder = {}
-        for value, i in @constructor.unwrap values
-            adder["#{size + i}"] = value
-        @_dict.setOrAdd adder
+        for value in (Tracker.nonreactive => @constructor.unwrap values)
+            @push value
 
 
     find: (f = _.identity) ->
@@ -138,7 +164,7 @@ class J.List
               not when the returned array changes.
         ###
         callerComp = Tracker.currentComputation
-        UNDEFINED = new J.Dict()
+        UNDEFINED = J.Dict()
         mappedList = @map(
             (v, i) =>
                 if callerComp
@@ -163,12 +189,15 @@ class J.List
         unless _.isNumber(index) and parseInt(index) is index
             throw new Meteor.Error "Index must be an int"
 
-        if index < 0
-            unless -index < @size()
-                throw new Meteor.Error "List index out of range"
-            index = @size() + index
+        size = Tracker.nonreactive => @size()
 
-        @_dict.forceGet "#{index}"
+        if index < 0
+            index = size + index
+
+        unless 0 <= index < size
+            throw new Meteor.Error "List index out of range"
+
+        @_get index
 
 
     getConcat: (lst) ->
@@ -207,7 +236,7 @@ class J.List
 
 
     getValues: ->
-        @_dict.get "#{i}" for i in [0...@size()]
+        @get(i) for i in [0...@size()]
 
 
     join: (separator) ->
@@ -222,7 +251,7 @@ class J.List
 
 
     isActive: ->
-        @_dict.isActive()
+        not @creator?.invalidated
 
 
     lazyMap: (f = _.identity, tag) ->
@@ -268,21 +297,11 @@ class J.List
 
 
     push: (value) ->
-        @extend [value]
+        @_push value
 
 
     pop: ->
-        size = Tracker.nonreactive => @size()
-        if size is 0
-            undefined
-        else
-            lastValue = @get size - 1
-            @_dict.delete "#{size - 1}"
-            lastValue
-
-
-    resize: (size) ->
-        @_resize size
+        @_pop()
 
 
     reverse: ->
@@ -300,17 +319,20 @@ class J.List
     set: (index, value) ->
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} instance is read-only"
-        unless _.isNumber(index) and @_dict.hasKey "#{index}"
+        unless index of @_arr
             throw new Meteor.Error "List index out of range"
 
-        setter = {}
-        setter["#{index}"] = value
-        @_dict.set setter
+        setter = Tracker.currentComputation
+        canSet = @isActive()
+        if not canSet
+            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+
+        @_arr[index].set value
 
 
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
-            @_dict.setReadOnly @readOnly, deep
+            J.Dict._deepSetReadOnly Tracker.nonreactive => @getValues()
 
 
     slice: (startIndex, endIndex = @size()) ->
@@ -332,7 +354,10 @@ class J.List
 
 
     size: ->
-        @_dict.size()
+        if not @isActive()
+            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
+        @_sizeDep.depend()
+        @_arr.length
 
 
     toArr: ->
@@ -352,12 +377,12 @@ class J.List
     toString: ->
         s = "List[#{@_id}]"
         if @tag then s += "(#{J.util.stringifyTag @tag})"
-        if @_dict? and not @isActive() then s += " (inactive)"
+        if not @isActive() then s += " (inactive)"
         s
 
 
     tryGet: (index) ->
-        if @_dict.hasKey "#{index}"
+        if index < @size()
             J.tryGet => @get index
         else
             undefined

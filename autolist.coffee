@@ -27,27 +27,88 @@ class J.AutoList extends J.List
 
         @onChange = onChange
 
-        @_dict = J.AutoDict(
+        @_sizeDep = null
+
+        @_sizeVar = J.AutoVar(
             (
                 autoList: @
-                tag: "#{@toString()}._dict"
+                tag: "#{@toString()} sizeVar"
             )
 
             =>
-                size = @sizeFunc()
-                unless _.isNumber(size) and parseInt(size) is size and size >= 0
-                    throw new Meteor.Error "Invalid AutoList sizeFunc output: #{size}"
-                "#{i}" for i in [0...size]
+                size = @sizeFunc.apply null
 
-            (key, _dict) => @valueFunc parseInt(key), @
+                unless _.isNumber(size) and size is parseInt(size) and size >= 0
+                    throw new Meteor.Error "AutoList.sizeFunc must return an int.
+                        Got #{size}"
 
-            (
-                if _.isFunction @onChange then (key, oldValue, newValue) =>
-                    @onChange?.call @, parseInt(key), oldValue, newValue
-                else
-                    @onChange
-            )
+                # Side effects during AutoVar recompute functions are usually not okay.
+                # We just need the framework to do it in this one place.
+                if size < @_arr.length
+                    for i in [size...@_arr.length]
+                        @_pop()
+                else if size > @_arr.length
+                    for i in [@_arr.length...size]
+                        @_push()
+
+                size
+
+            if @onChange? then true else null
+
+            creator: @creator
         )
+
+
+    _get: (index) ->
+        if @size() is undefined
+            undefined
+        else
+            if @_arr[index] is null then @_initFieldAutoVar index
+            @_arr[index].get()
+
+
+    _initFieldAutoVar: (index) ->
+        @_arr[index] = J.AutoVar(
+            (
+                autoList: @
+                fieldIndex: index
+                tag: "#{@toString()}._fields[#{index}]"
+            )
+
+            =>
+                # If @_sizeVar needs recomputing, this .get() call
+                # will throw a COMPUTING. Then this field-autovar
+                # may or may not be left standing to recompute
+                # and continue past the assert.
+                J.assert index < @size(), "SIZE"
+
+                @valueFunc.call null, index, @
+
+            if _.isFunction @onChange
+                @onChange.bind @, index
+            else
+                @onChange
+
+            creator: @creator
+        )
+
+
+    _pop: ->
+        fieldAutoVar = @_arr[@_arr.length - 1]
+        super
+        fieldAutoVar?.stop()
+
+
+    _push: ->
+        index = @_arr.length
+
+        @_arr.push null
+
+        if @onChange
+            @_initFieldAutoVar index
+        else
+            # Save ~1kb of memory until the field is
+            # actually needed.
 
 
     clone: ->
@@ -60,12 +121,12 @@ class J.AutoList extends J.List
         throw new Meteor.Error "There is no AutoList.clear"
 
 
+    isActive: ->
+        not @_sizeVar?.stopped
+
+
     push: ->
         throw new Meteor.Error "There is no AutoList.push"
-
-
-    resize: ->
-        throw new Meteor.Error "There is no AutoList.resize"
 
 
     reverse: ->
@@ -76,21 +137,16 @@ class J.AutoList extends J.List
         throw new Meteor.Error "There is no AutoList.set"
 
 
+    size: ->
+        @_sizeVar.get()
+
+
     snapshot: ->
-        keys = Tracker.nonreactive => @_dict.getKeys()
-        if keys is undefined
+        values = Tracker.nonreactive => @getValues()
+        if values is undefined
             undefined
         else
-            J.List Tracker.nonreactive => @getValues()
-
-
-    size: ->
-        getter = Tracker.currentComputation
-        canGet = @isActive() or (getter? and getter is @creator)
-        if not canGet
-            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
-
-        super
+            J.List values
 
 
     sort: ->
@@ -98,10 +154,11 @@ class J.AutoList extends J.List
 
 
     stop: ->
-        @_dict.stop()
+        fieldVar?.stop() for fieldVar in @_arr
+        @_sizeVar.stop()
 
 
     toString: ->
         s = "AutoList[#{@_id}](#{J.util.stringifyTag @tag ? ''})"
-        if @_dict? and not @isActive() then s += " (inactive)"
+        if not @isActive() then s += " (inactive)"
         s

@@ -80,6 +80,7 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
     al = J.AutoList('haial',
         -> size.get()
         (i) -> "#{i}-k"
+        true
     )
     ad = J.AutoDict('ad',
         al
@@ -96,6 +97,7 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
         '4-k': '4-k-v'
     size.set 4
     Tracker.flush()
+
     test.equal ad.getFields(),
         '0-k': '0-k-v'
         '1-k': '1-k-v'
@@ -404,23 +406,6 @@ Tinytest.add "List - sort", (test) ->
     Tracker.flush()
 
 
-Tinytest.add "List - resize", (test) ->
-    lst = J.List [0, 1, 2, 3, 4]
-    size = lst.size()
-    test.equal size, 5
-    c = Tracker.autorun ->
-        size = lst.size()
-    lst.resize 10
-    test.equal size, 5
-    Tracker.flush()
-    test.equal size, 10
-    test.equal lst.get(9), undefined
-    test.throws -> lst.get(10)
-    c.stop()
-
-
-
-
 Tinytest.add "AutoDict - Basics", (test) ->
     size = new J.Var 3
     d = J.AutoDict(
@@ -555,7 +540,6 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
     test.equal sizeFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal al.toArr(), [0, 10, 20]
-    test.throws -> al.resize 5
     test.throws -> al.set 2, 2
     size.set 2
     coef.set 100
@@ -624,7 +608,7 @@ Tinytest.add "AutoList - onChange", (test) ->
     test.isTrue _.any (J.util.equals(x, [3, 30, 300, 4]) for x in onChangeHistory)
 
 
-Tinytest.add "List - onChange 2", (test) ->
+Tinytest.add "AutoList - onChange 2", (test) ->
     coef = new J.Var 10
     size = new J.Var 5
     sizeFuncRunCount = 0
@@ -635,9 +619,11 @@ Tinytest.add "List - onChange 2", (test) ->
             sizeFuncRunCount += 1
             size.get()
         (i) ->
+            console.log 'compute', i
             valueFuncRunCount += 1
             i * coef.get()
         (i, oldValue, newValue) ->
+            console.log 'onchange', i, oldValue, newValue
             onChangeHistory.push [i, oldValue, newValue, @size()]
     )
     Tracker.flush()
@@ -647,6 +633,7 @@ Tinytest.add "List - onChange 2", (test) ->
     test.equal onChangeHistory, [
         [4, 40, undefined, 4]
     ]
+    al.stop()
 
 
 Tinytest.add "List - reverse", (test) ->
@@ -726,13 +713,6 @@ Tinytest.add "List - .contains reactivity", (test) ->
     lst.push 3
     Tracker.flush()
     test.isTrue lastContains
-    lst.resize 20
-    Tracker.flush()
-    test.isTrue lastContains
-    lst.resize 4
-    test.isTrue lastContains
-    Tracker.flush()
-    test.isFalse lastContains
 
 
 Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->

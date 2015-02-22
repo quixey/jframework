@@ -76,7 +76,6 @@ class J.AutoDict extends J.Dict
         ###
         @onChange = onChange
 
-        @_pendingNewKeys = null
         @_keysVar = J.AutoVar(
             (
                 autoDict: @
@@ -110,8 +109,6 @@ class J.AutoDict extends J.Dict
             wrap: false
         )
 
-        @_active = true
-
         if @_keysList? and @withFieldFuncs
             @_keysList.forEach (key) => @_setupGetterSetter key
         else if @_fieldSpecs?
@@ -124,7 +121,7 @@ class J.AutoDict extends J.Dict
     _delete: (key) ->
         fieldAutoVar = @_fields[key]
         super
-        fieldAutoVar.stop()
+        fieldAutoVar?.stop()
         if @_hasKeyDeps[key]?
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
@@ -135,6 +132,7 @@ class J.AutoDict extends J.Dict
         return undefined if hasKey is undefined
 
         if hasKey
+            if @_fields[key] is null then @_initFieldAutoVar key
             @_fields[key].get()
         else
             if force
@@ -144,6 +142,21 @@ class J.AutoDict extends J.Dict
 
 
     _initField: (key) ->
+        if @withFieldFuncs then @_setupGetterSetter key
+
+        if @_hasKeyDeps[key]?
+            @_hasKeyDeps[key].changed()
+            delete @_hasKeyDeps[key]
+
+        if @onChange
+            @_initFieldAutoVar key
+        else
+            # Save ~1kb of memory until the field is
+            # actually needed.
+            @_fields[key] = null
+
+
+    _initFieldAutoVar: (key) ->
         @_fields[key] = J.AutoVar(
             (
                 autoDict: @
@@ -160,18 +173,12 @@ class J.AutoDict extends J.Dict
                 @valueFunc.call null, key, @
 
             if _.isFunction @onChange
-                (oldValue, newValue) => @onChange.call @, key, oldValue, newValue
+                @onChange.bind @, key
             else
                 @onChange
 
             creator: @creator
         )
-
-        if @withFieldFuncs then @_setupGetterSetter key
-
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
 
 
     clear: ->
@@ -242,7 +249,7 @@ class J.AutoDict extends J.Dict
 
 
     stop: ->
-        fieldVar.stop() for key, fieldVar of @_fields
+        fieldVar?.stop() for key, fieldVar of @_fields
         @_keysVar.stop()
 
 
