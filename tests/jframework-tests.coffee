@@ -453,6 +453,7 @@ Tinytest.add "AutoDict - reactivity", (test) ->
         5: 10
         9: 18
     }
+
     coef.set 10
     Tracker.flush()
     test.equal dHistory.pop(), {
@@ -477,6 +478,7 @@ Tinytest.add "AutoDict - reactivity", (test) ->
     Tracker.flush()
     test.equal dHistory.length, 0
     watcher.stop()
+    d.stop()
 
 
 Tinytest.add "AutoDict - laziness", (test) ->

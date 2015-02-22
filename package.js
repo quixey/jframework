@@ -111,6 +111,7 @@ Package.onTest(function(api) {
         "tests/util-tests.coffee",
         "tests/test-models.coffee",
         "tests/autovar-tests.coffee",
+        "tests/list-tests.coffee",
         "tests/jframework-tests.coffee"
     ]);
 

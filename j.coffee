@@ -2,9 +2,9 @@ J = {}
 J.stores = {}
 
 J.counts = {}
-J.inc = (countName) ->
+J.inc = (countName, num = 1) ->
     J.counts[countName] ?= 0
-    J.counts[countName] += 1
+    J.counts[countName] += num
 
 J.g = J.graph = {} # jid: object
 J.debugGraph = Meteor.settings?.public?.jframework?.debug?.graph ? false

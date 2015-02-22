@@ -179,10 +179,9 @@ class J.Dict
 
     getFields: (keys = @getKeys()) ->
         keysList = J.List.wrap keys
-        valuesList = keysList.map (key) => @get key
         fields = {}
-        keysList.forEach (key, i) ->
-            fields[key] = valuesList.get i
+        keysList.forEach (key, i) =>
+            fields[key] = @get key
         fields
 
 

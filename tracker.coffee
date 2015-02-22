@@ -158,7 +158,6 @@ Tracker.flush = ->
     console.debug "Tracker.flush!"
 
     if Tracker.inFlush
-        console.error 'hi'
         throw "Can't call Tracker.flush while flushing"
 
     if Tracker.inCompute

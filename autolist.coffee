@@ -42,16 +42,52 @@ class J.AutoList extends J.List
                     throw new Meteor.Error "AutoList.sizeFunc must return an int.
                         Got #{size}"
 
+                size
+
+            if @onChange? then true else null
+
+            creator: @creator
+        )
+
+        @_valuesVar = J.AutoVar(
+            (
+                autoList: @
+                tag: "#{toString()} valuesVar"
+            )
+
+            =>
+                size = @size()
+                ready = true
+
+                values = for i in [0...size]
+                    try
+                        @valueFunc.call null, i, @
+                    catch e
+                        if e instanceof J.VALUE_NOT_READY
+                            # This is how AutoLists are parallelized. We keep
+                            # looping because we want to synchronously register
+                            # all the not-ready computations with the data
+                            # fetcher that runs during afterFlush.
+                            ready = false
+                            undefined
+                        else
+                            throw e
+
+                throw J.makeValueNotReadyObject() if not ready
+
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
+                for i in [0...Math.min size, @_arr.length]
+                    @_set i, values[i]
+
                 if size < @_arr.length
                     for i in [size...@_arr.length]
                         @_pop()
                 else if size > @_arr.length
                     for i in [@_arr.length...size]
-                        @_push()
+                        @_push values[i]
 
-                size
+                null
 
             if @onChange? then true else null
 
@@ -60,53 +96,10 @@ class J.AutoList extends J.List
 
 
     _get: (index) ->
-        if @size() is undefined
+        if @_valuesVar.get() is undefined
             undefined
         else
-            if @_arr[index] is null then @_initFieldAutoVar index
-            @_arr[index].get()
-
-
-    _initFieldAutoVar: (index) ->
-        @_arr[index] = J.AutoVar(
-            (
-                autoList: @
-                fieldIndex: index
-                tag: "#{@toString()}._fields[#{index}]"
-            )
-
-            =>
-                if index >= @size()
-                    # This field has just been popped
-                    return J.makeValueNotReadyObject()
-
-                @valueFunc.call null, index, @
-
-            if _.isFunction @onChange
-                @onChange.bind @, index
-            else
-                @onChange
-
-            creator: @creator
-        )
-
-
-    _pop: ->
-        fieldAutoVar = @_arr[@_arr.length - 1]
-        super
-        fieldAutoVar?.stop()
-
-
-    _push: ->
-        index = @_arr.length
-
-        @_arr.push null
-
-        if @onChange
-            @_initFieldAutoVar index
-        else
-            # Save ~1kb of memory until the field is
-            # actually needed.
+            super
 
 
     clone: ->
@@ -152,7 +145,7 @@ class J.AutoList extends J.List
 
 
     stop: ->
-        fieldVar?.stop() for fieldVar in @_arr
+        @_valuesVar.stop()
         @_sizeVar.stop()
 
 

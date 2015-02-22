@@ -78,15 +78,32 @@ class J.List
     _push: (value) ->
         index = @_arr.length
 
-        @_arr.push J.Var value,
+        # Initialize it as not-ready so when we set it
+        # on the next line, it might trigger @onChange.
+        @_arr.push J.Var J.makeValueNotReadyObject(),
             creator: @creator
             tag:
                 list: @
                 index: index
                 tag: "#{@toString()}._arr[#{index}]"
-            onChange: @onChange?.bind(@, index) ? null
+            onChange:
+                if _.isFunction @onChange
+                    @onChange.bind @, index
+                else null
 
-        @_sizeDep.changed()
+        @_arr[index].set value
+
+        @_sizeDep?.changed()
+
+
+    _set: (index, value) ->
+        if not @isActive()
+            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+
+        unless index of @_arr
+            throw new Meteor.Error "List index out of range"
+
+        @_arr[index].set value
 
 
     clear: ->
@@ -320,15 +337,8 @@ class J.List
     set: (index, value) ->
         if @readOnly
             throw new Meteor.Error "#{@constructor.name} instance is read-only"
-        unless index of @_arr
-            throw new Meteor.Error "List index out of range"
 
-        setter = Tracker.currentComputation
-        canSet = @isActive()
-        if not canSet
-            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
-
-        @_arr[index].set value
+        @_set index, value
 
 
     setReadOnly: (@readOnly = true, deep = false) ->
