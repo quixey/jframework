@@ -1,31 +1,4 @@
 class J.AutoVar extends Tracker.Computation
-    class @COMPUTING extends Error
-        constructor: ->
-            @name = "J.AutoVar.COMPUTING"
-            @message = "Value will be available later in the computation."
-
-
-    @makeComputingObject: ->
-        # The commented-out lines are kinda helpful
-        # for debugging but slow as hell.
-        # e = Error()
-        obj = new @COMPUTING
-        obj.isServer = Meteor.isServer
-        # obj.stack = e.stack
-        obj
-
-
-    @getFirstActiveAncestor = (comp) ->
-        if comp is null
-            null
-        else if not comp.stopped
-            comp
-        else if comp instanceof @
-            @getFirstActiveAncestor comp.creator
-        else
-            null
-
-
     constructor: (tag, valueFunc, onChange, options) ->
         ###
             AutoVars default to being "lazy", i.e. not calculated
@@ -88,6 +61,7 @@ class J.AutoVar extends Tracker.Computation
             @stop()
 
         @_getters = [] # computations
+        @_getting = false
         @_previousReadyValue = undefined
         @_value = undefined
 
@@ -118,15 +92,12 @@ class J.AutoVar extends Tracker.Computation
                 @_addInvalidAncestor @
 
         try
-            # ValueFunc may either return or throw J.Var.NOT_READY
-            # or throw @COMPUTING. It may not return undefined.
+            # ValueFunc may either return or throw J.Var.NOT_READY.
+            # It may not return undefined.
             value = @valueFunc.call null, @
 
         catch e
-            if e instanceof J.AutoVar.COMPUTING
-                @invalidate()
-                return
-            else if e instanceof J.VALUE_NOT_READY
+            if e instanceof J.VALUE_NOT_READY
                 value = e
             else
                 throw e
@@ -163,23 +134,15 @@ class J.AutoVar extends Tracker.Computation
                     @onChange.call @, oldValue, newValue
 
 
-    currentValueMightChange: ->
-        # Returns true if @_value might change between now
-        # and the end of the current flush (or the end of
-        # hypothetically calling Tracker.flush() now).
-        # Note that true doesn't mean the current value
-        # *will* change. It's possible that all invalidated
-        # dependency values will recompute themselves to have
-        # the same value, and thereby stop @_valueComp from
-        # ever invalidating.
-        @_value is undefined or @_invalidAncestors.length
-
-
     debug: ->
         console.log @toString()
 
 
     get: ->
+        if @_getting
+            console.error "AutoVar dependency cycle involving #{@toString()}"
+            throw "AutoVar dependency cycle involving #{@toString()}"
+
         if Meteor.isServer and J._inMethod.get()
             # We're just using the Var to wrap the value, e.g.
             # array becomes J.List.
@@ -187,28 +150,14 @@ class J.AutoVar extends Tracker.Computation
 
         getter = Tracker.currentComputation
 
-        if @stopped
-            ancestorComp = @constructor.getFirstActiveAncestor @creator
-            if ancestorComp
-                # There's an active ancestor, so there's a chance
-                # that the function trying to get us will succeed
-                # next time. That's why we can say we're "computing".
-                if getter?
-                    throw @constructor.makeComputingObject()
-                else
-                    return undefined
-            else
-                console.error()
-                throw new Meteor.Error "#{@constructor.name} ##{@_id} is stopped: #{@}."
-
+        @_getting = true
         if @_value is undefined
             @_compute()
-
-        if @currentValueMightChange()
-            if getter?
-                throw J.AutoVar.makeComputingObject()
-            else
-                return undefined
+        else
+            while @_invalidAncestors.length
+                ancestor = @_invalidAncestors.shift()
+                ancestor._compute()
+        @_getting = false
 
         if getter? and getter not in @_getters
             @_getters.push getter

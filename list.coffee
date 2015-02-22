@@ -5,6 +5,8 @@
 
 
 class J.List
+    @_UNDEFINED = new (->)
+
     constructor: (values, options) ->
         ###
             Options:
@@ -51,10 +53,6 @@ class J.List
 
 
     _get: (index) ->
-        if not @isActive()
-            throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
-                can't get index #{index} of inactive #{@constructor.name}: #{@}"
-
         @_arr[index].get()
 
 
@@ -164,7 +162,6 @@ class J.List
               not when the returned array changes.
         ###
         callerComp = Tracker.currentComputation
-        UNDEFINED = J.Dict()
         mappedList = @map(
             (v, i) =>
                 if callerComp
@@ -176,16 +173,20 @@ class J.List
                     # of the forEach should get invalidated.
                     Tracker.onInvalidate -> callerComp.invalidate()
                 ret = f v, i
-                if ret is undefined then UNDEFINED else ret
+                if ret is undefined then J.List._UNDEFINED else ret
             tag: "forEach(#{@toString()})"
             sourceList: @
             mapFunc: f
         )
         for value in mappedList.getValues()
-            if value is UNDEFINED then undefined else value
+            if value is J.List._UNDEFINED then undefined else value
 
 
     get: (index) ->
+        if not @isActive()
+            throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
+                can't get index #{index} of inactive #{@constructor.name}: #{@}"
+
         unless _.isNumber(index) and parseInt(index) is index
             throw new Meteor.Error "Index must be an int"
 
@@ -286,7 +287,7 @@ class J.List
             if f is _.identity and @ instanceof J.AutoList and @onChange
                 @
             else
-                mappedAl = J.AutoList(
+                J.AutoList(
                     tag
                     => @size()
                     (i) => f @get(i), i

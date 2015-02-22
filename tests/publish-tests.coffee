@@ -262,7 +262,7 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
                 log 'newCVal is', newCVal
             else if runCount1 is 3
                 test.isTrue false, "w1 should have thrown (2)"
-            else if runCount1 is 6
+            else if runCount1 is 4
                 test.equal cVal, currentId
                 a.stop()
                 b.stop()
@@ -270,7 +270,7 @@ addTest "AutoVar - invalidation propagation during fetch", (test, onComplete) ->
             cVal
         (oldCVal, newCVal) ->
             log 'watcher1.onChange', runCount1, oldCVal, newCVal
-            if runCount1 is 6
+            if runCount1 is 4
                 test.equal oldCVal, undefined
                 test.equal newCVal, currentId
                 watcher1.stop()

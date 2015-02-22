@@ -176,7 +176,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
-                        # If the onChange functions use not-ready/computing values,
+                        # If the onChange functions try to use not-ready values,
                         # we want that to be an error (unless they use J.tryGet).
                         # So wrap the call in a computation.
                         Tracker.autorun (c) =>
@@ -233,7 +233,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
-                        # If the onChange functions use not-ready/computing values,
+                        # If the onChange functions try to use not-ready values,
                         # we want that to be an error (unless they use J.tryGet).
                         # So wrap the call in a computation.
                         Tracker.autorun (c) =>
@@ -423,20 +423,6 @@ J._defineComponent = (componentName, componentSpec) ->
                                 textAlign: 'center'
                                 opacity: 0.5
                             $$ ('Loader')
-                    else if e instanceof J.AutoVar.COMPUTING
-                        # We want c to invalidate itself, but we want the
-                        # recalculation to happen at the end of the flush
-                        # queue (FIFO flushing), not right away. That's why
-                        # we're using afterFlush.
-                        Tracker.afterFlush(
-                            => c.invalidate()
-                            10 + @_componentId
-                        )
-                        $$ ('div'),
-                            style:
-                                textAlign: 'center'
-                                opacity: 0.5
-                            ("#{@toString()} computing...")
                     else
                         throw e
                 finally

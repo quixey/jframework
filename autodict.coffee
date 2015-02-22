@@ -165,10 +165,9 @@ class J.AutoDict extends J.Dict
             )
 
             =>
-                # If @_keysVar needs recomputing, this @hasKey call will throw
-                # a COMPUTING. Then this field-autovar may or may not be left
-                # standing to recompute and continue past the assert.
-                J.assert @hasKey key
+                if not @hasKey key
+                    # This field has just been deleted
+                    return J.makeValueNotReadyObject()
 
                 @valueFunc.call null, key, @
 
@@ -206,13 +205,11 @@ class J.AutoDict extends J.Dict
 
 
     hasKey: (key) ->
-        if @_keysVar.currentValueMightChange()
+        if @_keysVar._value is undefined or @_keysVar._invalidAncestors.length
             # This might have a special @_replaceKeys side effect
             # which then makes the logic in super work
             keysArr = Tracker.nonreactive => @_keysVar.get()
-            if keysArr is undefined
-                if Tracker.active then throw J.AutoVar.makeComputingObject()
-                else return undefined
+            return undefined if keysArr is undefined
 
         if Tracker.active
             @_hasKeyDeps[key] ?= new Tracker.Dependency @creator

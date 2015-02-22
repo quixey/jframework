@@ -1,45 +1,3 @@
-Tinytest.add "AutoVar - currentValueMightChange", (test) ->
-    v = J.Var 5
-    a = J.AutoVar(
-        'a'
-        -> v.get()
-    )
-    b = J.AutoVar(
-        'b'
-        -> a.get()
-    )
-    c = J.AutoVar(
-        'c'
-        -> Math.max a.get(), 10
-        true
-    )
-    dHistory = []
-    d = J.AutoVar(
-        'd'
-        -> c.get()
-        (oldD, newD) ->
-            dHistory.push [oldD, newD]
-    )
-    test.isTrue a.currentValueMightChange()
-    a.get()
-    test.isFalse a.currentValueMightChange()
-    test.isTrue c.currentValueMightChange()
-    Tracker.flush()
-    v.set 6
-    test.isTrue a.currentValueMightChange()
-    test.isTrue b.currentValueMightChange()
-    test.isTrue c.currentValueMightChange()
-    test.isTrue d.currentValueMightChange()
-    Tracker.flush()
-    test.isFalse c.currentValueMightChange()
-    test.isFalse d.currentValueMightChange()
-    test.equal dHistory, [[undefined, 10]]
-    a.stop()
-    b.stop()
-    c.stop()
-    d.stop()
-
-
 Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
     ###
         If an AutoVar's value is running its own computation,
@@ -84,27 +42,23 @@ Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplet
             onComplete()
 
 
-#
-#Tinytest.add "AutoVar - dependency cycle", (test) ->
-#    test.isTrue false, "Not implemented yet"
-#    return
-#
-#    firstRun = J.Var true
-#    runCount = 0
-#
-#    a = J.AutoVar 'a', ->
-#        runCount += 1
-#        if firstRun.get()
-#            1
-#        else
-#            Math.min a.get() + 1, 10
-#
-#    test.equal a.get(), 1
-#    firstRun.set false
-#    Tracker.flush()
-#    test.throws -> a.get()
-#
-#
+Tinytest.add "AutoVar - dependency cycle", (test) ->
+    firstRun = J.Var true
+    runCount = 0
+
+    a = J.AutoVar 'a', ->
+        runCount += 1
+        if firstRun.get()
+            1
+        else
+            Math.min a.get() + 1, 10
+
+    test.equal a.get(), 1
+    firstRun.set false
+    if Meteor.isClient then test.throws -> a.get()
+    a.stop()
+
+
 Tinytest.add "AutoVar - invalidation of parent computation", (test) ->
     v = J.Var 5
     b = null
@@ -115,9 +69,8 @@ Tinytest.add "AutoVar - invalidation of parent computation", (test) ->
 
     test.equal a.get(), 5
     v.set 6
-    test.equal a.get(), undefined
+    test.equal a.get(), 6
     Tracker.flush()
-    console.log 'a is', a.get()
     test.equal a.get(), 6
 
 Tinytest.add "AutoVar - invalidation of parent computation 2", (test) ->
@@ -132,8 +85,8 @@ Tinytest.add "AutoVar - invalidation of parent computation 2", (test) ->
 
     test.equal a.get(), 5
     v.set 6
-    test.equal a.get(), undefined
-    test.equal b.get(), undefined
+    test.equal a.get(), 6
+    test.equal b.get(), 6
     test.equal c.get(), 10
     Tracker.flush()
     test.equal a.get(), 6
@@ -146,14 +99,10 @@ Tinytest.add "AutoVar - invalidation of parent computation 3", (test) ->
     a = J.AutoVar 'a',
         ->
             c = J.AutoVar 'c', ->
-                console.log 1
                 if v.get() is 6
-                    console.log 2
                     w.get()
-                    console.log 3
                     'v is 6'
                 else
-                    console.log 4
                     'v is not 6'
 
             w = J.AutoVar 'w', -> v.get()
@@ -164,7 +113,7 @@ Tinytest.add "AutoVar - invalidation of parent computation 3", (test) ->
 
     test.equal a.get(), 3
     v.set 6
-    test.equal a.get(), undefined
+    test.equal a.get(), 3
     Tracker.flush()
     test.equal a.get(), 3
 
@@ -227,26 +176,18 @@ Tinytest.addAsync "AutoVar - Topological invalidation order", (test, onComplete)
             if hist.length > 30 then crash
             a.get()
             d.get()
-            console.log 7
             ret = a.get() + d.get()
             console.log 'end of e'
             ret
         true
     )
-    console.log 1
 
     Tracker.flush()
-    console.log 2
     test.equal hist, ['c', 'a', 'd', 'b', 'e']
-    console.log 3
     test.equal c.get(), 5
-    console.log 4
     x.set 6
-    console.log 5
     # Tracker.flush()
-    console.log 6
     #test.equal c.get(), 6
-    console.log 'hi'
     onComplete()
     return
 
@@ -311,7 +252,7 @@ Tinytest.add "AutoVar - basics 1", (test) ->
     xPlusOne = J.AutoVar -> x.get() + 1
     test.equal xPlusOne.get(), 6
     x.set 10
-    test.equal xPlusOne.get(), undefined
+    test.equal xPlusOne.get(), 11
     Tracker.flush()
     test.equal xPlusOne.get(), 11
 
@@ -390,7 +331,7 @@ Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
     e = J.AutoVar -> d.get()
     test.equal e.get(), 5
     x.set 6
-    test.equal e.get(), undefined
+    test.equal e.get(), 6
     Tracker.flush()
     test.equal e.get(), 6
 
@@ -402,7 +343,7 @@ Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
     e = J.AutoVar 'e', -> c.get() + a.get()
     test.equal e.get(), 10
     x.set 6
-    test.equal e.get(), undefined
+    test.equal e.get(), 12
     Tracker.flush()
     test.equal e.get(), 12
 

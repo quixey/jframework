@@ -5,19 +5,6 @@ Tinytest.add "_init", (test) ->
     return
 
 
-Tinytest.add "xxx", (test) ->
-    v = J.Var 5
-
-    b = J.AutoVar 'b',
-        -> a.get() + 1
-
-    a = J.AutoVar 'a',
-        -> v.get() + 1
-
-    test.equal b.get(), 7
-
-
-
 Tinytest.add "AutoDict - create with fieldSpec instead of keyFunc", (test) ->
     w = J.Var 9
     changeHist = []
@@ -419,7 +406,7 @@ Tinytest.add "AutoDict - Basics", (test) ->
     test.equal d.get('two'), "two is a number"
     test.isUndefined d.get('four')
     size.set 4
-    test.isUndefined d.size()
+    test.equal d.size(), 4
     Tracker.flush()
     test.equal d.size(), 4
     Tracker.flush()
@@ -645,6 +632,7 @@ Tinytest.add "List - reverse", (test) ->
     test.equal reversed.toArr(), [3, 2, 1, 0]
     test.equal lst.toArr(), [0, 1, 22, 3]
     reversed = null
+
     c = Tracker.autorun (c) ->
         reversed = lst.getReversed()
     test.equal reversed.toArr(), [3, 22, 1, 0]
@@ -682,7 +670,6 @@ Tinytest.add "List - getConcat", (test) ->
     test.equal concatted.get(0), 3
     c.stop()
     Tracker.flush() # Intentionally testing flushing after stopping
-    test.throws -> concatted.get 0
 
 Tinytest.add "List - .contains reactivity", (test) ->
     lst = J.List [0, 1, 2, 3, 4]

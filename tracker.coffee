@@ -31,7 +31,7 @@ withNoYieldsAllowed = (f) ->
         args = arguments
         Meteor._noYieldsAllowed -> f.apply null, args
 
-pendingComputations = []
+Tracker.pendingComputations = []
 
 # true if a Tracker.flush is scheduled, or if we are in Tracker.flush now
 Tracker.willFlush = false
@@ -43,9 +43,9 @@ Tracker.inFlush = false
 # or recompute.  This matches Tracker.active unless we are inside
 # Tracker.nonreactive, which nullifies currentComputation even though
 # an enclosing computation may still be running.
-inCompute = false
+Tracker.inCompute = false
 
-afterFlushCallbacks = []
+Tracker.afterFlushCallbacks = []
 
 requireFlush = ->
     if not Tracker.willFlush
@@ -99,13 +99,13 @@ Tracker.Computation::invalidate = ->
     @invalidated = true
 
     if not @stopped
-        pendingComputations.push @
+        Tracker.pendingComputations.push @
 
-        if pendingComputations.length > 1 and (
-            @sortKey < pendingComputations[pendingComputations.length - 1].sortKey
+        if Tracker.pendingComputations.length > 1 and (
+            @sortKey < Tracker.pendingComputations[Tracker.pendingComputations.length - 1].sortKey
         )
             J.inc 'pcSort'
-            pendingComputations.sort (a, b) ->
+            Tracker.pendingComputations.sort (a, b) ->
                 if a.sortKey < b.sortKey then -1
                 else if a.sortKey > b.sortKey then 1
                 else 0
@@ -127,18 +127,22 @@ Tracker.Computation::stop = ->
 
 
 Tracker.Computation::_compute = ->
+    i = Tracker.pendingComputations.indexOf @
+    if i >= 0
+        Tracker.pendingComputations.splice i, 1
+
     @invalidated = false
 
     previous = Tracker.currentComputation
     setCurrentComputation @
-    previousInCompute = inCompute
-    inCompute = true
+    previousInCompute = Tracker.inCompute
+    Tracker.inCompute = true
 
     try
         withNoYieldsAllowed(@_func) @
     finally
         setCurrentComputation previous
-        inCompute = previousInCompute
+        Tracker.inCompute = previousInCompute
 
 
 Tracker.Computation::debug = ->
@@ -150,31 +154,32 @@ Tracker.Computation::debug = ->
     console.groupEnd()
 
 
-Tracker.flush = (_opts) ->
-    # console.debug "Tracker.flush!"
+Tracker.flush = ->
+    console.debug "Tracker.flush!"
 
     if Tracker.inFlush
-        throw new Error "Can't call Tracker.flush while flushing"
+        console.error 'hi'
+        throw "Can't call Tracker.flush while flushing"
 
-    if inCompute
-        throw new Error "Can't flush inside Tracker.autorun"
+    if Tracker.inCompute
+        throw "Can't flush inside Tracker.autorun"
 
     Tracker.inFlush = true
     Tracker.willFlush = true
 
-    while pendingComputations.length or afterFlushCallbacks.length
+    while Tracker.pendingComputations.length or Tracker.afterFlushCallbacks.length
         # Recompute all pending computations
-        while pendingComputations.length
-            comp = pendingComputations.shift()
+        while Tracker.pendingComputations.length
+            comp = Tracker.pendingComputations.shift()
             comp._compute() unless comp.stopped
             J.inc 'recompute'
 
-        if afterFlushCallbacks.length
+        if Tracker.afterFlushCallbacks.length
             J.inc 'afterFlush'
 
             # Call one afterFlush callback, which may
             # invalidate more computations
-            afc = afterFlushCallbacks.shift()
+            afc = Tracker.afterFlushCallbacks.shift()
             afc.func.call null
 
     Tracker.willFlush = false
@@ -222,12 +227,12 @@ Tracker.afterFlush = (f, sortKey = 0.5) ->
     unless _.isNumber(sortKey)
         throw new Error "afterFlush sortKey must be a number (lower comes first)"
 
-    afterFlushCallbacks.push func: f, sortKey: sortKey
+    Tracker.afterFlushCallbacks.push func: f, sortKey: sortKey
 
-    if afterFlushCallbacks.length > 1 and (
-        sortKey < afterFlushCallbacks[afterFlushCallbacks.length - 2].sortKey
+    if Tracker.afterFlushCallbacks.length > 1 and (
+        sortKey < Tracker.afterFlushCallbacks[Tracker.afterFlushCallbacks.length - 2].sortKey
     )
-        afterFlushCallbacks.sort (a, b) ->
+        Tracker.afterFlushCallbacks.sort (a, b) ->
             if a.sortKey < b.sortKey then -1
             else if a.sortKey > b.sortKey then 1
             else 0

@@ -76,11 +76,9 @@ class J.AutoList extends J.List
             )
 
             =>
-                # If @_sizeVar needs recomputing, this .get() call
-                # will throw a COMPUTING. Then this field-autovar
-                # may or may not be left standing to recompute
-                # and continue past the assert.
-                J.assert index < @size(), "SIZE"
+                if index >= @size()
+                    # This field has just been popped
+                    return J.makeValueNotReadyObject()
 
                 @valueFunc.call null, index, @
 
