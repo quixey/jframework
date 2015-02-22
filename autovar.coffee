@@ -59,6 +59,7 @@ class J.AutoVar extends Tracker.Computation
 
         @creator?.onInvalidate =>
             @stop()
+            @_removeInvalidAncestor @
 
         @_getters = [] # computations
         @_getting = false
@@ -87,8 +88,11 @@ class J.AutoVar extends Tracker.Computation
 
     _runValueFunc: ->
         @onInvalidate =>
-            @_invalidAncestors = []
-            if not @stopped
+            if @stopped
+                @_removeInvalidAncestor @
+                @_invalidAncestors = []
+            else
+                @_invalidAncestors = []
                 @_addInvalidAncestor @
 
         try
@@ -113,25 +117,33 @@ class J.AutoVar extends Tracker.Computation
 
     _set: (value) ->
         previousValue = @_value
-        @_value = J.Var::maybeWrap.call @, value
+        newValue = @_value = J.Var::maybeWrap.call @, value
 
         if _.isFunction(@onChange) and previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
 
-        if @_value isnt previousValue
+        if newValue isnt previousValue
             getter.invalidate() for getter in _.clone @_getters
+
+            if (
+                (newValue instanceof J.List or newValue instanceof J.Dict) and
+                newValue.creator?
+            )
+                # Normally Lists and Dicts control their own reactivity when methods
+                # are called on them. The exception is when they get stopped.
+                newValue.creator.onInvalidate =>
+                    if @_value is newValue
+                        getter.invalidate() for getter in _.clone @_getters
 
         if (
             _.isFunction(@onChange) and
             @_value not instanceof J.VALUE_NOT_READY and
             @_value isnt @_previousReadyValue
         )
-            # Need lexically scoped oldValue and newValue
-            oldValue = @_previousReadyValue
-            newValue = @_value
+            previousReadyValue = @_previousReadyValue
             Tracker.afterFlush =>
                 if not @stopped
-                    @onChange.call @, oldValue, newValue
+                    @onChange.call @, previousReadyValue, newValue
 
 
     debug: ->
@@ -139,6 +151,9 @@ class J.AutoVar extends Tracker.Computation
 
 
     get: ->
+        if @stopped
+            throw new Meteor.Error "Can't get value of inactive AutoVar: #{@}"
+
         if @_getting
             console.error "AutoVar dependency cycle involving #{@toString()}"
             throw "AutoVar dependency cycle involving #{@toString()}"

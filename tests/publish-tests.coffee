@@ -12,12 +12,12 @@ log = ->
 
 
 addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
-    console.info "begin weird problem"
-
     a = J.AutoVar 'a',
-        ->
+        (newA) ->
+            console.log 'recomp a', (aa.tag + '-' + aa._id for aa in newA._invalidAncestors)
             b = J.AutoVar 'b',
                 ->
+                    console.log 'recomp b'
                     x = $$.Foo.fetchOne()
                     J.AutoList(
                         'al'
@@ -29,9 +29,13 @@ addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
 
             outerTester = J.AutoVar 'outerTester',
                 (ot) ->
-                    b.get()
+                    console.log 'recomp outertester', ot._id
+                    ret = b.get()
+                    console.log 'done outertester', ot._id
+                    ret
 
             outerTester.get()
+            console.log 'done a'
 
             ['fake1', 'fake2']
 
@@ -39,8 +43,11 @@ addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
     test.isUndefined aVal
     setTimeout(
         ->
+            console.log 1, a._value, a.stopped, Tracker.pendingComputations, (aa.tag + "-" + aa._id for aa in a._invalidAncestors)
             aVal2 = a.get()
+            console.log 2
             test.isTrue aVal2?
+            console.log 3
             a.stop()
             onComplete()
         1000

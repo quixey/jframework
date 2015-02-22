@@ -52,7 +52,7 @@ class J.AutoList extends J.List
         @_valuesVar = J.AutoVar(
             (
                 autoList: @
-                tag: "#{toString()} valuesVar"
+                tag: "#{@toString()} valuesVar"
             )
 
             =>

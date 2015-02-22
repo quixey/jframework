@@ -70,7 +70,7 @@ class J.Var
             @onChange = null
         @wrap = options?.wrap ? true
 
-        @_getters = {} # computationId: computation
+        @_getters = [] # computations
 
         ###
             @_value is never undefined. It can be J.VALUE_NOT_READY
@@ -88,14 +88,13 @@ class J.Var
     get: ->
         getter = Tracker.currentComputation
 
-        canGet = @isActive() # or (getter? and getter is @creator)
-        if not canGet
+        if not @isActive()
             throw new Meteor.Error "Can't get value of inactive Var: #{@}"
 
-        if getter? and getter._id not of @_getters
-            @_getters[getter._id] = getter
+        if getter? and getter not in @_getters
+            @_getters.push getter
             getter.onInvalidate =>
-                delete @_getters[getter._id]
+                @_getters.splice @_getters.indexOf(getter), 1
 
         if @_value instanceof J.VALUE_NOT_READY
             throw @_value if getter
@@ -110,20 +109,29 @@ class J.Var
 
     set: (value) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 
         previousValue = @_value
-        @_value = @maybeWrap value
+        newValue = @_value = @maybeWrap value
 
         if @onChange? and previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
 
-        if not J.util.equals previousValue, @_value
-            for getterId, getter of @_getters
+        if not J.util.equals newValue, previousValue
+            for getter in _.clone @_getters
                 unless getter is setter is @creator
                     getter.invalidate()
+
+            if (
+                (newValue instanceof J.List or newValue instanceof J.Dict) and
+                newValue.creator?
+            )
+                # Normally Lists and Dicts control their own reactivity when methods
+                # are called on them. The exception is when they get stopped.
+                newValue.creator.onInvalidate =>
+                    if @_value is newValue
+                        getter.invalidate() for getter in _.clone @_getters
 
         if (
             @onChange? and
@@ -136,15 +144,14 @@ class J.Var
             # and cause @onChange(undefined, 4), @onChange(4, 7) and
             # @onChange(7, 3) to both be called after flush, in the correct
             # order of course.
-            oldValue = @_previousReadyValue
-            newValue = @_value
+            previousReadyValue = @_previousReadyValue
 
             Tracker.afterFlush =>
                 # Only call onChange if we're still active, even though
                 # there may be multiple onChange calls queued up from when
                 # we were still active.
                 if @isActive()
-                    @onChange.call @, oldValue, newValue
+                    @onChange.call @, previousReadyValue, newValue
 
         @_value
 

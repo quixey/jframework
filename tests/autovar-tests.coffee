@@ -400,3 +400,115 @@ Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
     dep.changed()
     test.isTrue c1.invalidated
     c1.stop()
+
+Tinytest.add "AutoVar - sideways invalidation", (test) ->
+    v = J.Var 5
+    a = J.AutoVar(
+        'a'
+        ->
+            b = J.AutoList(
+                'b'
+                1
+                (i) ->
+                    v.get()
+            )
+            b.get(0)
+            b
+    )
+    c = J.AutoVar(
+        'c'
+        ->
+            myB = a.get()
+
+            d = J.AutoVar(
+                'd'
+                ->
+                    if v.get() is 6
+                        myB.get(0)
+                    else null
+            )
+            d.get()
+    )
+    c.get()
+    a.get()
+    Tracker.flush()
+    v.set 6
+    c.get()
+    a.stop()
+    c.stop()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
