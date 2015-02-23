@@ -144,6 +144,15 @@ J.fetching =
                 Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
 
 
+    _deleteComputationQsRequests: (computation) ->
+        for qsString of @_requestersByQs
+            delete @_requestersByQs[qsString][computation._id]
+            if _.isEmpty @_requestersByQs[qsString]
+                delete @_requestersByQs[qsString]
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+
+
     requestQuery: (querySpec) ->
         qsString = EJSON.stringify querySpec
 
@@ -157,15 +166,15 @@ J.fetching =
             @_requestersByQs[qsString] ?= {}
             if computation._id not of @_requestersByQs[qsString]
                 @_requestersByQs[qsString][computation._id] = computation
-                computation.onInvalidate =>
+
+                if computation is computation.component?._elementVar
+                    # Will be slow to re-render relative to the flush cycle, so don't
+                    # kill its fetches yet.
+                else computation.onInvalidate =>
                     # console.log computation.tag, 'cancels a query', computation.stopped,
                     #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
-                    if qsString of @_requestersByQs
-                        delete @_requestersByQs[qsString][computation._id]
-                        if _.isEmpty @_requestersByQs[qsString]
-                            delete @_requestersByQs[qsString]
-                    @_requestsChanged = true
-                    Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+                    @_deleteComputationQsRequests computation
+
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]

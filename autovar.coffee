@@ -50,8 +50,8 @@ class J.AutoVar extends Tracker.Computation
         else
             @creator = options.creator
         @wrap = options?.wrap ? true
+        @sortKey = options?.sortKey ? 0.3
 
-        @sortKey = 0.3
         @invalidated = false
         @_invalidAncestors = [] # autoVars
         @_onInvalidateCallbacks = []
@@ -104,6 +104,7 @@ class J.AutoVar extends Tracker.Computation
             if e instanceof J.VALUE_NOT_READY
                 value = e
             else
+                console.log e.stack
                 throw e
 
         if value is undefined
@@ -134,7 +135,6 @@ class J.AutoVar extends Tracker.Computation
                 newValue.creator.onInvalidate =>
                     if @_value is newValue
                         for getter in _.clone @_getters
-                            console.log @tag, "invalidating", getter.tag, "on behalf of ", newValue
                             getter.invalidate()
 
         if (
@@ -154,7 +154,8 @@ class J.AutoVar extends Tracker.Computation
 
     get: ->
         if @stopped
-            throw new Meteor.Error "Can't get value of inactive AutoVar: #{@}"
+            throw new Meteor.Error "#{Tracker.currentComputation?._id} can't get
+                value of inactive AutoVar: #{@}"
 
         if @_getting
             console.error "AutoVar dependency cycle involving #{@toString()}"

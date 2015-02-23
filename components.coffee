@@ -176,6 +176,9 @@ J._defineComponent = (componentName, componentSpec) ->
         J._componentsByName[componentName] ?= {}
         J._componentsByName[componentName][@_componentId] = @
 
+        @_valid = J.Var true
+
+
         # Check for invalid prop names in @props
         for propName, value of @props
             unless propName of propSpecs
@@ -290,6 +293,13 @@ J._defineComponent = (componentName, componentSpec) ->
                     )
 
                     =>
+                        hasInvalidAncestor = Tracker.nonreactive => @_hasInvalidAncestor()
+                        if hasInvalidAncestor
+                            @_hasInvalidAncestor() # we want to recompute when it's false
+                            return J.makeValueNotReadyObject()
+                        else
+                            # We don't gain anything from recomputing if/when it's true
+
                         _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
                             console.debug _getDebugPrefix(@), "!#{reactiveName}()"
@@ -386,11 +396,22 @@ J._defineComponent = (componentName, componentSpec) ->
         delete J._componentsByName[componentName][@_componentId]
         delete J._componentDomsByName[componentName][@_componentId]
 
+        @_valid.set false
         @_elementVar.stop()
+        J.fetching._deleteComputationQsRequests @_elementVar
         for reactiveName, reactiveVar of @reactives
             reactiveVar.stop()
 
         componentSpec.componentWillUnmount?.apply @
+
+
+    reactSpec._hasInvalidAncestor = ->
+        ancestor = @
+        while ancestor
+            if ancestor._valid? and not ancestor._valid.get()
+                return true
+            ancestor = ancestor._owner
+        false
 
 
     reactSpec.render = ->
@@ -401,7 +422,10 @@ J._defineComponent = (componentName, componentSpec) ->
             throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components
                 don't allow forceUpdate(). Use reactive expressions instead."
 
-        @_elementVar?.stop()
+        if @_elementVar?
+            @_elementVar.stop()
+            J.fetching._deleteComputationQsRequests @_elementVar
+
         firstRun = true
         @_elementVar = J.AutoVar(
             (
@@ -413,19 +437,12 @@ J._defineComponent = (componentName, componentSpec) ->
             (elementVar) =>
                 if firstRun
                     firstRun = false
+                    elementVar.component = @
                     unpackRenderSpec componentSpec.render.apply @
                 else
                     elementVar.stop()
 
-                    hasInvalidAncestor = false
-                    ancestor = @_owner
-                    while ancestor
-                        if ancestor._elementVar?.invalidated
-                            hasInvalidAncestor = true
-                            break
-                        ancestor = ancestor._owner
-
-                    if not hasInvalidAncestor
+                    if not @_hasInvalidAncestor()
                         Tracker.afterFlush(
                             =>
                                 if @_elementVar is elementVar and @isMounted()
@@ -433,8 +450,12 @@ J._defineComponent = (componentName, componentSpec) ->
                             @_componentId + 10
                         )
 
+                    @_valid.set false
+
                     null
         )
+
+        @_valid.set true
 
         element = @_elementVar.get()
 
