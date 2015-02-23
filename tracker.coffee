@@ -260,10 +260,8 @@ class Tracker.Dependency
         @_dependents = []
 
 
-    depend: (computation) ->
-        if not computation?
-            return false if not Tracker.active
-            computation = Tracker.currentComputation
+    depend: (computation = Tracker.currentComputation) ->
+        return false if not computation?
 
         if computation in @_dependents
             false
@@ -276,7 +274,7 @@ class Tracker.Dependency
 
 
     changed: ->
-        for computation in @_dependents
+        for computation in _.clone @_dependents
             unless computation is Tracker.currentComputation is @creator
                 computation.invalidate()
 
