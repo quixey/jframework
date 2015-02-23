@@ -57,7 +57,6 @@ class J.AutoList extends J.List
 
             =>
                 size = @size()
-                ready = true
 
                 values = for i in [0...size]
                     try
@@ -68,17 +67,21 @@ class J.AutoList extends J.List
                             # looping because we want to synchronously register
                             # all the not-ready computations with the data
                             # fetcher that runs during afterFlush.
-                            ready = false
-                            undefined
+                            e
                         else
                             throw e
-
-                throw J.makeValueNotReadyObject() if not ready
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
                 for i in [0...Math.min size, @_arr.length]
                     @_set i, values[i]
+
+                    # Setting may have caused @creator to invalidate which
+                    # in turn killed @. Normally we never need this kind of
+                    # hacky bailout; it's just because we're doing mutation
+                    # in a valueComp.
+                    if not @isActive()
+                        return J.makeValueNotReadyObject()
 
                 if size < @_arr.length
                     for i in [size...@_arr.length]
@@ -96,10 +99,10 @@ class J.AutoList extends J.List
 
 
     _get: (index) ->
-        if @_valuesVar.get() is undefined
-            undefined
-        else
-            super
+        # Call @_valuesVar.get() for its side effect if
+        # @_valuesVar is newly created or invalidated.
+        @_valuesVar.get()
+        super
 
 
     clone: ->

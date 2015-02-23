@@ -427,19 +427,30 @@ addTest "Fetching - detect inserted instance", (test, onComplete) ->
     )
 
 addTest "Programming patterns - mutation in a forEach with fetching", (test, onComplete) ->
-    J.AutoVar 'a', (a) ->
-        myList = J.List()
-        J.List(['a', 'b', 'c']).map(
-            (x) ->
-                "#{x}-#{$$.Foo.fetchOne(x)}"
-        ).toArr().forEach(
-            (y) -> myList.push y
-        )
-        test.equal myList.toArr(), ['a-null', 'b-null', 'c-null']
-        a.stop()
-        onComplete()
-        null
-    , true
+    J.AutoVar(
+        'a'
+        (a) ->
+            myList = J.List()
+            console.log 1
+            mapAl = J.List(['a', 'b', 'c']).map(
+                (x) ->
+                    "#{x}-#{$$.Foo.fetchOne(x)}"
+            )
+            console.log 1.5
+            values = mapAl.toArr()
+            console.log 1.7
+            values.forEach(
+                (y) -> myList.push y
+            )
+            console.log 2
+            test.equal myList.toArr(), ['a-null', 'b-null', 'c-null']
+            console.log 3
+            a.stop()
+            console.log 4
+            onComplete()
+            null
+        true
+    )
 
 
 Tinytest.addAsync "_lastTest2", (test, onComplete) ->

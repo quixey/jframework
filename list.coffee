@@ -316,6 +316,7 @@ class J.List
 
     push: (value) ->
         @_push value
+        undefined
 
 
     pop: ->

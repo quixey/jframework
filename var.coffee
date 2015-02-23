@@ -78,7 +78,17 @@ class J.Var
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
-        @_value = @maybeWrap value
+        initValue = @_value = @maybeWrap value
+
+        if (
+            (initValue instanceof J.List or initValue instanceof J.Dict) and
+            initValue.creator?
+        )
+            # Normally Lists and Dicts control their own reactivity when methods
+            # are called on them. The exception is when they get stopped.
+            initValue.creator.onInvalidate =>
+                if @_value is initValue
+                    getter.invalidate() for getter in _.clone @_getters
 
 
     debug: ->
@@ -108,9 +118,10 @@ class J.Var
 
 
     set: (value) ->
-        setter = Tracker.currentComputation
         if not @isActive()
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
+
+        setter = Tracker.currentComputation
 
         previousValue = @_value
         newValue = @_value = @maybeWrap value

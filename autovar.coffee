@@ -57,11 +57,11 @@ class J.AutoVar extends Tracker.Computation
         @_onInvalidateCallbacks = []
         @stopped = false
 
+        @_getters = [] # computations
         @creator?.onInvalidate =>
             @stop()
             @_removeInvalidAncestor @
 
-        @_getters = [] # computations
         @_getting = false
         @_previousReadyValue = undefined
         @_value = undefined
@@ -133,7 +133,9 @@ class J.AutoVar extends Tracker.Computation
                 # are called on them. The exception is when they get stopped.
                 newValue.creator.onInvalidate =>
                     if @_value is newValue
-                        getter.invalidate() for getter in _.clone @_getters
+                        for getter in _.clone @_getters
+                            console.log @tag, "invalidating", getter.tag, "on behalf of ", newValue
+                            getter.invalidate()
 
         if (
             _.isFunction(@onChange) and

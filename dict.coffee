@@ -80,8 +80,7 @@ class J.Dict
 
 
     _get: (key, force) ->
-        canGet = @isActive()
-        if not canGet
+        if not @isActive()
             throw new Meteor.Error "Computation[#{Tracker.currentComputation?._id}]
                 can't get key #{JSON.stringify key} of inactive #{@constructor.name}: #{@}"
 

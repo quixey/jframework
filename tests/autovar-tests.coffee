@@ -406,10 +406,14 @@ Tinytest.add "AutoVar - sideways invalidation", (test) ->
     a = J.AutoVar(
         'a'
         ->
+            console.log 'compute a'
+            Tracker.onInvalidate -> console.log 'invalidated a'
             b = J.AutoList(
                 'b'
                 1
                 (i) ->
+                    console.log 'compute b[0]'
+                    Tracker.onInvalidate -> console.log 'invalidated b[0]'
                     v.get()
             )
             b.get(0)
@@ -418,22 +422,32 @@ Tinytest.add "AutoVar - sideways invalidation", (test) ->
     c = J.AutoVar(
         'c'
         ->
+            console.log 'compute c'
+            Tracker.onInvalidate -> console.log 'invalidated c'
             myB = a.get()
 
             d = J.AutoVar(
                 'd'
                 ->
+                    console.log 'compute d'
+                    Tracker.onInvalidate -> console.log 'invalidated d'
                     if v.get() is 6
                         myB.get(0)
                     else null
             )
             d.get()
     )
+    console.log 1
     c.get()
+    console.log 2
     a.get()
+    console.log 3
     Tracker.flush()
+    console.log 4
     v.set 6
+    console.log 5
     c.get()
+    console.log 6
     a.stop()
     c.stop()
 
