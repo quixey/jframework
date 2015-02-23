@@ -120,8 +120,17 @@ class J.AutoDict extends J.Dict
 
     _delete: (key) ->
         fieldAutoVar = @_fields[key]
-        super
+
+        oldValue = fieldAutoVar?.get()
+        if oldValue isnt undefined and @onChange?
+            Tracker.afterFlush =>
+                if @isActive()
+                    @onChange.call @, key, oldValue, undefined
+
         fieldAutoVar?.stop()
+        delete @[key]
+        delete @_fields[key]
+
         if @_hasKeyDeps[key]?
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]

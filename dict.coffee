@@ -59,7 +59,7 @@ class J.Dict
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
-        oldValue = Tracker.nonreactive => @_fields[key].get()
+        oldValue = Tracker.nonreactive => @_get key
         if oldValue isnt undefined and @onChange?
             Tracker.afterFlush =>
                 if @isActive()
@@ -68,14 +68,28 @@ class J.Dict
         delete @[key]
         delete @_fields[key]
 
-        @_keysDep?.changed()
+        @_keysDep.changed()
 
 
     _forceSet: (fields) ->
         for key, value of fields
             if key not of @_fields
                 throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set value
+
+            if @_fields[key] not instanceof J.Var
+                # We need a Var to set this list up to invalidate getters
+                # when its creator invalidates.
+                if (
+                    value instanceof J.List or value instanceof J.Dict or
+                    _.isArray(value) or J.util.isPlainObject(value)
+                )
+                    @_initFieldVar key
+
+            if @_fields[key] instanceof J.Var
+                @_fields[key].set value
+            else
+                @_fields[key] = value
+
         null
 
 
@@ -90,6 +104,8 @@ class J.Dict
         # invalidates the computation if and when this field gets
         # changed.
         if @hasKey key
+            unless @_fields[key] instanceof J.Var or @_fields[key] instanceof J.AutoVar
+                @_initFieldVar key
             @_fields[key].get()
         else if force
             throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
@@ -97,14 +113,26 @@ class J.Dict
             undefined
 
 
-    _initField: (key, value) ->
-        @_fields[key] = J.Var value,
+    _initFieldVar: (key) ->
+        @_fields[key] = J.Var @_fields[key],
             creator: @creator
             tag:
                 dict: @
                 fieldKey: key
                 tag: "#{@toString()}._fields[#{J.util.stringify key}]"
             onChange: @onChange?.bind(@, key) ? null
+
+
+    _initField: (key, value) ->
+        @_fields[key] = value
+        if (
+            @onChange? or
+            value instanceof J.List or value instanceof J.Dict or
+            _.isArray(value) or J.util.isPlainObject(value)
+        )
+            # We need a Var to set this list up to invalidate getters
+            # when its creator invalidates.
+            @_initFieldVar key
 
         if @withFieldFuncs then @_setupGetterSetter key
 
@@ -208,8 +236,7 @@ class J.Dict
 
     set: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
@@ -231,8 +258,7 @@ class J.Dict
 
     setOrAdd: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
