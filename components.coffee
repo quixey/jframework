@@ -416,12 +416,23 @@ J._defineComponent = (componentName, componentSpec) ->
                     unpackRenderSpec componentSpec.render.apply @
                 else
                     elementVar.stop()
-                    Tracker.afterFlush(
-                        =>
-                            if @_elementVar is elementVar and @isMounted()
-                                @forceUpdate()
-                        @_componentId + 10
-                    )
+
+                    hasInvalidAncestor = false
+                    ancestor = @_owner
+                    while ancestor
+                        if ancestor._elementVar?.invalidated
+                            hasInvalidAncestor = true
+                            break
+                        ancestor = ancestor._owner
+
+                    if not hasInvalidAncestor
+                        Tracker.afterFlush(
+                            =>
+                                if @_elementVar is elementVar and @isMounted()
+                                    @forceUpdate()
+                            @_componentId + 10
+                        )
+
                     null
         )
 
