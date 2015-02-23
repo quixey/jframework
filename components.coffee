@@ -293,12 +293,12 @@ J._defineComponent = (componentName, componentSpec) ->
                     )
 
                     =>
-                        hasInvalidAncestor = Tracker.nonreactive => @_hasInvalidAncestor()
-                        if hasInvalidAncestor
-                            @_hasInvalidAncestor() # we want to recompute when it's false
-                            return J.makeValueNotReadyObject()
-                        else
-                            # We don't gain anything from recomputing if/when it's true
+#                        hasInvalidAncestor = Tracker.nonreactive => @_hasInvalidAncestor()
+#                        if hasInvalidAncestor
+#                            @_hasInvalidAncestor() # we want to recompute when it's false
+#                            return J.makeValueNotReadyObject()
+#                        else
+#                            # We don't gain anything from recomputing if/when it's true
 
                         _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
@@ -336,8 +336,9 @@ J._defineComponent = (componentName, componentSpec) ->
                                     reactiveSpec.onChange.call @, oldValue, newValue
                                 finally
                                     c.stop()
-
                     else null
+
+                    component: @
                 )
 
         # Return initialState to React
@@ -437,12 +438,13 @@ J._defineComponent = (componentName, componentSpec) ->
             (elementVar) =>
                 if firstRun
                     firstRun = false
-                    elementVar.component = @
+                    Tracker.onInvalidate => @_valid.set false
                     unpackRenderSpec componentSpec.render.apply @
+
                 else
                     elementVar.stop()
 
-                    if not @_hasInvalidAncestor()
+                    if not (@_owner? and @_owner._hasInvalidAncestor?())
                         Tracker.afterFlush(
                             =>
                                 if @_elementVar is elementVar and @isMounted()
@@ -450,9 +452,11 @@ J._defineComponent = (componentName, componentSpec) ->
                             @_componentId + 10
                         )
 
-                    @_valid.set false
-
                     null
+
+            null
+
+            component: @
         )
 
         @_valid.set true

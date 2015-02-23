@@ -51,6 +51,7 @@ class J.AutoVar extends Tracker.Computation
             @creator = options.creator
         @wrap = options?.wrap ? true
         @sortKey = options?.sortKey ? 0.3
+        @component = options?.component
 
         @invalidated = false
         @_invalidAncestors = [] # autoVars
@@ -79,6 +80,11 @@ class J.AutoVar extends Tracker.Computation
             comp._addInvalidAncestor? autoVar
 
 
+    _hasInvalidComponentAncestor: ->
+        if @component?._hasInvalidAncestor() then true
+        else @creator?._hasInvalidComponentAncestor?() ? false
+
+
     _removeInvalidAncestor: (autoVar) ->
         i = @_invalidAncestors.indexOf autoVar
         if i >= 0 then @_invalidAncestors.splice i, 1
@@ -95,17 +101,21 @@ class J.AutoVar extends Tracker.Computation
                 @_invalidAncestors = []
                 @_addInvalidAncestor @
 
-        try
-            # ValueFunc may either return or throw J.Var.NOT_READY.
-            # It may not return undefined.
-            value = @valueFunc.call null, @
+        if @ isnt @component?._elementVar and Tracker.nonreactive(=> @_hasInvalidComponentAncestor())
+            @_hasInvalidComponentAncestor() # we want to recompute when it's false
+            value = J.makeValueNotReadyObject()
+        else
+            try
+                # ValueFunc may either return or throw J.Var.NOT_READY.
+                # It may not return undefined.
+                value = @valueFunc.call null, @
 
-        catch e
-            if e instanceof J.VALUE_NOT_READY
-                value = e
-            else
-                console.log e.stack
-                throw e
+            catch e
+                if e instanceof J.VALUE_NOT_READY
+                    value = e
+                else
+                    console.log e.stack
+                    throw e
 
         if value is undefined
             throw new Meteor.Error "#{@toString()}.valueFunc must not return undefined."
