@@ -257,7 +257,7 @@ class Tracker.Dependency
             else
                 creator
 
-        @_dependentsById = {}
+        @_dependents = []
 
 
     depend: (computation) ->
@@ -265,21 +265,21 @@ class Tracker.Dependency
             return false if not Tracker.active
             computation = Tracker.currentComputation
 
-        id = computation._id
-        if id of @_dependentsById
+        if computation in @_dependents
             false
         else
-            @_dependentsById[id] = computation
+            @_dependents.push computation
             computation.onInvalidate =>
-                delete @_dependentsById[id]
+                i = @_dependents.indexOf computation
+                @_dependents.splice i, 1
             true
 
 
     changed: ->
-        for id, computation of @_dependentsById
+        for computation in @_dependents
             unless computation is Tracker.currentComputation is @creator
-                @_dependentsById[id].invalidate()
+                computation.invalidate()
 
 
     hasDependents: ->
-        not _.isEmpty @_dependentsById
+        @_dependents.length > 0
