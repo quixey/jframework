@@ -34,6 +34,26 @@ J.dc = J.defineComponent = (componentName, componentSpec) ->
         spec: componentSpec
 
 
+
+# Transform J.List to array anywhere in the element children hierarchy
+# and J.Dicts to plain objects in the case of the "style" property
+unpackRenderSpec = (elem) ->
+    if React.isValidElement elem
+        if _.isArray elem.props.children
+            elem.props.children = (unpackRenderSpec e for e in elem.props.children)
+        else if elem.props.children?
+            elem.props.children = unpackRenderSpec elem.props.children
+        if elem.props.style instanceof J.Dict
+            elem.props.style = elem.props.style.toObj()
+        elem
+    else if elem instanceof J.List
+        unpackRenderSpec e for e in elem.getValues()
+    else if _.isArray elem
+        unpackRenderSpec e for e in elem
+    else
+        elem
+
+
 J._defineComponent = (componentName, componentSpec) ->
     for memberName in [
         'getDefaultProps'
@@ -168,6 +188,7 @@ J._defineComponent = (componentName, componentSpec) ->
             @_props[propName] = J.Var @props[propName],
                 tag:
                     component: @
+                    propName: propName
                     tag: "#{@toString}.prop.#{propName}"
                 onChange: do (propName, propSpec) => (oldValue, newValue) =>
                     if propSpec.onChange?
@@ -176,14 +197,21 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
-                        # If the onChange functions try to use not-ready values,
-                        # we want that to be an error (unless they use J.tryGet).
-                        # So wrap the call in a computation.
-                        Tracker.autorun (c) =>
-                            try
-                                propSpec.onChange.call @, oldValue, newValue
-                            finally
-                                c.stop()
+                        if true
+                            propSpec.onChange.call @, oldValue, newValue
+                        else
+                            # If the onChange functions try to use not-ready values,
+                            # we want that to be an error (unless they use J.tryGet).
+                            # So wrap the call in a computation.
+                            Tracker.autorun (c) =>
+                                c.tag =
+                                    component: @
+                                    propName: propName
+                                    tag: "#{@toString}.prop.#{propName} onChange!"
+                                try
+                                    propSpec.onChange.call @, oldValue, newValue
+                                finally
+                                    c.stop()
 
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
@@ -225,6 +253,7 @@ J._defineComponent = (componentName, componentSpec) ->
             initialState[stateFieldName] = J.Var initialValue,
                 tag:
                     component: @
+                    stateFieldName: stateFieldName
                     tag: "#{@toString()}.state.#{stateFieldName}"
                 onChange: do (stateFieldName, stateFieldSpec) => (oldValue, newValue) =>
                     if stateFieldSpec.onChange?
@@ -233,22 +262,32 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
-                        # If the onChange functions try to use not-ready values,
-                        # we want that to be an error (unless they use J.tryGet).
-                        # So wrap the call in a computation.
-                        Tracker.autorun (c) =>
-                            try
-                                stateFieldSpec.onChange.call @, oldValue, newValue
-                            finally
-                                c.stop()
+                        if true
+                            stateFieldSpec.onChange.call @, oldValue, newValue
+                        else
+                            # If the onChange functions try to use not-ready values,
+                            # we want that to be an error (unless they use J.tryGet).
+                            # So wrap the call in a computation.
+                            Tracker.autorun (c) =>
+                                c.tag =
+                                    component: @
+                                    stateFieldName: stateFieldName
+                                    tag: "#{@toString()}.state.#{stateFieldName} onChange!"
+                                try
+                                    stateFieldSpec.onChange.call @, oldValue, newValue
+                                finally
+                                    c.stop()
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of reactiveSpecByName
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
                 J.AutoVar(
-                    component: @
-                    tag: "#{@toString()}.reactives.#{reactiveName}",
+                    (
+                        component: @
+                        reactiveName: reactiveName
+                        tag: "#{@toString()}.reactives.#{reactiveName}",
+                    )
 
                     =>
                         _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
@@ -272,14 +311,21 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
-                        # If the onChange functions use not-ready/computing values,
-                        # we want that to be an error (unless they use J.tryGet).
-                        # So wrap the call in a computation.
-                        Tracker.autorun (c) =>
-                            try
-                                reactiveSpec.onChange.call @, oldValue, newValue
-                            finally
-                                c.stop()
+                        if true
+                            reactiveSpec.onChange.call @, oldValue, newValue
+                        else
+                            # If the onChange functions use not-ready/computing values,
+                            # we want that to be an error (unless they use J.tryGet).
+                            # So wrap the call in a computation.
+                            Tracker.autorun (c) =>
+                                c.tag =
+                                    component: @
+                                    reactiveName: reactiveName
+                                    tag: "#{@toString()}.reactives.#{reactiveName} onChange!"
+                                try
+                                    reactiveSpec.onChange.call @, oldValue, newValue
+                                finally
+                                    c.stop()
 
                     else null
                 )
@@ -317,7 +363,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
-        @_renderComp?.invalidated
+        not @_elementVar? or @_elementVar.stopped
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
@@ -327,6 +373,12 @@ J._defineComponent = (componentName, componentSpec) ->
 
         componentSpec.componentDidUpdate?.call @, prevProps, prevState
 
+    reactSpec.afterRender = (f) ->
+        if @_elementVar? and not @_elementVar.stopped
+            f.call @
+        else
+            @_setCallbacks ?= []
+            @_setCallbacks.push f
 
     reactSpec.componentWillUnmount = ->
         delete J._componentById[@_componentId]
@@ -334,111 +386,55 @@ J._defineComponent = (componentName, componentSpec) ->
         delete J._componentsByName[componentName][@_componentId]
         delete J._componentDomsByName[componentName][@_componentId]
 
-        delete @_setCallbacks
-
-        @_renderComp.stop()
-        delete @_renderComp
-
-        for reactiveName, autoVar of @reactives
-            autoVar.stop()
+        @_elementVar.stop()
+        for reactiveName, reactiveVar of @reactives
+            reactiveVar.stop()
 
         componentSpec.componentWillUnmount?.apply @
 
 
     reactSpec.render = ->
-        ###
-            Note: The following code is not elegant.
-            It would be much better to have an AutoVar which
-            always computes the latest version of the element. Unfortunately,
-            in order for React to set up refs properly, we need to do the
-            rendering at the right synchronous time.
-        ###
+        if Tracker.active
+            throw "Can't call render inside a reactive computation: #{Tracker.currentComputation._id}"
 
-        if @_renderComp?
-            if @_renderComp.invalidated
-                @_renderComp.stop()
-            else
-                throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components don't allow
-                    forceUpdate(). Use reactive expressions instead."
+        if @_elementVar? and not @_elementVar.stopped
+            throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components
+                don't allow forceUpdate(). Use reactive expressions instead."
 
-        # Transform J.List to array anywhere in the element children hierarchy
-        # and J.Dicts to plain objects in the case of the "style" property
-        transformedElement = (elem) =>
-            if React.isValidElement elem
-                if _.isArray elem.props.children
-                    elem.props.children = (transformedElement e for e in elem.props.children)
-                else if elem.props.children?
-                    elem.props.children = transformedElement elem.props.children
-                if elem.props.style instanceof J.Dict
-                    elem.props.style = elem.props.style.toObj()
-                elem
-            else if elem instanceof J.List
-                transformedElement e for e in elem.getValues()
-            else if _.isArray elem
-                transformedElement e for e in elem
-            else
-                elem
+        @_elementVar?.stop()
+        firstRun = true
+        @_elementVar = J.AutoVar(
+            (
+                component: @
+                tag: "#{@toString()}.render"
+                sortKey: @_componentId + 10
+            )
 
-        element = undefined
+            (elementVar) =>
+                if firstRun
+                    firstRun = false
+                    unpackRenderSpec componentSpec.render.apply @
+                else
+                    elementVar.stop()
+                    Tracker.afterFlush(
+                        =>
+                            if @_elementVar is elementVar and @isMounted()
+                                @forceUpdate()
+                        @_componentId + 10
+                    )
+                    null
+        )
 
-        Tracker.autorun((c) =>
-            if c.firstRun
-                @_renderComp = c
-                @_renderComp.tag = "#{@toString()}.render!"
-                @_renderComp.component = @
+        element = @_elementVar.get()
 
-            else
-                if componentDebug
-                    console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                        "Invalidated #{@toString()}", c._id
-
-                # This autorun was just here to let us respond to an invalidation
-                # at flush time once. The @forceUpdate() call will now stop this
-                # computation and create a new one.
-                @_renderComp.stop()
-                @_renderComp = null
-
-                # If we start the new @_renderComp inside this stopped @_renderComp,
-                # Meteor will automatically stop it.
-                Tracker.nonreactive => @forceUpdate()
-
-                return
-
-            _pushDebugFlag componentSpec.debug
-            if componentDebug
-                console.debug _getDebugPrefix() + (if _debugDepth > 0 then " " else "") +
-                    "#{@toString()} render!", c._id
-                _debugDepth += 1
-
-            element =
-                try
-                    transformedElement componentSpec.render.apply @
-                catch e
-                    # If the component is computing or not ready, we'll keep
-                    # element undefined for now and show nothing or a loading
-                    # message.
-                    if e instanceof J.VALUE_NOT_READY
-                        $$ ('div'),
-                            style:
-                                textAlign: 'center'
-                                opacity: 0.5
-                            $$ ('Loader')
-                    else
-                        throw e
-                finally
-                    if componentDebug
-                        console.debug _getDebugPrefix(), element
-                        _debugDepth -= 1
-                    _popDebugFlag()
-
-        # It's important to re-render components in topological-sorted order.
-        # If we get the re-rendering order wrong, the child's props may have
-        # been inactivated by the parent's invalidation.
-        # Using @_id as the autorun sortKey ensures that parent components
-        # get re-rendered before their children.
-        10 + @_componentId)
-
-        element
+        if element is undefined
+            $$ ('div'),
+                style:
+                    textAlign: 'center'
+                    opacity: 0.5
+                $$ ('Loader')
+        else
+            element
 
 
     reactSpec.toString = ->

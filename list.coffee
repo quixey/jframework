@@ -191,9 +191,10 @@ class J.List
                     Tracker.onInvalidate -> callerComp.invalidate()
                 ret = f v, i
                 if ret is undefined then J.List._UNDEFINED else ret
-            tag: "forEach(#{@toString()})"
-            sourceList: @
-            mapFunc: f
+            tag:
+                tag: "forEach(#{@toString()})"
+                sourceList: @
+                mapFunc: f
         )
         for value in mappedList.getValues()
             if value is J.List._UNDEFINED then undefined else value
@@ -272,27 +273,6 @@ class J.List
         not @creator?.invalidated
 
 
-    lazyMap: (f = _.identity, tag) ->
-        tag ?= (
-            tag: "mapped(#{@toString()})"
-            sourceList: @
-            mapFunc: f
-        )
-        if Tracker.active
-            J.AutoList(
-                (
-                    tag: tag
-                    sourceList: @
-                    mapFunc: f
-                )
-                => @size()
-                (i) => f @get(i), i
-                null # This makes it lazy
-            )
-        else
-            J.List @getValues().map(f), tag: tag
-
-
     map: (f = _.identity, tag) ->
         # Enables parallel fetching
         tag ?= (
@@ -300,18 +280,23 @@ class J.List
             sourceList: @
             mapFunc: f
         )
-        if Tracker.active
-            if f is _.identity and @ instanceof J.AutoList and @onChange
-                @
-            else
-                J.AutoList(
-                    tag
-                    => @size()
-                    (i) => f @get(i), i
-                    true # This makes it not lazy
-                )
-        else
-            J.List @getValues().map(f), tag: tag
+        if @size() is undefined then return undefined
+        J.List(
+            for i in [0...@size()]
+                try
+                    v = @get i
+                    if v is undefined then undefined else f v, i
+                catch e
+                    if e instanceof J.VALUE_NOT_READY
+                        # This is how AutoLists are parallelized. We keep
+                        # looping because we want to synchronously register
+                        # all the not-ready computations with the data
+                        # fetcher that runs during afterFlush.
+                        e
+                    else
+                        throw e
+            tag: tag
+        )
 
 
     push: (value) ->
