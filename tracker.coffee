@@ -155,7 +155,7 @@ Tracker.Computation::debug = ->
 
 
 Tracker.flush = ->
-    console.debug "Tracker.flush!"
+    # console.debug "Tracker.flush!"
 
     if Tracker.inFlush
         throw "Can't call Tracker.flush while flushing"

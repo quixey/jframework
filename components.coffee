@@ -423,9 +423,23 @@ J._defineComponent = (componentName, componentSpec) ->
             throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components
                 don't allow forceUpdate(). Use reactive expressions instead."
 
+        _pushDebugFlag componentSpec.debug
+        if componentDebug
+            console.debug _getDebugPrefix(@), "render!"
+            _debugDepth += 1
+
         if @_elementVar?
             @_elementVar.stop()
             J.fetching._deleteComputationQsRequests @_elementVar
+        else
+            # First render
+            # Pre-compute all the reactives with onChanges in parallel. This is
+            # so we won't waste time fetching data in series when render needs it.
+            for reactiveName, reactive of @reactives
+                if reactive.onChange
+                    if componentDebug
+                        console.debug "Precomputing !#{reactiveName}"
+                    reactive.get()
 
         firstRun = true
         @_elementVar = J.AutoVar(
@@ -462,6 +476,11 @@ J._defineComponent = (componentName, componentSpec) ->
         @_valid.set true
 
         element = @_elementVar.get()
+
+        if componentDebug
+            console.debug _getDebugPrefix(), if element? then "[Rendered #{@}]" else "[Loader for #{@}]"
+            _debugDepth -= 1
+        _popDebugFlag()
 
         if element is undefined
             $$ ('div'),

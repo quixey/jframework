@@ -393,11 +393,11 @@ class J.List
         if @size() is undefined then return undefined
         J.List(
             for i in [0...@size()]
-                try
-                    value = @get i
-                    if value is undefined
-                        undefined
-                    else
+                value = J.tryGet (=> @get i)
+                if value is undefined
+                    undefined
+                else
+                    try
                         mappedValue = f value, i
                         if mappedValue is undefined
                             msg = "Map function must not return undefined.
@@ -406,15 +406,15 @@ class J.List
                             console.error msg
                             throw msg
                         mappedValue
-                catch e
-                    if e instanceof J.VALUE_NOT_READY
-                        # This is how AutoLists are parallelized. We keep
-                        # looping because we want to synchronously register
-                        # all the not-ready computations with the data
-                        # fetcher that runs during afterFlush.
-                        e
-                    else
-                        throw e
+                    catch e
+                        if e instanceof J.VALUE_NOT_READY
+                            # This is how AutoLists are parallelized. We keep
+                            # looping because we want to synchronously register
+                            # all the not-ready computations with the data
+                            # fetcher that runs during afterFlush.
+                            e
+                        else
+                            throw e
             tag: tag
         )
 

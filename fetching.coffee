@@ -167,9 +167,9 @@ J.fetching =
             if computation._id not of @_requestersByQs[qsString]
                 @_requestersByQs[qsString][computation._id] = computation
 
-                if computation is computation.component?._elementVar
-                    # Will be slow to re-render relative to the flush cycle, so don't
-                    # kill its fetches yet.
+                if computation.component?
+                    # Components are slow to re-render relative to the flush cycle, so don't
+                    # kill its fetches yet, or those of its reactives.
                 else computation.onInvalidate =>
                     # console.log computation.tag, 'cancels a query', computation.stopped,
                     #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
