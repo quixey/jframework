@@ -394,8 +394,18 @@ class J.List
         J.List(
             for i in [0...@size()]
                 try
-                    v = @get i
-                    if v is undefined then undefined else f v, i
+                    value = @get i
+                    if value is undefined
+                        undefined
+                    else
+                        mappedValue = f value, i
+                        if mappedValue is undefined
+                            msg = "Map function must not return undefined.
+                                Return null or J.makeValueNotReadyObject()
+                                or use List.forEach() instead."
+                            console.error msg
+                            throw msg
+                        mappedValue
                 catch e
                     if e instanceof J.VALUE_NOT_READY
                         # This is how AutoLists are parallelized. We keep
