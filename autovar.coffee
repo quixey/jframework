@@ -112,6 +112,8 @@ class J.AutoVar extends Tracker.Computation
             sg.invalidate() for sg in _.clone @_sideGetters
 
             if @stopped
+                if @component? and @ isnt @component._elementVar
+                    if Meteor.isClient then J.fetching._deleteComputationQsRequests @
                 @_removeInvalidAncestor @
                 @_invalidAncestors = []
             else
@@ -122,6 +124,9 @@ class J.AutoVar extends Tracker.Computation
             @_hasInvalidComponentAncestor() # we want to recompute when it's false
             value = J.makeValueNotReadyObject()
         else
+            if @component? and @_value instanceof J.VALUE_NOT_READY and @ isnt @component?._elementVar
+                if Meteor.isClient then J.fetching._deleteComputationQsRequests @
+
             try
                 # ValueFunc may either return or throw J.Var.NOT_READY.
                 # It may not return undefined.

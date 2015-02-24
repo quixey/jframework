@@ -458,13 +458,13 @@ J._defineComponent = (componentName, componentSpec) ->
                 else
                     elementVar.stop()
 
-                    if not (@_owner? and @_owner._hasInvalidAncestor?())
-                        Tracker.afterFlush(
-                            =>
-                                if @_elementVar is elementVar and @isMounted()
+                    Tracker.afterFlush(
+                        =>
+                            if @_elementVar is elementVar and @isMounted()
+                                if not (@_owner? and @_owner._hasInvalidAncestor?())
                                     @forceUpdate()
-                            @_componentId + 10
-                        )
+                        @_componentId + 10
+                    )
 
                     null
 

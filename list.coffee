@@ -330,19 +330,7 @@ class J.List
 
 
     getConcat: (lst) ->
-        if Tracker.active
-            lst = @constructor.wrap lst
-            J.AutoList(
-                =>
-                    @size() + lst.size()
-                (i) =>
-                    if i < @size()
-                        @get i
-                    else
-                        lst.get i - @size()
-            )
-        else
-            J.List @getValues().concat @constructor.unwrap lst
+        J.List @map().getValues().concat @constructor.unwrap lst
 
 
     getReversed: ->
@@ -393,11 +381,11 @@ class J.List
         if @size() is undefined then return undefined
         J.List(
             for i in [0...@size()]
-                value = J.tryGet (=> @get i)
-                if value is undefined
-                    undefined
-                else
-                    try
+                try
+                    value = @get i
+                    if value is undefined
+                        undefined
+                    else
                         mappedValue = f value, i
                         if mappedValue is undefined
                             msg = "Map function must not return undefined.
@@ -406,15 +394,15 @@ class J.List
                             console.error msg
                             throw msg
                         mappedValue
-                    catch e
-                        if e instanceof J.VALUE_NOT_READY
-                            # This is how AutoLists are parallelized. We keep
-                            # looping because we want to synchronously register
-                            # all the not-ready computations with the data
-                            # fetcher that runs during afterFlush.
-                            e
-                        else
-                            throw e
+                catch e
+                    if e instanceof J.VALUE_NOT_READY
+                        # This is how AutoLists are parallelized. We keep
+                        # looping because we want to synchronously register
+                        # all the not-ready computations with the data
+                        # fetcher that runs during afterFlush.
+                        e
+                    else
+                        throw e
             tag: tag
         )
 
@@ -453,15 +441,7 @@ class J.List
 
 
     slice: (startIndex, endIndex = @size()) ->
-        if Tracker.active
-            J.AutoList(
-                =>
-                    Math.max 0,
-                        Math.min(@size(), endIndex) - startIndex
-                (i) => @get startIndex + i
-            )
-        else
-            J.List @getValues().slice startIndex, endIndex
+        J.List @map().getValues().slice startIndex, endIndex
 
 
     sort: (keySpec = J.util.sortKeyFunc) ->

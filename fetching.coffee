@@ -166,14 +166,9 @@ J.fetching =
             @_requestersByQs[qsString] ?= {}
             if computation._id not of @_requestersByQs[qsString]
                 @_requestersByQs[qsString][computation._id] = computation
-
-                if computation.component?
-                    # Components are slow to re-render relative to the flush cycle, so don't
-                    # kill its fetches yet, or those of its reactives.
-                else computation.onInvalidate =>
-                    # console.log computation.tag, 'cancels a query', computation.stopped,
-                    #     querySpec.modelName, querySpec.selector, @isQueryReady querySpec
-                    @_deleteComputationQsRequests computation
+                # Note: AutoVar handles logic to remove from @_requestersByQueue
+                # because it involves complicated sequencing with React component
+                # rendering.
 
 
         if @isQueryReady querySpec
