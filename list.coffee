@@ -20,6 +20,8 @@ class J.List
         unless @ instanceof J.List
             return new J.List values, options
 
+        @_id = J.getNextId()
+        if J.debugGraph then J.graph[@_id] = @
 
         @tag = if J.debugTags then options?.tag else null
 
@@ -40,6 +42,7 @@ class J.List
             @creator = Tracker.currentComputation
         else
             @creator = options.creator
+        @fineGrained = options?.fineGrained ? true
         @onChange = options?.onChange ? null
 
         @readOnly = false
@@ -96,7 +99,8 @@ class J.List
 
 
     _pop: ->
-        if Tracker.active then @_setCompact false
+        if Tracker.active and @fineGrained
+            @_setCompact false
 
         if @_valuesVar?
             values = _.clone Tracker.nonreactive => @_valuesVar.get()
@@ -126,7 +130,8 @@ class J.List
 
 
     _push: (value) ->
-        if Tracker.active then @_setCompact false
+        if Tracker.active and @fineGrained
+            @_setCompact false
 
         if @_valuesVar?
             values = _.clone Tracker.nonreactive => @_valuesVar.get()
@@ -152,7 +157,8 @@ class J.List
 
 
     _set: (index, value) ->
-        if Tracker.active then @_setCompact false
+        if Tracker.active and @fineGrained
+            @_setCompact false
 
         if @_valuesVar?
             values = _.clone Tracker.nonreactive => @_valuesVar.get()

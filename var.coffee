@@ -166,7 +166,7 @@ class J.Var
         J.tryGet => @get()
 
 
-    maybeWrap: (value) ->
+    maybeWrap: (value, withFieldFuncs = true) ->
         if value is undefined
             if Tracker.active
                 throw new Meteor.Error "Can't set #{@toString()} value to undefined.
@@ -176,24 +176,14 @@ class J.Var
         else if value instanceof J.AutoVar
             throw new Meteor.Error "Can't put an AutoVar inside #{@toString()}:
                 #{value}. Get its value with .get() first."
-        if value instanceof J.VALUE_NOT_READY
-            value
-        else if @wrap and J.util.isPlainObject value
-            J.Dict value
-        else if @wrap and _.isArray(value)
-            J.List value
-        else if value instanceof J.Var
-            # Prevent any nested J.Var situation
-            try
-                value.get()
-            catch e
-                throw e unless e instanceof J.VALUE_NOT_READY
-                e
-        else
-            value
+
+        if not @wrap and (_.isArray(value) or J.util.isPlainObject(value))
+            return value
+
+        J.Var.wrap value, withFieldFuncs
 
 
-    @wrap: (value) ->
+    @wrap: (value, withFieldFuncs = true) ->
         if value is undefined
             if Tracker.active
                 throw new Meteor.Error "Undefined is an invalid value.
@@ -206,9 +196,12 @@ class J.Var
         if value instanceof J.VALUE_NOT_READY
             value
         else if J.util.isPlainObject value
-            J.Dict value
+            J.Dict value,
+                fineGrained: false
+                withFieldFuncs: withFieldFuncs
         else if _.isArray(value)
-            J.List value
+            J.List value,
+                fineGrained: false
         else if value instanceof J.Var
             # Prevent any nested J.Var situation
             try

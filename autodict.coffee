@@ -1,10 +1,10 @@
 class J.AutoDict extends J.Dict
-    constructor: (tag, keysFunc, valueFunc, onChange) ->
+    constructor: (tag, keysFunc, valueFunc, onChange, options) ->
         ###
             Overloads
-            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange]
-            (2) J.AutoDict [tag], keysList, valueFunc, [onChange]
-            (3) J.AutoDict [tag], fieldSpecs, [onChange]
+            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange, [options]]
+            (2) J.AutoDict [tag], keysList, valueFunc, [onChange, [options]]
+            (3) J.AutoDict [tag], fieldSpecs, [onChange, [options]]
         ###
 
         unless @ instanceof J.AutoDict
@@ -22,6 +22,7 @@ class J.AutoDict extends J.Dict
             )
         )
             # tag argument not provided
+            options = onChange
             onChange = valueFunc
             valueFunc = keysFunc
             keysFunc = tag
@@ -39,6 +40,7 @@ class J.AutoDict extends J.Dict
             # Overload (3) -> (1)
             @_fieldSpecs = J.Dict.wrap keysFunc
             @_setupGetterSetter key for key of @_fieldSpecs
+            options = onChange
             onChange = valueFunc
             keysFunc = => @_fieldSpecs.getKeys()
             valueFunc = (key) =>
@@ -57,24 +59,15 @@ class J.AutoDict extends J.Dict
 
         super {},
             creator: Tracker.currentComputation
-            onChange: null # doesn't support onChange=true
+            onChange: onChange
             tag: tag
             withFieldFuncs: withFieldFuncs
+            fineGrained: options?.fineGrained
 
         delete @_keysDep
 
         @keysFunc = keysFunc
         @valueFunc = valueFunc
-
-        ###
-            onChange:
-                A function to call with (oldValue, newValue) when
-                the value changes.
-                May also pass onChange=true or null.
-                If onChange is either a function or true, the
-                AutoDict becomes non-lazy.
-        ###
-        @onChange = onChange
 
         @_keysVar = J.AutoVar(
             (
@@ -99,7 +92,12 @@ class J.AutoDict extends J.Dict
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
-                @_replaceKeys keysArr
+                keysDiff = J.util.diffStrings(
+                    Tracker.nonreactive => J.Dict::getKeys.call @
+                    keysArr
+                )
+                @_delete key for key in keysDiff.deleted
+                @_initField key, J.makeValueNotReadyObject() for key in keysDiff.added
 
                 keysArr
 

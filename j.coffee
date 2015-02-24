@@ -48,4 +48,15 @@ J.stats = ->
                 J.inc 'expandedLists'
                 J.inc 'expandedListElements', x._arr.length
 
+            if x.fineGrained
+                J.inc 'fineGrainedLists'
+            else
+                J.inc 'courseGrainedLists'
+
+        else if x instanceof J.Dict
+            if x.fineGrained
+                J.inc 'fineGrainedDicts'
+            else
+                J.inc 'courseGrainedDicts'
+
     J.counts

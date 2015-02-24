@@ -145,7 +145,7 @@ class J.AutoVar extends Tracker.Computation
 
     _set: (value) ->
         previousValue = @_value
-        newValue = @_value = J.Var::maybeWrap.call @, value
+        newValue = @_value = J.Var::maybeWrap.call @, value, true
 
         if _.isFunction(@onChange) and previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
