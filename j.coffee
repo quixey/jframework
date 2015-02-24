@@ -2,9 +2,9 @@ J = {}
 J.stores = {}
 
 J.counts = {}
-J.inc = (countName) ->
+J.inc = (countName, num = 1) ->
     J.counts[countName] ?= 0
-    J.counts[countName] += 1
+    J.counts[countName] += num
 
 J.g = J.graph = {} # jid: object
 J.debugGraph = Meteor.settings?.public?.jframework?.debug?.graph ? false
@@ -15,6 +15,10 @@ J.getNextId = ->
     J._nextId += 1
     jid
 
+J.getIds = {}
+J.getValueIds = {}
+J.forEachIds = {}
+J.mapIds = {}
 
 if Meteor.isServer
     cslLog = console.log
@@ -32,3 +36,27 @@ if Meteor.isServer
         cslLog.apply console, arguments
     console.group = ->
         cslLog.apply console, arguments
+
+
+J.stats = ->
+    for id, x of J.graph
+        if x instanceof J.List
+            if x._valuesVar?
+                J.inc 'compactLists'
+                J.inc 'compactListElements', x._valuesVar._value.length
+            else
+                J.inc 'expandedLists'
+                J.inc 'expandedListElements', x._arr.length
+
+            if x.fineGrained
+                J.inc 'fineGrainedLists'
+            else
+                J.inc 'courseGrainedLists'
+
+        else if x instanceof J.Dict
+            if x.fineGrained
+                J.inc 'fineGrainedDicts'
+            else
+                J.inc 'courseGrainedDicts'
+
+    J.counts

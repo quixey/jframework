@@ -5,99 +5,6 @@ Tinytest.add "_init", (test) ->
     return
 
 
-Tinytest.add "xxx", (test) ->
-    v = J.Var 5
-
-    b = J.AutoVar 'b',
-        -> a.get() + 1
-
-    a = J.AutoVar 'a',
-        -> v.get() + 1
-
-    test.equal b.get(), 7
-
-
-
-Tinytest.add "AutoVar - dependency cycle", (test) ->
-    test.isTrue false, "Not implemented yet"
-    return
-
-    firstRun = J.Var true
-    runCount = 0
-
-    a = J.AutoVar 'a', ->
-        runCount += 1
-        if firstRun.get()
-            1
-        else
-            Math.min a.get() + 1, 10
-
-    test.equal a.get(), 1
-    firstRun.set false
-    Tracker.flush()
-    test.throws -> a.get()
-
-
-Tinytest.add "AutoVar - invalidation of parent computation", (test) ->
-    v = J.Var 5
-    b = null
-    a = J.AutoVar 'a', ->
-        b = J.AutoVar 'b', ->
-            v.get()
-        b.get()
-
-    test.equal a.get(), 5
-    v.set 6
-    test.equal a.get(), undefined
-    Tracker.flush()
-    console.log 'a is', a.get()
-    test.equal a.get(), 6
-
-Tinytest.add "AutoVar - invalidation of parent computation 2", (test) ->
-    v = J.Var 5
-    b = null
-    a = J.AutoVar 'a', ->
-        b.get()
-    b = J.AutoVar 'b', ->
-        v.get()
-    c = J.AutoVar 'c', ->
-        10
-
-    test.equal a.get(), 5
-    v.set 6
-    test.equal a.get(), undefined
-    test.equal b.get(), undefined
-    test.equal c.get(), 10
-    Tracker.flush()
-    test.equal a.get(), 6
-    test.equal b.get(), 6
-
-
-Tinytest.add "AutoVar - invalidation of parent computation 3", (test) ->
-    v = J.Var 5, tag: 'v'
-
-    a = J.AutoVar 'a',
-        ->
-            c = J.AutoVar 'c', ->
-                if v.get() is 6
-                    w.get()
-                    'v is 6'
-                else
-                    'v is not 6'
-
-            w = J.AutoVar 'w', -> v.get()
-
-            c.get()
-            w.get()
-            3
-
-    test.equal a.get(), 3
-    v.set 6
-    test.equal a.get(), undefined
-    Tracker.flush()
-    test.equal a.get(), 3
-
-
 Tinytest.add "AutoDict - create with fieldSpec instead of keyFunc", (test) ->
     w = J.Var 9
     changeHist = []
@@ -160,6 +67,7 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
     al = J.AutoList('haial',
         -> size.get()
         (i) -> "#{i}-k"
+        true
     )
     ad = J.AutoDict('ad',
         al
@@ -176,6 +84,7 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
         '4-k': '4-k-v'
     size.set 4
     Tracker.flush()
+
     test.equal ad.getFields(),
         '0-k': '0-k-v'
         '1-k': '1-k-v'
@@ -208,7 +117,7 @@ Tinytest.addAsync "AfterFlush - sortKey basics", (test, onComplete) ->
                 aafCount += 1
                 Tracker.afterFlush(->
                     test.equal aafCount, 6, 'fail 6'
-                    onComplete()
+                    _.defer -> onComplete()
                 , 0.7)
             , 0.7)
             Tracker.afterFlush(->
@@ -267,65 +176,6 @@ Tinytest.addAsync "AfterFlush - trigger high sortKey funcs after all onChange ha
     test.equal onChangeCount, 1, 'fail 7'
 
 
-
-Tinytest.add "AutoVar - Topological invalidation order", (test) ->
-    hist = []
-
-    x = new J.Var 5
-
-    a = null
-
-    b = null
-
-    c = J.AutoVar(
-        'c'
-        (c) ->
-            hist.push 'c'
-            if hist.length > 30 then crash
-            a = J.AutoVar('a'
-                (a) ->
-                    hist.push 'a'
-                    x.get()
-                true
-            )
-            a.get()
-        true
-    )
-
-    d = J.AutoVar(
-        'd'
-        (d) ->
-            hist.push 'd'
-            if hist.length > 30 then crash
-
-            b = J.AutoVar('b'
-                (b) ->
-                    hist.push 'b'
-                    x.get()
-                true
-            )
-
-            b.get() + c.get()
-        true
-    )
-
-    e = J.AutoVar(
-        'e'
-        ->
-            hist.push 'e'
-            if hist.length > 30 then crash
-            a.get()
-            d.get()
-            a.get() + d.get()
-        true
-    )
-
-    Tracker.flush()
-    test.equal hist, ['c', 'a', 'd', 'b', 'e']
-    test.equal c.get(), 5
-    x.set 6
-    Tracker.flush()
-    test.equal c.get(), 6
 
 
 
@@ -388,59 +238,6 @@ Tinytest.add "AutoDict - delete element onChange", (test) ->
     ]
 
 
-Tinytest.add "AutoVar - onchange", (test) ->
-    vHist = []
-    v = J.Var 5,
-        onChange: (oldV, newV) ->
-            vHist.push [oldV, newV]
-
-    aHist = []
-    a = J.AutoVar('a'
-        -> v
-        (oldV, newV) ->
-            aHist.push [oldV, newV]
-    )
-    v.set 6
-    v.set 'x'
-    v.set J.makeValueNotReadyObject()
-    test.isUndefined v.get()
-    test.isUndefined a.get()
-    v.set 'x'
-    v.set J.makeValueNotReadyObject()
-    v.set 6
-    Tracker.flush()
-    test.equal a.get(), 6
-    v.set J.makeValueNotReadyObject()
-    v.set 7
-    Tracker.flush()
-    test.equal a.get(), 7
-    v.set 7
-    v.set 5
-    v.set 3
-    test.equal vHist, [
-        [5, 6]
-        [6, 'x']
-        ['x', 6]
-        [6, 7]
-    ]
-    test.equal aHist, [
-        [undefined, 6]
-        [6, 7]
-    ]
-    vHist = []
-    aHist = []
-    Tracker.flush()
-    goodVHist = [
-        [7, 5]
-        [5, 3]
-    ]
-    goodAHist = [
-        [7, 3]
-    ]
-    test.equal vHist, goodVHist
-    test.equal aHist, goodAHist
-    a.stop()
-    test.equal aHist, goodAHist
 
 
 
@@ -460,7 +257,7 @@ Tinytest.add "Dict - basics", (test) ->
 
 Tinytest.add "AutoDict - onChange", (test) ->
     changeHistory = []
-    keysVar = new J.Var ['a', 'b']
+    keysVar = J.Var ['a', 'b']
     ad = J.AutoDict(
         -> keysVar.get()
         (key) -> 5
@@ -596,96 +393,6 @@ Tinytest.add "List - sort", (test) ->
     Tracker.flush()
 
 
-Tinytest.add "List - resize", (test) ->
-    lst = J.List [0, 1, 2, 3, 4]
-    size = lst.size()
-    test.equal size, 5
-    c = Tracker.autorun ->
-        size = lst.size()
-    lst.resize 10
-    test.equal size, 5
-    Tracker.flush()
-    test.equal size, 10
-    test.equal lst.get(9), undefined
-    test.throws -> lst.get(10)
-    c.stop()
-
-Tinytest.add "AutoVar - basics 1", (test) ->
-    x = new J.Var 5
-    xPlusOne = J.AutoVar -> x.get() + 1
-    test.equal xPlusOne.get(), 6
-    x.set 10
-    test.equal xPlusOne.get(), undefined
-    Tracker.flush()
-    test.equal xPlusOne.get(), 11
-
-Tinytest.add "AutoVar - be lazy when no one is looking", (test) ->
-    x = new J.Var 5
-    runCount = 0
-    xPlusOne = J.AutoVar ->
-        runCount += 1
-        x.get() + 1
-    test.equal runCount, 0
-    x.set 10
-    test.equal runCount, 0
-    Tracker.flush()
-    test.equal runCount, 0
-    test.equal xPlusOne.get(), 11
-    test.equal runCount, 1, "fail 1"
-    Tracker.flush()
-    test.equal runCount, 1, "fail 1.5"
-    test.equal xPlusOne.get(), 11
-    test.equal runCount, 1, "fail 2"
-    x.set 20
-    test.equal runCount, 1, "fail 3"
-    Tracker.flush()
-    x.set 30
-    test.equal runCount, 2, "fail 4"
-    Tracker.flush()
-    x.set 40
-    test.equal runCount, 3, "fail 5"
-    Tracker.flush()
-    test.equal runCount, 4, "fail 6"
-    test.equal xPlusOne.get(), 41
-    test.equal runCount, 4
-    test.equal xPlusOne.get(), 41
-    test.equal runCount, 4
-
-
-Tinytest.add "AutoVar - don't be lazy if someone is looking", (test) ->
-    x = new J.Var 5
-    runCount = 0
-    xPlusOne = J.AutoVar ->
-        runCount += 1
-        x.get() + 1
-    test.equal runCount, 0
-    watchOnce = Tracker.autorun (watchOnce) ->
-        if watchOnce.firstRun
-            xPlusOne.get()
-    test.equal runCount, 1
-    watchMany = Tracker.autorun (watchMany) ->
-        xPlusOne.get()
-    # runCount is still 1 because xPlusOne's computation
-    # is still valid
-    test.equal runCount, 1
-    Tracker.flush()
-    test.equal runCount, 1
-    x.set 10
-    test.equal runCount, 1
-    Tracker.flush()
-    test.equal runCount, 2
-    Tracker.flush()
-    test.equal runCount, 2
-    x.set 20
-    test.equal runCount, 2
-    Tracker.flush()
-    test.equal runCount, 3
-    watchMany.stop()
-    x.set 30
-    Tracker.flush()
-    watchOnce.stop()
-
-
 Tinytest.add "AutoDict - Basics", (test) ->
     size = new J.Var 3
     d = J.AutoDict(
@@ -699,7 +406,7 @@ Tinytest.add "AutoDict - Basics", (test) ->
     test.equal d.get('two'), "two is a number"
     test.isUndefined d.get('four')
     size.set 4
-    test.isUndefined d.size()
+    test.equal d.size(), 4
     Tracker.flush()
     test.equal d.size(), 4
     Tracker.flush()
@@ -746,6 +453,7 @@ Tinytest.add "AutoDict - reactivity", (test) ->
         5: 10
         9: 18
     }
+
     coef.set 10
     Tracker.flush()
     test.equal dHistory.pop(), {
@@ -770,6 +478,7 @@ Tinytest.add "AutoDict - reactivity", (test) ->
     Tracker.flush()
     test.equal dHistory.length, 0
     watcher.stop()
+    d.stop()
 
 
 Tinytest.add "AutoDict - laziness", (test) ->
@@ -820,7 +529,6 @@ Tinytest.add "AutoList - reactivity 1", (test) ->
     test.equal sizeFuncRunCount, 0
     test.equal valueFuncRunCount, 0
     test.equal al.toArr(), [0, 10, 20]
-    test.throws -> al.resize 5
     test.throws -> al.set 2, 2
     size.set 2
     coef.set 100
@@ -889,7 +597,7 @@ Tinytest.add "AutoList - onChange", (test) ->
     test.isTrue _.any (J.util.equals(x, [3, 30, 300, 4]) for x in onChangeHistory)
 
 
-Tinytest.add "List - onChange 2", (test) ->
+Tinytest.add "AutoList - onChange 2", (test) ->
     coef = new J.Var 10
     size = new J.Var 5
     sizeFuncRunCount = 0
@@ -900,9 +608,11 @@ Tinytest.add "List - onChange 2", (test) ->
             sizeFuncRunCount += 1
             size.get()
         (i) ->
+            console.log 'compute', i
             valueFuncRunCount += 1
             i * coef.get()
         (i, oldValue, newValue) ->
+            console.log 'onchange', i, oldValue, newValue
             onChangeHistory.push [i, oldValue, newValue, @size()]
     )
     Tracker.flush()
@@ -912,6 +622,7 @@ Tinytest.add "List - onChange 2", (test) ->
     test.equal onChangeHistory, [
         [4, 40, undefined, 4]
     ]
+    al.stop()
 
 
 Tinytest.add "List - reverse", (test) ->
@@ -923,6 +634,7 @@ Tinytest.add "List - reverse", (test) ->
     test.equal reversed.toArr(), [3, 2, 1, 0]
     test.equal lst.toArr(), [0, 1, 22, 3]
     reversed = null
+
     c = Tracker.autorun (c) ->
         reversed = lst.getReversed()
     test.equal reversed.toArr(), [3, 22, 1, 0]
@@ -960,7 +672,6 @@ Tinytest.add "List - getConcat", (test) ->
     test.equal concatted.get(0), 3
     c.stop()
     Tracker.flush() # Intentionally testing flushing after stopping
-    test.throws -> concatted.get 0
 
 Tinytest.add "List - .contains reactivity", (test) ->
     lst = J.List [0, 1, 2, 3, 4]
@@ -991,13 +702,6 @@ Tinytest.add "List - .contains reactivity", (test) ->
     lst.push 3
     Tracker.flush()
     test.isTrue lastContains
-    lst.resize 20
-    Tracker.flush()
-    test.isTrue lastContains
-    lst.resize 4
-    test.isTrue lastContains
-    Tracker.flush()
-    test.isFalse lastContains
 
 
 Tinytest.add "AutoDict - Don't recalculate dead keys", (test) ->
@@ -1067,82 +771,6 @@ Tinytest.add "AutoDict - Make sure key still exists when expediting value recalc
     test.isUndefined d.get('0')
 
 
-Tinytest.add "AutoVar - Invalidation propagation 1", (test) ->
-    x = new J.Var 5
-    a = J.AutoVar -> x.get()
-    b = J.AutoVar -> a.get()
-    c = J.AutoVar -> b.get()
-    d = J.AutoVar -> c.get()
-    e = J.AutoVar -> d.get()
-    test.equal e.get(), 5
-    x.set 6
-    test.equal e.get(), undefined
-    Tracker.flush()
-    test.equal e.get(), 6
-
-Tinytest.add "AutoVar - Invalidation propagation 2", (test) ->
-    x = new J.Var 5
-    a = J.AutoVar 'a', -> x.get()
-    b = J.AutoVar 'b', -> a.get()
-    c = J.AutoVar 'c', -> b.get()
-    e = J.AutoVar 'e', -> c.get() + a.get()
-    test.equal e.get(), 10
-    x.set 6
-    test.equal e.get(), undefined
-    Tracker.flush()
-    test.equal e.get(), 12
-
-Tinytest.add "AutoVar - Invalidation propagation order", (test) ->
-    history = []
-    x = new J.Var 5
-    a = J.AutoVar 'a', ->
-        history.push 'a'
-        x.get()
-    b = J.AutoVar 'b', ->
-        history.push 'b'
-        a.get()
-    c = J.AutoVar 'c', ->
-        history.push 'c'
-        b.get()
-    d = J.AutoVar 'd', ->
-        history.push 'd'
-        c.get()
-    e = J.AutoVar 'e', ->
-        history.push 'e'
-        a.get() + c.get()
-
-    test.equal history, []
-    test.equal e.get(), 10
-    test.equal history, ['e', 'a', 'c', 'b']
-    history = []
-    x.set 6
-    test.equal history, []
-    Tracker.flush()
-    test.equal e.get(), 12
-    test.equal history, ['a', 'e', 'b', 'c', 'e']
-
-
-Tinytest.add "AutoVar - Can stop self from within computation", (test) ->
-    a = J.AutoVar(
-        -> a.stop() ? null
-        true
-    )
-    Tracker.flush()
-    test.isFalse a.active
-    test.isTrue a._valueComp.stopped
-
-
-
-Tinytest.add "Dependency - don't invalidate creator computation", (test) ->
-    dep = null
-    c1 = Tracker.autorun ->
-        dep = new Tracker.Dependency()
-        dep.depend()
-        dep.changed()
-    test.isFalse c1.invalidated
-    dep.changed()
-    test.isTrue c1.invalidated
-    c1.stop()
 
 
 Tinytest.add "Dict - don't invalidate creator computation", (test) ->
@@ -1180,56 +808,12 @@ Tinytest.add "Dict - don't invalidate creator computation", (test) ->
     test.equal runCount2, 2
     d.delete 'b'
     test.isTrue c1.invalidated
-    test.isFalse c2.invalidated
     Tracker.flush()
     test.equal runCount, 3
     test.equal runCount2, 3 # c1 invalidates c2
     c1.stop()
     c2.stop()
 
-
-Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
-    ###
-        If an AutoVar's value is running its own computation,
-        then the AutoVar's computation is the only one
-        whose invalidation can invalidate that child's
-        computation.
-    ###
-    al = null
-    av = J.AutoVar "av",
-        ->
-            al = J.AutoList(
-                -> 3
-                (i) -> 5
-            )
-            al.tag = "av.al"
-            al
-
-    av2 = J.AutoVar "av2",
-        -> av.get()
-
-    test.isTrue av.isActive()
-    test.isTrue av2.isActive()
-    test.isNull al
-    Meteor.defer =>
-        test.isNull al
-
-        Tracker.autorun (c) =>
-            myAl = av2.get()
-            test.isTrue al.isActive(), "al stopped prematurely"
-            test.isTrue myAl.isActive(), "myAl stopped prematurely"
-            av2.stop()
-
-            test.isTrue myAl.isActive()
-            test.isTrue av.isActive()
-            test.isTrue al.isActive()
-            av.stop()
-            test.isFalse al.isActive()
-            test.isFalse myAl.isActive()
-
-            c.stop()
-
-            onComplete()
 
 
 Tinytest.addAsync "AutoList - Maps don't stop prematurely", (test, onComplete) ->

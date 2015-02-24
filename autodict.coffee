@@ -1,10 +1,10 @@
 class J.AutoDict extends J.Dict
-    constructor: (tag, keysFunc, valueFunc, onChange) ->
+    constructor: (tag, keysFunc, valueFunc, onChange, options) ->
         ###
             Overloads
-            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange]
-            (2) J.AutoDict [tag], keysList, valueFunc, [onChange]
-            (3) J.AutoDict [tag], fieldSpecs, [onChange]
+            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange, [options]]
+            (2) J.AutoDict [tag], keysList, valueFunc, [onChange, [options]]
+            (3) J.AutoDict [tag], fieldSpecs, [onChange, [options]]
         ###
 
         unless @ instanceof J.AutoDict
@@ -22,6 +22,7 @@ class J.AutoDict extends J.Dict
             )
         )
             # tag argument not provided
+            options = onChange
             onChange = valueFunc
             valueFunc = keysFunc
             keysFunc = tag
@@ -39,6 +40,7 @@ class J.AutoDict extends J.Dict
             # Overload (3) -> (1)
             @_fieldSpecs = J.Dict.wrap keysFunc
             @_setupGetterSetter key for key of @_fieldSpecs
+            options = onChange
             onChange = valueFunc
             keysFunc = => @_fieldSpecs.getKeys()
             valueFunc = (key) =>
@@ -57,26 +59,16 @@ class J.AutoDict extends J.Dict
 
         super {},
             creator: Tracker.currentComputation
-            onChange: null # doesn't support onChange=true
+            onChange: onChange
             tag: tag
             withFieldFuncs: withFieldFuncs
+            fineGrained: options?.fineGrained
 
         delete @_keysDep
 
         @keysFunc = keysFunc
         @valueFunc = valueFunc
 
-        ###
-            onChange:
-                A function to call with (oldValue, newValue) when
-                the value changes.
-                May also pass onChange=true or null.
-                If onChange is either a function or true, the
-                AutoDict becomes non-lazy.
-        ###
-        @onChange = onChange
-
-        @_pendingNewKeys = null
         @_keysVar = J.AutoVar(
             (
                 autoDict: @
@@ -100,7 +92,12 @@ class J.AutoDict extends J.Dict
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
-                @_replaceKeys keysArr
+                keysDiff = J.util.diffStrings(
+                    Tracker.nonreactive => J.Dict::getKeys.call @
+                    keysArr
+                )
+                @_delete key for key in keysDiff.deleted
+                @_initField key, J.makeValueNotReadyObject() for key in keysDiff.added
 
                 keysArr
 
@@ -109,12 +106,6 @@ class J.AutoDict extends J.Dict
             creator: @creator
             wrap: false
         )
-
-        @_active = true
-        if Tracker.active
-            Tracker.onInvalidate =>
-                # console.log 'INVALIDATED', @toString()
-                @stop()
 
         if @_keysList? and @withFieldFuncs
             @_keysList.forEach (key) => @_setupGetterSetter key
@@ -127,8 +118,17 @@ class J.AutoDict extends J.Dict
 
     _delete: (key) ->
         fieldAutoVar = @_fields[key]
-        super
-        fieldAutoVar.stop()
+
+        oldValue = fieldAutoVar?.get()
+        if oldValue isnt undefined and @onChange?
+            Tracker.afterFlush =>
+                if @isActive()
+                    @onChange.call @, key, oldValue, undefined
+
+        fieldAutoVar?.stop()
+        delete @[key]
+        delete @_fields[key]
+
         if @_hasKeyDeps[key]?
             @_hasKeyDeps[key].changed()
             delete @_hasKeyDeps[key]
@@ -139,6 +139,7 @@ class J.AutoDict extends J.Dict
         return undefined if hasKey is undefined
 
         if hasKey
+            if @_fields[key] is null then @_initFieldAutoVar key
             @_fields[key].get()
         else
             if force
@@ -148,6 +149,21 @@ class J.AutoDict extends J.Dict
 
 
     _initField: (key) ->
+        if @withFieldFuncs then @_setupGetterSetter key
+
+        if @_hasKeyDeps[key]?
+            @_hasKeyDeps[key].changed()
+            delete @_hasKeyDeps[key]
+
+        if @onChange
+            @_initFieldAutoVar key
+        else
+            # Save ~1kb of memory until the field is
+            # actually needed.
+            @_fields[key] = null
+
+
+    _initFieldAutoVar: (key) ->
         @_fields[key] = J.AutoVar(
             (
                 autoDict: @
@@ -156,26 +172,19 @@ class J.AutoDict extends J.Dict
             )
 
             =>
-                # If @_keysVar needs recomputing, this @hasKey call will throw
-                # a COMPUTING. Then this field-autovar may or may not be left
-                # standing to recompute and continue past the assert.
-                J.assert @hasKey key
+                if not @hasKey key
+                    # This field has just been deleted
+                    return J.makeValueNotReadyObject()
 
                 @valueFunc.call null, key, @
 
             if _.isFunction @onChange
-                (oldValue, newValue) => @onChange.call @, key, oldValue, newValue
+                @onChange.bind @, key
             else
                 @onChange
 
             creator: @creator
         )
-
-        if @withFieldFuncs then @_setupGetterSetter key
-
-        if @_hasKeyDeps[key]?
-            @_hasKeyDeps[key].changed()
-            delete @_hasKeyDeps[key]
 
 
     clear: ->
@@ -203,13 +212,11 @@ class J.AutoDict extends J.Dict
 
 
     hasKey: (key) ->
-        if @_keysVar.currentValueMightChange()
+        if @_keysVar._value is undefined or @_keysVar._invalidAncestors.length
             # This might have a special @_replaceKeys side effect
             # which then makes the logic in super work
             keysArr = Tracker.nonreactive => @_keysVar.get()
-            if keysArr is undefined
-                if Tracker.active then throw J.AutoVar.makeComputingObject()
-                else return undefined
+            return undefined if keysArr is undefined
 
         if Tracker.active
             @_hasKeyDeps[key] ?= new Tracker.Dependency @creator
@@ -219,7 +226,7 @@ class J.AutoDict extends J.Dict
 
 
     isActive: ->
-        @_active
+        not @_keysVar?.stopped
 
 
     replaceKeys: ->
@@ -246,11 +253,8 @@ class J.AutoDict extends J.Dict
 
 
     stop: ->
-        if @_active
-            # console.log "STOPPING", @toString()
-            fieldComp.stop() for key, fieldComp of @_fields
-            @_keysVar.stop()
-            @_active = false
+        fieldVar?.stop() for key, fieldVar of @_fields
+        @_keysVar.stop()
 
 
     toString: ->

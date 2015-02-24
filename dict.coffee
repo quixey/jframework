@@ -8,6 +8,8 @@ class J.Dict
                 tag: A toString-able object for debugging
                 onChange: function(key, oldValue, newValue) or null
                 withFieldFuncs=true: Make @[fieldName]() getter/setter
+                fineGrained=true: Fine-grained reactivity. Takes more
+                    memory but doesn't invalidate unnecessarily.
         ###
 
         unless @ instanceof J.Dict
@@ -40,15 +42,36 @@ class J.Dict
         else
             @creator = options.creator
         @onChange = options?.onChange ? null
+        @fineGrained = options?.fineGrained ? true
         @withFieldFuncs = options?.withFieldFuncs ? true
 
-        @_fields = {}
-        @_keysDep = new Tracker.Dependency @creator
+        # fineGrained=true stuff
+        @_fields = if @fineGrained then {} else null
+        @_keysDep = if @fineGrained then new Tracker.Dependency @creator else null
+
+        # fineGrained=false stuff
+        @_fieldsVar = if @fineGrained then null else
+            J.Var(
+                {}
+
+                tag:
+                    dict: @
+                    tag: "#{@} fieldsVar"
+                creator: @creator
+                wrap: false
+                onChange:
+                    if _.isFunction @onChange
+                        (oldFields, newFields) =>
+                            keysDiff = J.util.diffStrings _.keys(oldFields), _.keys(newFields)
+                            for key in keysDiff.deleted
+                                @onChange key, oldFields[key], undefined
+                            for key in keysDiff.added
+                                @onChange key, undefined, newFields[key]
+            )
 
         @readOnly = false
 
-        if not _.isEmpty fields
-            @setOrAdd fields
+        if not _.isEmpty fields then @setOrAdd fields
 
 
     _clear: ->
@@ -59,64 +82,113 @@ class J.Dict
     _delete: (key) ->
         J.assert key of @_fields, "Missing key #{J.util.stringify key}"
 
-        oldValue = Tracker.nonreactive => @_fields[key].get()
-        if oldValue isnt undefined and @onChange
-            Tracker.afterFlush =>
-                if @isActive()
-                    @onChange.call @, key, oldValue, undefined
+        if @fineGrained
+            oldValue = Tracker.nonreactive => @_get key
+            if oldValue isnt undefined and @onChange?
+                Tracker.afterFlush =>
+                    if @isActive()
+                        @onChange.call @, key, oldValue, undefined
+
+            delete @_fields[key]
+            @_keysDep?.changed()
+
+        else
+            fields = _.clone @_fieldsVar.get()
+            delete fields[key]
+            @_fieldsVar.set fields
 
         delete @[key]
-        delete @_fields[key]
-
-        @_keysDep?.changed()
-
 
     _forceSet: (fields) ->
-        for key, value of fields
-            if key not of @_fields
-                throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
-            @_fields[key].set value
+        if @fineGrained
+            for key, value of fields
+                if key not of @_fields
+                    throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+
+                if @_fields[key] not instanceof J.Var
+                    # We need a Var to set this object up to invalidate getters
+                    # when its creator invalidates.
+                    if (
+                        value instanceof J.List or value instanceof J.Dict or
+                        _.isArray(value) or J.util.isPlainObject(value) or
+                        value instanceof J.VALUE_NOT_READY
+                    )
+                        @_initFieldVar key
+
+                if @_fields[key] instanceof J.Var
+                    @_fields[key].set value
+                else
+                    @_fields[key] = value
+
+        else
+            newFields = _.clone @_fieldsVar.get()
+            for key, value of fields
+                if key not of newFields
+                    throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+                newFields[key] = J.Var.wrap value, @withFieldFuncs
+            @_fieldsVar.set newFields
+
         null
 
 
     _get: (key, force) ->
-        canGet = @isActive()
-        if not canGet
+        if not @isActive()
             throw new Meteor.Error "Computation[#{Tracker.currentComputation?._id}]
                 can't get key #{JSON.stringify key} of inactive #{@constructor.name}: #{@}"
 
-        # The @hasKey call is necessary to reactively invalidate
-        # the computation if and when this field gets added/deleted.
-        # It's not at all redundant with @_fields[key].get(), which
-        # invalidates the computation if and when this field gets
-        # changed.
-        if @hasKey key
-            @_fields[key].get()
-        else if force
-            throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
+        if @fineGrained
+            # The @hasKey call is necessary to reactively invalidate
+            # the computation if and when this field gets added/deleted.
+            # It's not at all redundant with @_fields[key].get(), which
+            # invalidates the computation if and when this field gets
+            # changed.
+            if @hasKey key
+                unless @_fields[key] instanceof J.Var or @_fields[key] instanceof J.AutoVar
+                    @_initFieldVar key
+                @_fields[key].get()
+            else if force
+                throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
+            else
+                undefined
         else
-            undefined
+            fields = @_fieldsVar.get()
+            if key of fields
+                J.Var(fields[key]).get()
+            else
+                undefined
 
 
-    _initField: (key, value) ->
-        @_fields[key] = J.Var value,
+    _initFieldVar: (key) ->
+        @_fields[key] = J.Var @_fields[key],
             creator: @creator
             tag:
                 dict: @
                 fieldKey: key
                 tag: "#{@toString()}._fields[#{J.util.stringify key}]"
-            onChange: @onChange?.bind(@, key) ? null
+            onChange: if _.isFunction(@onChange) then @onChange.bind(@, key) else null
+
+
+    _initField: (key, value) ->
+        if @fineGrained
+            @_fields[key] = value
+            if (
+                _.isFunction(@onChange) or
+                value instanceof J.List or value instanceof J.Dict or
+                _.isArray(value) or J.util.isPlainObject(value) or
+                value instanceof J.VALUE_NOT_READY
+            )
+                # We need a Var to set this object up to invalidate getters
+                # when its creator invalidates.
+                @_initFieldVar key
+
+            @_keysDep?.changed()
+
+        else
+            fields = _.clone @_fieldsVar.get()
+            fields[key] = J.Var.wrap value, @withFieldFuncs
+            @_fieldsVar.set fields
 
         if @withFieldFuncs then @_setupGetterSetter key
-
-        @_keysDep?.changed()
-
-
-    _replaceKeys: (newKeys) ->
-        keysDiff = J.util.diffStrings _.keys(@_fields), J.List.unwrap(newKeys)
-        @_delete key for key in keysDiff.deleted
-        @_initField key, J.makeValueNotReadyObject() for key in keysDiff.added
-        keysDiff
 
 
     _setupGetterSetter: (key) ->
@@ -152,14 +224,14 @@ class J.Dict
 
     debug: ->
         console.log @toString()
-        for key, v of @_fields
+        for key, v of @_fields ? @_fieldsVar._value
             console.group key
-            v.debug()
+            v?.debug()
             console.groupEnd()
 
 
     delete: (key) ->
-        if key of @_fields
+        if Tracker.nonreactive(=> @hasKey key)
             @_delete key
         null
 
@@ -178,17 +250,24 @@ class J.Dict
 
 
     getFields: (keys = @getKeys()) ->
-        keysList = J.List.wrap keys
-        valuesList = keysList.map (key) => @get key
+        keysArr = J.List.unwrap keys
         fields = {}
-        keysList.forEach (key, i) ->
-            fields[key] = valuesList.get i
+        if @fineGrained
+            for key in keysArr
+                fields[key] = @get key
+        else
+            allFields = @_fieldsVar.get()
+            for key in keysArr
+                fields[key] = allFields[key]
         fields
 
 
     getKeys: ->
-        @_keysDep.depend()
-        _.keys @_fields
+        if @fineGrained
+            @_keysDep?.depend()
+            _.keys @_fields
+        else
+            _.keys @_fieldsVar.get()
 
 
     getValues: ->
@@ -196,22 +275,20 @@ class J.Dict
 
 
     hasKey: (key) ->
-        @_keysDep.depend()
-        key of @_fields
+        if @fineGrained
+            @_keysDep.depend()
+            key of @_fields
+        else
+            key of @_fieldsVar.get()
 
 
     isActive: ->
         not @creator?.invalidated
 
 
-    replaceKeys: (newKeys) ->
-        @_replaceKeys newKeys
-
-
     set: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
@@ -233,8 +310,7 @@ class J.Dict
 
     setOrAdd: (fields) ->
         setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
@@ -252,7 +328,7 @@ class J.Dict
 
         setters = {}
         for key, value of fields
-            if key of @_fields
+            if Tracker.nonreactive(=> @hasKey key)
                 setters[key] = value
             else
                 @_initField key, value
@@ -267,6 +343,8 @@ class J.Dict
 
     size: ->
         # TODO: Finer-grained reactivity
+        if not @isActive()
+            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
 
         keys = @getKeys()
         if keys is undefined then undefined else keys.length

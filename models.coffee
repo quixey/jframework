@@ -174,7 +174,8 @@ class J.Model
             throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
                 to collection #{J.util.stringify @collection._name}"
 
-        @_fields.set fields
+        for fieldName, value of fields
+            @_fields.set fieldName, J.Var.wrap value, true
         null
 
 
@@ -307,7 +308,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         @_fields = J.Dict()
         for fieldName of @modelClass.fieldSpecs
             @_fields.setOrAdd fieldName, null
-        @_fields.set nonIdInitFields
+        for fieldName, value of nonIdInitFields
+            @_fields.set fieldName, J.Var.wrap value, true
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
             unless @_id is @key()

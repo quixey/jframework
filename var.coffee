@@ -70,7 +70,7 @@ class J.Var
             @onChange = null
         @wrap = options?.wrap ? true
 
-        @_getters = {} # computationId: computation
+        @_getters = [] # computations
 
         ###
             @_value is never undefined. It can be J.VALUE_NOT_READY
@@ -78,7 +78,7 @@ class J.Var
             undefined when there is no active computation.
         ###
         @_previousReadyValue = undefined
-        @_value = @maybeWrap value
+        initValue = @_value = @maybeWrap value
 
 
     debug: ->
@@ -88,21 +88,25 @@ class J.Var
     get: ->
         getter = Tracker.currentComputation
 
-        canGet = @isActive() # or (getter? and getter is @creator)
-        if not canGet
+        if not @isActive()
             throw new Meteor.Error "Can't get value of inactive Var: #{@}"
 
-        if getter? and getter._id not of @_getters
-            if getter._id not of @_getters
-                @_getters[getter._id] = getter
-                # getter.gets ?= {} # computationId: computation
-                # getter.gets[@_id] = @
+        if getter?
+            if getter not in @_getters
+                @_getters.push getter
                 getter.onInvalidate =>
-                    # delete getter.gets[@_id]
-                    delete @_getters[getter._id]
+                    @_getters.splice @_getters.indexOf(getter), 1
+
+            if (
+                (@_value instanceof J.List or @_value instanceof J.Dict) and
+                @_value.creator?
+            )
+                # Normally Lists and Dicts control their own reactivity when methods
+                # are called on them. The exception is when they get stopped.
+                @_value.creator._addSideGetter getter
 
         if @_value instanceof J.VALUE_NOT_READY
-            if getter then throw @_value
+            throw @_value if getter
             undefined
         else
             @_value
@@ -113,19 +117,19 @@ class J.Var
 
 
     set: (value) ->
-        setter = Tracker.currentComputation
-        canSet = @isActive() # or (setter? and setter is @creator)
-        if not canSet
+        if not @isActive()
             throw new Meteor.Error "Can't set value of inactive Var: #{@}"
 
-        previousValue = @_value
-        @_value = @maybeWrap value
+        setter = Tracker.currentComputation
 
-        if previousValue not instanceof J.VALUE_NOT_READY
+        previousValue = @_value
+        newValue = @_value = @maybeWrap value
+
+        if @onChange? and previousValue not instanceof J.VALUE_NOT_READY
             @_previousReadyValue = previousValue
 
-        if not J.util.equals previousValue, @_value
-            for getterId, getter of @_getters
+        if not J.util.equals newValue, previousValue
+            for getter in _.clone @_getters
                 unless getter is setter is @creator
                     getter.invalidate()
 
@@ -140,15 +144,14 @@ class J.Var
             # and cause @onChange(undefined, 4), @onChange(4, 7) and
             # @onChange(7, 3) to both be called after flush, in the correct
             # order of course.
-            oldValue = @_previousReadyValue
-            newValue = @_value
+            previousReadyValue = @_previousReadyValue
 
             Tracker.afterFlush =>
                 # Only call onChange if we're still active, even though
                 # there may be multiple onChange calls queued up from when
                 # we were still active.
                 if @isActive()
-                    @onChange.call @, oldValue, newValue
+                    @onChange.call @, previousReadyValue, newValue
 
         @_value
 
@@ -163,21 +166,42 @@ class J.Var
         J.tryGet => @get()
 
 
-    maybeWrap: (value) ->
+    maybeWrap: (value, withFieldFuncs = true) ->
         if value is undefined
             if Tracker.active
                 throw new Meteor.Error "Can't set #{@toString()} value to undefined.
                     Use null or new J.VALUE_NOT_READY instead."
             else
                 J.makeValueNotReadyObject()
-        else if not @constructor.isValidValue value
-            throw new Meteor.Error "Invalid value for Var: #{value}"
+        else if value instanceof J.AutoVar
+            throw new Meteor.Error "Can't put an AutoVar inside #{@toString()}:
+                #{value}. Get its value with .get() first."
+
+        if not @wrap and (_.isArray(value) or J.util.isPlainObject(value))
+            return value
+
+        J.Var.wrap value, withFieldFuncs
+
+
+    @wrap: (value, withFieldFuncs = true) ->
+        if value is undefined
+            if Tracker.active
+                throw new Meteor.Error "Undefined is an invalid value.
+                    Use null or new J.VALUE_NOT_READY instead."
+            else
+                J.makeValueNotReadyObject()
+        else if value instanceof J.AutoVar
+            throw new Meteor.Error "A whole AutoVar is not a valid:
+                value: #{value}. Get its value with .get() first."
         if value instanceof J.VALUE_NOT_READY
             value
-        else if @wrap and J.util.isPlainObject value
-            J.Dict value
-        else if @wrap and _.isArray(value)
-            J.List value
+        else if J.util.isPlainObject value
+            J.Dict value,
+                fineGrained: false
+                withFieldFuncs: withFieldFuncs
+        else if _.isArray(value)
+            J.List value,
+                fineGrained: false
         else if value instanceof J.Var
             # Prevent any nested J.Var situation
             try
@@ -187,10 +211,3 @@ class J.Var
                 e
         else
             value
-
-
-    @isValidValue: (value) ->
-        not (
-            value is undefined or
-                value instanceof J.AutoVar
-        )
