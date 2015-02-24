@@ -71,7 +71,10 @@ class J.List
 
     _get: (index) ->
         if @_valuesVar?
-            @_valuesVar.get()[index]
+            # We're using a J.Var to:
+            # - throw VALUE_NOT_READY
+            # - set an extra dependency for List/Dict creator invalidations
+            J.Var(@_valuesVar.get()[index]).get()
 
         else
             unless @_arr[index] instanceof J.Var
@@ -99,10 +102,9 @@ class J.List
 
         if @_valuesVar?
             values = _.clone Tracker.nonreactive => @_valuesVar.get()
-            size = values.length
             lastValue = values.pop()
             @_valuesVar.set values
-            return lastValue
+            return J.Var(lastValue).get()
 
         size = @_arr.length
         if size is 0
