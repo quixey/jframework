@@ -80,16 +80,6 @@ class J.Var
         @_previousReadyValue = undefined
         initValue = @_value = @maybeWrap value
 
-        if (
-            (initValue instanceof J.List or initValue instanceof J.Dict) and
-            initValue.creator?
-        )
-            # Normally Lists and Dicts control their own reactivity when methods
-            # are called on them. The exception is when they get stopped.
-            initValue.creator.onInvalidate =>
-                if @_value is initValue
-                    getter.invalidate() for getter in _.clone @_getters
-
 
     debug: ->
         console.log @toString()
@@ -101,10 +91,19 @@ class J.Var
         if not @isActive()
             throw new Meteor.Error "Can't get value of inactive Var: #{@}"
 
-        if getter? and getter not in @_getters
-            @_getters.push getter
-            getter.onInvalidate =>
-                @_getters.splice @_getters.indexOf(getter), 1
+        if getter?
+            if getter not in @_getters
+                @_getters.push getter
+                getter.onInvalidate =>
+                    @_getters.splice @_getters.indexOf(getter), 1
+
+            if (
+                (@_value instanceof J.List or @_value instanceof J.Dict) and
+                @_value.creator?
+            )
+                # Normally Lists and Dicts control their own reactivity when methods
+                # are called on them. The exception is when they get stopped.
+                @_value.creator._addSideGetter getter
 
         if @_value instanceof J.VALUE_NOT_READY
             throw @_value if getter
@@ -133,16 +132,6 @@ class J.Var
             for getter in _.clone @_getters
                 unless getter is setter is @creator
                     getter.invalidate()
-
-            if (
-                (newValue instanceof J.List or newValue instanceof J.Dict) and
-                newValue.creator?
-            )
-                # Normally Lists and Dicts control their own reactivity when methods
-                # are called on them. The exception is when they get stopped.
-                newValue.creator.onInvalidate =>
-                    if @_value is newValue
-                        getter.invalidate() for getter in _.clone @_getters
 
         if (
             @onChange? and

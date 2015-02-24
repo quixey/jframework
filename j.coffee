@@ -36,3 +36,16 @@ if Meteor.isServer
         cslLog.apply console, arguments
     console.group = ->
         cslLog.apply console, arguments
+
+
+J.stats = ->
+    for id, x of J.graph
+        if x instanceof J.List
+            if x._valuesVar?
+                J.inc 'compactLists'
+                J.inc 'compactListElements', x._valuesVar._value.length
+            else
+                J.inc 'expandedLists'
+                J.inc 'expandedListElements', x._arr.length
+
+    J.counts

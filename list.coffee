@@ -20,8 +20,6 @@ class J.List
         unless @ instanceof J.List
             return new J.List values, options
 
-        @_id = J.getNextId()
-        if J.debugGraph then J.graph[@_id] = @
 
         @tag = if J.debugTags then options?.tag else null
 
@@ -200,8 +198,6 @@ class J.List
         else
             return if @_arr?
 
-            J.inc 'setCompact'
-
             values = Tracker.nonreactive => @getValues()
 
             # Invalidate its dependents so they recompute and
@@ -278,7 +274,6 @@ class J.List
 
 
     forEach: (f) ->
-        J.forEachIds[@_id] = true
         ###
             Use when f has side effects.
             Like @map except:
@@ -310,8 +305,6 @@ class J.List
 
 
     get: (index) ->
-        J.getIds[@_id] = true
-
         if not @isActive()
             throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
                 can't get index #{index} of inactive #{@constructor.name}: #{@}"
@@ -366,8 +359,6 @@ class J.List
 
 
     getValues: ->
-        J.getValueIds[@_id] = true
-
         @get(i) for i in [0...@size()]
 
 
@@ -387,8 +378,6 @@ class J.List
 
 
     map: (f = _.identity, tag) ->
-        J.mapIds[@_id] = true
-
         # Enables parallel fetching
         tag ?= (
             tag: "mapped(#{@toString()})"

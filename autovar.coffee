@@ -59,6 +59,7 @@ class J.AutoVar extends Tracker.Computation
         @stopped = false
 
         @_getters = [] # computations
+        @_sideGetters = [] # computations
         @creator?.onInvalidate =>
             @stop()
             @_removeInvalidAncestor @
@@ -72,6 +73,20 @@ class J.AutoVar extends Tracker.Computation
             # of valueFunc.
             Tracker.afterFlush =>
                 if @_value is undefined then @invalidate()
+
+
+    _addGetter: (getter) ->
+        if getter not in @_getters
+            @_getters.push getter
+            getter.onInvalidate =>
+                @_getters.splice @_getters.indexOf(getter), 1
+
+
+    _addSideGetter: (getter) ->
+        if getter not in @_sideGetters
+            @_sideGetters.push getter
+            getter.onInvalidate =>
+                @_sideGetters.splice @_sideGetters.indexOf(getter), 1
 
 
     _addInvalidAncestor: (autoVar) ->
@@ -94,6 +109,8 @@ class J.AutoVar extends Tracker.Computation
 
     _runValueFunc: ->
         @onInvalidate =>
+            sg.invalidate() for sg in _.clone @_sideGetters
+
             if @stopped
                 @_removeInvalidAncestor @
                 @_invalidAncestors = []
@@ -136,17 +153,6 @@ class J.AutoVar extends Tracker.Computation
         if newValue isnt previousValue
             getter.invalidate() for getter in _.clone @_getters
 
-            if (
-                (newValue instanceof J.List or newValue instanceof J.Dict) and
-                newValue.creator?
-            )
-                # Normally Lists and Dicts control their own reactivity when methods
-                # are called on them. The exception is when they get stopped.
-                newValue.creator.onInvalidate =>
-                    if @_value is newValue
-                        for getter in _.clone @_getters
-                            getter.invalidate()
-
         if (
             _.isFunction(@onChange) and
             @_value not instanceof J.VALUE_NOT_READY and
@@ -188,10 +194,15 @@ class J.AutoVar extends Tracker.Computation
                 ancestor._compute()
         @_getting = false
 
-        if getter? and getter not in @_getters
-            @_getters.push getter
-            getter.onInvalidate =>
-                @_getters.splice @_getters.indexOf(getter), 1
+        if getter?
+            @_addGetter getter
+            if (
+                (@_value instanceof J.List or @_value instanceof J.Dict) and
+                @_value.creator?
+            )
+                # Normally Lists and Dicts control their own reactivity when methods
+                # are called on them. The exception is when they get stopped.
+                @_value.creator._addSideGetter getter
 
         if @_value instanceof J.VALUE_NOT_READY
             throw @_value if getter
