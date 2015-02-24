@@ -202,3 +202,30 @@ class J.Var
                 e
         else
             value
+
+
+    @wrap: (value) ->
+        if value is undefined
+            if Tracker.active
+                throw new Meteor.Error "Undefined is an invalid value.
+                    Use null or new J.VALUE_NOT_READY instead."
+            else
+                J.makeValueNotReadyObject()
+        else if value instanceof J.AutoVar
+            throw new Meteor.Error "A whole AutoVar is not a valid:
+                value: #{value}. Get its value with .get() first."
+        if value instanceof J.VALUE_NOT_READY
+            value
+        else if J.util.isPlainObject value
+            J.Dict value
+        else if _.isArray(value)
+            J.List value
+        else if value instanceof J.Var
+            # Prevent any nested J.Var situation
+            try
+                value.get()
+            catch e
+                throw e unless e instanceof J.VALUE_NOT_READY
+                e
+        else
+            value

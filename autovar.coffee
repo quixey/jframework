@@ -168,8 +168,9 @@ class J.AutoVar extends Tracker.Computation
                 value of inactive AutoVar: #{@}"
 
         if @_getting
-            console.error "AutoVar dependency cycle involving #{@toString()}"
-            throw "AutoVar dependency cycle involving #{@toString()}"
+            msg = "AutoVar dependency cycle involving #{Tracker.currentComputation} and #{@}"
+            console.error msg
+            throw msg
 
         if Meteor.isServer and J._inMethod.get()
             # We're just using the Var to wrap the value, e.g.

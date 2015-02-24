@@ -1,3 +1,6 @@
+J.debugTags = true
+J.debugGraph = true
+
 Tinytest.add 'util - sorting', (test) ->
     test.equal J.util.compare(
         [false, -2]

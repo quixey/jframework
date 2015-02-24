@@ -15,6 +15,10 @@ J.getNextId = ->
     J._nextId += 1
     jid
 
+J.getIds = {}
+J.getValueIds = {}
+J.forEachIds = {}
+J.mapIds = {}
 
 if Meteor.isServer
     cslLog = console.log

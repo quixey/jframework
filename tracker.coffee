@@ -194,7 +194,7 @@ Tracker.autorun = (f, sortKey = 0.5) ->
     if Meteor.isServer
         f = Meteor.bindEnvironment f
 
-    @_constructingComputation = true
+    Tracker._constructingComputation = true
     c = new Tracker.Computation f, Tracker.currentComputation
     c.sortKey = sortKey
 

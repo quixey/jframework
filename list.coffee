@@ -44,43 +44,45 @@ class J.List
             @creator = options.creator
         @onChange = options?.onChange ? null
 
-        @_arr = []
-        @_sizeDep = new Tracker.Dependency @creator
-
         @readOnly = false
 
-        @push x for x in arr
+        # compact mode
+        @_valuesVar = J.Var(
+            J.Var.wrap v for v in arr
+
+            tag:
+                list: @
+                tag: "#{@toString()} valuesVar"
+            creator: @creator
+            wrap: false
+            onChange:
+                if _.isFunction @onChange
+                    (oldValues, newValues) =>
+                        for i in [0...Math.max oldValues.length, newValues.length]
+                            if oldValues[i] isnt newValues[i]
+                                @onChange i, oldValues[i], newValues[i]
+        )
+
+        # expanded mode
+        @_arr = null
+        @_sizeDep = null
+
 
 
     _get: (index) ->
-        @_arr[index].get()
+        if @_valuesVar?
+            @_valuesVar.get()[index]
 
-
-    _pop: ->
-        size = @_arr.length
-        if size is 0
-            undefined
         else
-            lastValue = undefined
-            Tracker.nonreactive =>
-                lastValue = @_arr[size - 1]._value
-                if lastValue is undefined or lastValue instanceof J.VALUE_NOT_READY
-                    lastValue = @_arr[size - 1]._previousReadyValue
-            if lastValue isnt undefined and _.isFunction @onChange
-                Tracker.afterFlush =>
-                    if @isActive()
-                        @onChange.call @, size - 1, lastValue, undefined
-            @_arr.pop()
-            @_sizeDep?.changed()
-            lastValue
+            unless @_arr[index] instanceof J.Var
+                @_initIndexVar index
+            @_arr[index].get()
 
 
-    _push: (value) ->
-        index = @_arr.length
-
+    _initIndexVar: (index) ->
         # Initialize it as not-ready so when we set it
         # on the next line, it might trigger @onChange.
-        @_arr.push J.Var J.makeValueNotReadyObject(),
+        @_arr[index] = J.Var @_arr[index],
             creator: @creator
             tag:
                 list: @
@@ -91,23 +93,127 @@ class J.List
                     @onChange.bind @, index
                 else null
 
-        @_arr[index].set value
+
+    _pop: ->
+        if Tracker.active then @_setCompact false
+
+        if @_valuesVar?
+            values = _.clone Tracker.nonreactive => @_valuesVar.get()
+            size = values.length
+            lastValue = values.pop()
+            @_valuesVar.set values
+            return lastValue
+
+        size = @_arr.length
+        if size is 0
+            undefined
+        else
+            lastValue = undefined
+            Tracker.nonreactive =>
+                if @_arr[size - 1] instanceof J.Var
+                    lastValue = @_arr[size - 1]._value
+                    if lastValue is undefined or lastValue instanceof J.VALUE_NOT_READY
+                        lastValue = @_arr[size - 1]._previousReadyValue
+                else
+                    lastValue = @_arr[size - 1]
+            if lastValue isnt undefined and _.isFunction @onChange
+                Tracker.afterFlush =>
+                    if @isActive()
+                        @onChange.call @, size - 1, lastValue, undefined
+            @_arr.pop()
+            @_sizeDep?.changed()
+            lastValue
+
+
+    _push: (value) ->
+        if Tracker.active then @_setCompact false
+
+        if @_valuesVar?
+            values = _.clone Tracker.nonreactive => @_valuesVar.get()
+            values.push J.Var.wrap value
+            @_valuesVar.set values
+            return
+
+        index = @_arr.length
+
+        if (
+            _.isFunction(@onChange) or
+            value instanceof J.List or value instanceof J.Dict or
+            _.isArray(value) or J.util.isPlainObject(value) or
+            value instanceof J.VALUE_NOT_READY
+        )
+            @_arr.push J.makeValueNotReadyObject()
+            @_initIndexVar index
+            @_arr[index].set value
+        else
+            @_arr.push value
 
         @_sizeDep?.changed()
 
 
     _set: (index, value) ->
+        if Tracker.active then @_setCompact false
+
+        if @_valuesVar?
+            values = _.clone Tracker.nonreactive => @_valuesVar.get()
+            values[index] = J.Var.wrap value
+            @_valuesVar.set values
+            return value
+
         if not @isActive()
             throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         unless index of @_arr
             throw new Meteor.Error "List index out of range"
 
-        @_arr[index].set value
+        if @_arr[index] not instanceof J.Var
+            # We need a Var to set this object up to invalidate getters
+            # when its creator invalidates.
+            if (
+                value instanceof J.List or value instanceof J.Dict or
+                _.isArray(value) or J.util.isPlainObject(value) or
+                value instanceof J.VALUE_NOT_READY
+            )
+                @_initIndexVar index
+
+        if @_arr[index] instanceof J.Var
+            @_arr[index].set value
+        else
+            @_arr[index] = value
+
+
+    _setCompact: (compact) ->
+        ###
+            Compact mode:
+                @_valuesVar is just one array of values; it doesn't
+                try to wrap them in individual Vars or monitor
+                individual gets at index-granularity.
+            Expanded mode:
+                @_arr is an array of naked values that get
+                promoted to Vars as needed.
+        ###
+
+        if compact
+            throw "not implemented yet"
+        else
+            return if @_arr?
+
+            J.inc 'setCompact'
+
+            values = Tracker.nonreactive => @getValues()
+
+            # Invalidate its dependents so they recompute and
+            # get a more granular dependency.
+            @_valuesVar.set null
+            @_valuesVar = null
+
+            @_arr = []
+            @_push value for value in values
+            @_sizeDep = new Tracker.Dependency @creator
 
 
     clear: ->
-        @pop() for i in [0...@_arr.length]
+        @pop() for i in [0...Tracker.nonreactive -> @size()]
 
 
     clone: ->
@@ -170,6 +276,7 @@ class J.List
 
 
     forEach: (f) ->
+        J.forEachIds[@_id] = true
         ###
             Use when f has side effects.
             Like @map except:
@@ -201,6 +308,8 @@ class J.List
 
 
     get: (index) ->
+        J.getIds[@_id] = true
+
         if not @isActive()
             throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
                 can't get index #{index} of inactive #{@constructor.name}: #{@}"
@@ -255,6 +364,8 @@ class J.List
 
 
     getValues: ->
+        J.getValueIds[@_id] = true
+
         @get(i) for i in [0...@size()]
 
 
@@ -274,6 +385,8 @@ class J.List
 
 
     map: (f = _.identity, tag) ->
+        J.mapIds[@_id] = true
+
         # Enables parallel fetching
         tag ?= (
             tag: "mapped(#{@toString()})"
@@ -353,8 +466,12 @@ class J.List
     size: ->
         if not @isActive()
             throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
-        @_sizeDep.depend()
-        @_arr.length
+
+        if @_valuesVar?
+            @_valuesVar.get().length
+        else
+            @_sizeDep.depend()
+            @_arr.length
 
 
     toArr: ->

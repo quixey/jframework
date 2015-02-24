@@ -77,11 +77,12 @@ class J.Dict
                 throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
 
             if @_fields[key] not instanceof J.Var
-                # We need a Var to set this list up to invalidate getters
+                # We need a Var to set this object up to invalidate getters
                 # when its creator invalidates.
                 if (
                     value instanceof J.List or value instanceof J.Dict or
-                    _.isArray(value) or J.util.isPlainObject(value)
+                    _.isArray(value) or J.util.isPlainObject(value) or
+                    value instanceof J.VALUE_NOT_READY
                 )
                     @_initFieldVar key
 
@@ -128,9 +129,10 @@ class J.Dict
         if (
             @onChange? or
             value instanceof J.List or value instanceof J.Dict or
-            _.isArray(value) or J.util.isPlainObject(value)
+            _.isArray(value) or J.util.isPlainObject(value) or
+            value instanceof J.VALUE_NOT_READY
         )
-            # We need a Var to set this list up to invalidate getters
+            # We need a Var to set this object up to invalidate getters
             # when its creator invalidates.
             @_initFieldVar key
 

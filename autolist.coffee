@@ -22,10 +22,8 @@ class J.AutoList extends J.List
 
         super [],
             creator: Tracker.currentComputation
-            onChange: null # doesn't support onChange=true
+            onChange: onChange
             tag: tag
-
-        @onChange = onChange
 
         @_sizeDep = null
 
@@ -49,13 +47,14 @@ class J.AutoList extends J.List
             creator: @creator
         )
 
-        @_valuesVar = J.AutoVar(
+        @_valuesAutoVar = J.AutoVar(
             (
                 autoList: @
-                tag: "#{@toString()} valuesVar"
+                tag: "#{@toString()} valuesAutoVar"
             )
 
             =>
+                oldSize = Tracker.nonreactive => J.List::size.call @
                 size = @size()
 
                 values = for i in [0...size]
@@ -73,8 +72,8 @@ class J.AutoList extends J.List
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
-                for i in [0...Math.min size, @_arr.length]
-                    @_set i, values[i]
+                for i in [0...Math.min oldSize, size]
+                    Tracker.nonreactive => @_set i, values[i]
 
                     # Setting may have caused @creator to invalidate which
                     # in turn killed @. Normally we never need this kind of
@@ -83,12 +82,12 @@ class J.AutoList extends J.List
                     if not @isActive()
                         return J.makeValueNotReadyObject()
 
-                if size < @_arr.length
-                    for i in [size...@_arr.length]
-                        @_pop()
-                else if size > @_arr.length
-                    for i in [@_arr.length...size]
-                        @_push values[i]
+                if size < oldSize
+                    for i in [size...oldSize]
+                        Tracker.nonreactive => @_pop()
+                else if oldSize < size
+                    for i in [oldSize...size]
+                        Tracker.nonreactive => @_push values[i]
 
                 null
 
@@ -99,9 +98,9 @@ class J.AutoList extends J.List
 
 
     _get: (index) ->
-        # Call @_valuesVar.get() for its side effect if
-        # @_valuesVar is newly created or invalidated.
-        @_valuesVar.get()
+        # Call @_valuesAutoVar.get() for its side effect if
+        # @_valuesAutoVar is newly created or invalidated.
+        @_valuesAutoVar.get()
         super
 
 
@@ -148,7 +147,7 @@ class J.AutoList extends J.List
 
 
     stop: ->
-        @_valuesVar.stop()
+        @_valuesAutoVar.stop()
         @_sizeVar.stop()
 
 

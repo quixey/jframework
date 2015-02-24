@@ -117,7 +117,7 @@ Tinytest.addAsync "AfterFlush - sortKey basics", (test, onComplete) ->
                 aafCount += 1
                 Tracker.afterFlush(->
                     test.equal aafCount, 6, 'fail 6'
-                    onComplete()
+                    _.defer -> onComplete()
                 , 0.7)
             , 0.7)
             Tracker.afterFlush(->
