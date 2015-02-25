@@ -154,12 +154,12 @@ J.fetching =
 
     requestQuery: (querySpec) ->
         qsString = EJSON.stringify querySpec
+        computation = Tracker.currentComputation
 
         if Tracker.active
             # We may not need reactivity per se, since the query should
             # never stop once it's started. But we still want to track
             # which computations need this querySpec.
-            computation = Tracker.currentComputation
             # console.log computation.tag, 'requests a query', querySpec.modelName,
             #     querySpec.selector, @isQueryReady querySpec
             @_requestersByQs[qsString] ?= {}
@@ -176,11 +176,34 @@ J.fetching =
             options = {}
             for optionName in ['fields', 'sort', 'skip', 'limit']
                 if querySpec[optionName]? then options[optionName] = querySpec[optionName]
-            return J.List modelClass.find(querySpec.selector, options).fetch()
 
-        if Tracker.active
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
-            throw J.makeValueNotReadyObject()
+            if Tracker.active
+                results = J.List Tracker.nonreactive ->
+                    modelClass.find(querySpec.selector, options).fetch()
+
+                # The individual model instances' getters have their own reactivity, so
+                # this query should only invalidate if a result gets added/removed/moved.
+                idQueryOptions = _.clone options
+                idQueryOptions.fields = _id: 1
+                idQueryOptions.transform = null
+
+                initializing = true
+                invalidator = -> computation.invalidate() if not initializing
+                modelClass.find(querySpec.selector, idQueryOptions).observe
+                    added: invalidator
+                    movedTo: invalidator
+                    removed: invalidator
+                initializing = false
+
+                results
+
+            else
+                J.List modelClass.find(querySpec.selector, options).fetch()
+
         else
-            undefined
+            if Tracker.active
+                @_requestsChanged = true
+                Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+                throw J.makeValueNotReadyObject()
+            else
+                undefined
