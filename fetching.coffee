@@ -55,8 +55,6 @@ J.fetching =
 
 
     getMerged: (querySpecs) ->
-        return _.clone querySpecs
-
         requestedIdsByModel = {} # modelName: {id: true}
 
         mergedQuerySpecs = []

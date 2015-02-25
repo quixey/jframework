@@ -422,6 +422,14 @@ J._defineComponent = (componentName, componentSpec) ->
         false
 
 
+    reactSpec.renderLoader ?= ->
+        $$ ('div'),
+            style:
+                textAlign: 'center'
+                opacity: 0.5
+            $$ ('Loader')
+
+
     reactSpec.render = ->
         if Tracker.active
             throw "Can't call render inside a reactive computation: #{Tracker.currentComputation._id}"
@@ -490,11 +498,7 @@ J._defineComponent = (componentName, componentSpec) ->
         _popDebugFlag()
 
         if element is undefined
-            $$ ('div'),
-                style:
-                    textAlign: 'center'
-                    opacity: 0.5
-                $$ ('Loader')
+            @renderLoader()
         else
             element
 
