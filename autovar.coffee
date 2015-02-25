@@ -107,14 +107,6 @@ class J.AutoVar extends Tracker.Computation
 
 
     _runValueFunc: ->
-        @onInvalidate =>
-            sg.invalidate() for sg in _.clone @_sideGetters
-            c.stop() for c in _.clone @_children
-
-            if not @stopped
-                @_invalidAncestors = []
-                @_addInvalidAncestor @
-
         if @ isnt @component?._elementVar and Tracker.nonreactive(=> @_hasInvalidComponentAncestor())
             @_hasInvalidComponentAncestor() # we want to recompute when it's false
             value = J.makeValueNotReadyObject()
@@ -210,6 +202,21 @@ class J.AutoVar extends Tracker.Computation
             undefined
         else
             @_value
+
+
+    invalidate: ->
+        return if @invalidated
+        @invalidated = true
+
+        sg.invalidate() for sg in _.clone @_sideGetters
+        c.stop() for c in _.clone @_children
+
+        if not @stopped
+            @_invalidAncestors = []
+            @_addInvalidAncestor @
+
+        @invalidated = false
+        super
 
 
     set: ->
