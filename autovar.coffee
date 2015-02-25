@@ -177,7 +177,7 @@ class J.AutoVar extends Tracker.Computation
         if @_getting
             msg = "AutoVar dependency cycle involving #{Tracker.currentComputation} and #{@}"
             console.error msg
-            throw msg
+            throw new Meteor.Error msg
 
         if Meteor.isServer and J._inMethod.get()
             # We're just using the Var to wrap the value, e.g.
@@ -206,7 +206,7 @@ class J.AutoVar extends Tracker.Computation
                 @_value.creator._addSideGetter getter
 
         if @_value instanceof J.VALUE_NOT_READY
-            throw @_value if getter
+            throw @_value if getter?
             undefined
         else
             @_value

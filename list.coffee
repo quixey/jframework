@@ -5,8 +5,6 @@
 
 
 class J.List
-    @_UNDEFINED = new (->)
-
     constructor: (values, options) ->
         ###
             Options:
@@ -284,30 +282,35 @@ class J.List
             Use when f has side effects.
             Like @map except:
             - Lets f return undefined
-            - Returns an array, not an AutoList
+            - Returns an array, not a List
+            - If any of the iterations throws VALUE_NOT_READY,
+              the forEach call will throw VALUE_NOT_READY
             - Invalidates when @getValues() changes,
               not when the returned array changes.
+                Note: This is currently true of maps
+                just because making them coarse-grained
+                is saving memory.
         ###
-        callerComp = Tracker.currentComputation
-        mappedList = @map(
-            (v, i) =>
-                if callerComp
-                    # There's no such thing as partially invalidating
-                    # the output of a forEach, since the whole thing
-                    # is supposed to cause one big side effect.
-                    # If a value of this list changes, or another
-                    # reactive input to f changes, then the caller
-                    # of the forEach should get invalidated.
-                    Tracker.onInvalidate -> callerComp.invalidate()
-                ret = f v, i
-                if ret is undefined then J.List._UNDEFINED else ret
-            tag:
-                tag: "forEach(#{@toString()})"
-                sourceList: @
-                mapFunc: f
-        )
-        for value in mappedList.getValues()
-            if value is J.List._UNDEFINED then undefined else value
+        ready = true
+        ret = for i in [0...@size()]
+            try
+                value = @get i
+                if value is undefined
+                    undefined
+                else
+                    f value, i
+            catch e
+                if e instanceof J.VALUE_NOT_READY
+                    # This is how AutoLists are parallelized. We keep
+                    # looping because we want to synchronously register
+                    # all the not-ready computations with the data
+                    # fetcher that runs during afterFlush.
+                    ready = false
+                    e
+                else
+                    throw e
+        if not ready then throw J.makeValueNotReadyObject()
+        ret
 
 
     get: (index) ->
