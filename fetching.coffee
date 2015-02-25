@@ -55,6 +55,8 @@ J.fetching =
 
 
     getMerged: (querySpecs) ->
+        return _.clone querySpecs
+
         requestedIdsByModel = {} # modelName: {id: true}
 
         mergedQuerySpecs = []
@@ -111,10 +113,7 @@ J.fetching =
                 console.groupCollapsed("+")
                 for qsString in unmergedQsStringsDiff.added
                     for computationId, computation of @_requestersByQs[qsString]
-                        if computation.autoVar?
-                            console.log computation.autoVar
-                        else
-                            console.log computation
+                        if false then console.log computation
                 console.groupEnd()
                 console.debug "    ", consolify(qs) for qs in addedQuerySpecs
             if deletedQuerySpecs.length
@@ -145,12 +144,14 @@ J.fetching =
 
 
     _deleteComputationQsRequests: (computation) ->
-        for qsString of @_requestersByQs
+        return if not computation._requestingData
+        for qsString in _.keys @_requestersByQs
             delete @_requestersByQs[qsString][computation._id]
             if _.isEmpty @_requestersByQs[qsString]
                 delete @_requestersByQs[qsString]
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+        computation._requestingData = false
+        @_requestsChanged = true
+        Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
 
 
     requestQuery: (querySpec) ->
@@ -166,6 +167,7 @@ J.fetching =
             @_requestersByQs[qsString] ?= {}
             if computation._id not of @_requestersByQs[qsString]
                 @_requestersByQs[qsString][computation._id] = computation
+                computation._requestingData = true
                 # Note: AutoVar handles logic to remove from @_requestersByQueue
                 # because it involves complicated sequencing with React component
                 # rendering.

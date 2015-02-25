@@ -192,7 +192,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 tag:
                     component: @
                     propName: propName
-                    tag: "#{@toString}.prop.#{propName}"
+                    tag: "#{@toString()}.prop.#{propName}"
                 onChange: do (propName, propSpec) => (oldValue, newValue) =>
                     if propSpec.onChange?
                         if componentDebug
@@ -384,6 +384,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
         componentSpec.componentDidUpdate?.call @, prevProps, prevState
 
+
     reactSpec.afterRender = (f) ->
         if @_elementVar? and not @_elementVar.stopped
             f.call @
@@ -391,7 +392,10 @@ J._defineComponent = (componentName, componentSpec) ->
             @_setCallbacks ?= []
             @_setCallbacks.push f
 
+
     reactSpec.componentWillUnmount = ->
+        componentSpec.componentWillUnmount?.apply @
+
         delete J._componentById[@_componentId]
         delete J._componentDomById[@_componentId]
         delete J._componentsByName[componentName][@_componentId]
@@ -399,11 +403,14 @@ J._defineComponent = (componentName, componentSpec) ->
 
         @_valid.set false
         @_elementVar.stop()
+
         J.fetching._deleteComputationQsRequests @_elementVar
         for reactiveName, reactiveVar of @reactives
             reactiveVar.stop()
 
-        componentSpec.componentWillUnmount?.apply @
+        # Garbage collector seems to need this
+        delete @_elementVar.component
+        delete @_elementVar
 
 
     reactSpec._hasInvalidAncestor = ->

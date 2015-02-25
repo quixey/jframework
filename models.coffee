@@ -408,6 +408,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
                     instance.alive = false
+                    for reactiveName, reactive of instance.reactives
+                        reactive.stop()
                     delete collection._attachedInstances[id]
 
         if Meteor.isServer

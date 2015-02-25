@@ -36,7 +36,7 @@ class J.AutoVar extends Tracker.Computation
         @_id = J.getNextId()
         if J.debugGraph then J.graph[@_id] = @
 
-        @tag = if J.debugTags then tag else null
+        @tag = if J.debugTags then J.util.stringifyTag(tag) else null
 
         @valueFunc = valueFunc
         if Meteor.isServer
@@ -60,9 +60,8 @@ class J.AutoVar extends Tracker.Computation
 
         @_getters = [] # computations
         @_sideGetters = [] # computations
-        @creator?.onInvalidate =>
-            @stop()
-            @_removeInvalidAncestor @
+        @_children = [] # computations
+        @creator?._children.push @
 
         @_getting = false
         @_previousReadyValue = undefined
@@ -110,13 +109,9 @@ class J.AutoVar extends Tracker.Computation
     _runValueFunc: ->
         @onInvalidate =>
             sg.invalidate() for sg in _.clone @_sideGetters
+            c.stop() for c in _.clone @_children
 
-            if @stopped
-                if @component? and @ isnt @component._elementVar
-                    if Meteor.isClient then J.fetching._deleteComputationQsRequests @
-                @_removeInvalidAncestor @
-                @_invalidAncestors = []
-            else
+            if not @stopped
                 @_invalidAncestors = []
                 @_addInvalidAncestor @
 
@@ -124,7 +119,7 @@ class J.AutoVar extends Tracker.Computation
             @_hasInvalidComponentAncestor() # we want to recompute when it's false
             value = J.makeValueNotReadyObject()
         else
-            if @component? and @_value instanceof J.VALUE_NOT_READY and @ isnt @component?._elementVar
+            if @ isnt @component?._elementVar
                 if Meteor.isClient then J.fetching._deleteComputationQsRequests @
 
             try
@@ -164,6 +159,7 @@ class J.AutoVar extends Tracker.Computation
             @_value isnt @_previousReadyValue
         )
             previousReadyValue = @_previousReadyValue
+            @_previousReadyValue = undefined # Free the memory
             Tracker.afterFlush =>
                 if not @stopped
                     @onChange.call @, previousReadyValue, newValue
@@ -218,6 +214,15 @@ class J.AutoVar extends Tracker.Computation
 
     set: ->
         throw new Meteor.Error "There is no AutoVar.set"
+
+
+    stop: ->
+        if @ isnt @component?._elementVar
+            if Meteor.isClient then J.fetching._deleteComputationQsRequests @
+        @_removeInvalidAncestor @
+        @_invalidAncestors = []
+        @creator?._children.splice @creator._children.indexOf(@), 1
+        super
 
 
     toString: ->

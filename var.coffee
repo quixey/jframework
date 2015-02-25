@@ -60,8 +60,9 @@ class J.Var
             @creator = options.creator
         else
             throw new Meteor.Error "Invalid Var creator: #{options.creator}"
+        @creator?.onInvalidate => delete @creator
 
-        @tag = if J.debugTags then options?.tag else null
+        @tag = if J.debugTags then J.util.stringifyTag(options?.tag) else null
         if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?
@@ -125,8 +126,9 @@ class J.Var
         previousValue = @_value
         newValue = @_value = @maybeWrap value
 
-        if @onChange? and previousValue not instanceof J.VALUE_NOT_READY
-            @_previousReadyValue = previousValue
+        if @onChange?
+            if previousValue not instanceof J.VALUE_NOT_READY
+                @_previousReadyValue = previousValue
 
         if not J.util.equals newValue, previousValue
             for getter in _.clone @_getters
@@ -145,6 +147,7 @@ class J.Var
             # @onChange(7, 3) to both be called after flush, in the correct
             # order of course.
             previousReadyValue = @_previousReadyValue
+            @_previousReadyValue = undefined # Free the memory
 
             Tracker.afterFlush =>
                 # Only call onChange if we're still active, even though
