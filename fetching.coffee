@@ -138,7 +138,7 @@ J.fetching =
 
                 # There may be changes to @_requestersByQs that we couldn't act on
                 # until this request was done.
-                Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+                Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
 
     _deleteComputationQsRequests: (computation) ->
@@ -149,7 +149,7 @@ J.fetching =
                 delete @_requestersByQs[qsString]
         computation._requestingData = false
         @_requestsChanged = true
-        Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
 
     requestQuery: (querySpec) ->
@@ -203,7 +203,7 @@ J.fetching =
         else
             if Tracker.active
                 @_requestsChanged = true
-                Tracker.afterFlush (=> @remergeQueries()), Math.POSITIVE_INFINITY
+                Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
                 throw J.makeValueNotReadyObject()
             else
                 undefined

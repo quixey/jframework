@@ -155,7 +155,7 @@ Tracker.Computation::debug = ->
 
 
 Tracker.flush = ->
-    # console.debug "Tracker.flush!"
+    console.debug "Tracker.flush!"
 
     if Tracker.inFlush
         throw "Can't call Tracker.flush while flushing"
@@ -170,6 +170,7 @@ Tracker.flush = ->
         # Recompute all pending computations
         while Tracker.pendingComputations.length
             comp = Tracker.pendingComputations.shift()
+            # console.debug 'recompute', comp, comp.stopped
             comp._compute() unless comp.stopped
             J.inc 'recompute'
 
@@ -179,7 +180,10 @@ Tracker.flush = ->
             # Call one afterFlush callback, which may
             # invalidate more computations
             afc = Tracker.afterFlushCallbacks.shift()
+            # console.debug 'afterFlush', afc
             afc.func.call null
+
+    # console.debug 'flush done'
 
     Tracker.willFlush = false
     Tracker.inFlush = false

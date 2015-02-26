@@ -65,6 +65,9 @@ J._defineComponent = (componentName, componentSpec) ->
         if memberName of componentSpec
             throw new Meteor.Error "Unnecessary to define #{memberName} for JFramework components
                 (in #{componentName})"
+    if componentSpec.componentDidUpdate? and componentSpec.componentDidUpdate.length > 0
+        throw new Meteor.Error "J.Component.componentDidUpdate methods can't take
+            arguments. Use reactive expressions if you care about that stuff."
 
     unless _.isFunction componentSpec.render
         throw new Meteor.Error "Missing #{componentName}.render method"
@@ -133,7 +136,9 @@ J._defineComponent = (componentName, componentSpec) ->
             isLastRoute = lastRoute.handler.displayName is @constructor.displayName
 
             if isLastRoute and lastRoute.name?
-                newPath = @makeGoodPath lastRoute.name, newRouteSpec.params().toObj(), newRouteSpec.query().toObj()
+                newPath = @makeGoodPath lastRoute.name,
+                    newRouteSpec.get('params')?.toObj() ? {},
+                    newRouteSpec.get('query')?.toObj() ? {}
                 if newPath isnt URI().resource()
                     # TODO: Block the re-rendering here; it's completely unnecessary.
                     # console.debug 'PUSH', newPath
@@ -177,7 +182,8 @@ J._defineComponent = (componentName, componentSpec) ->
         J._componentsByName[componentName][@_componentId] = @
 
         @_valid = J.Var true
-
+        @_showingLoader = false
+        @_afterRenderCallbacks = []
 
         # Check for invalid prop names in @props
         for propName, value of @props
@@ -188,13 +194,15 @@ J._defineComponent = (componentName, componentSpec) ->
         @_props = {} # Vars for the props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
+            if propName of @props and @props[propName] is undefined
+                throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
             @_props[propName] = J.Var @props[propName],
                 tag:
                     component: @
                     propName: propName
                     tag: "#{@toString()}.prop.#{propName}"
-                onChange: do (propName, propSpec) => (oldValue, newValue) =>
-                    if propSpec.onChange?
+                onChange: if propSpec.onChange? then do (propName, propSpec) =>
+                    (oldValue, newValue) =>
                         if componentDebug
                             console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
@@ -258,8 +266,8 @@ J._defineComponent = (componentName, componentSpec) ->
                     component: @
                     stateFieldName: stateFieldName
                     tag: "#{@toString()}.state.#{stateFieldName}"
-                onChange: do (stateFieldName, stateFieldSpec) => (oldValue, newValue) =>
-                    if stateFieldSpec.onChange?
+                onChange: if stateFieldSpec.onChange? then do (stateFieldName, stateFieldSpec) =>
+                    (oldValue, newValue) =>
                         if componentDebug
                             console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
@@ -346,9 +354,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.set = (stateFields, callback) ->
-        if callback?
-            @_setCallbacks ?= []
-            @_setCallbacks.push callback
+        if callback? then @afterRender callback
 
         for stateFieldName, value of stateFields
             unless stateFieldName of @state
@@ -374,23 +380,25 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
-        not @_elementVar? or @_elementVar.stopped
+        not @_elementVar? or @_elementVar.invalidated
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
-        prevSetCallbacks = @_setCallbacks ? []
-        delete @_setCallbacks
-        callback() for callback in prevSetCallbacks
+        return if @_showingLoader
 
-        componentSpec.componentDidUpdate?.call @, prevProps, prevState
+        prevAfterRenderCallbacks = @_afterRenderCallbacks ? []
+        @_afterRenderCallbacks = []
+        callback() for callback in prevAfterRenderCallbacks
+
+        componentSpec.componentDidUpdate?.call @
 
 
     reactSpec.afterRender = (f) ->
-        if @_elementVar? and not @_elementVar.stopped
-            f.call @
-        else
-            @_setCallbacks ?= []
-            @_setCallbacks.push f
+        J.assert not Tracker.active or @_elementVar?._getting, "Can only call afterRender
+            from within render function or from outside a reactive computation."
+
+        @_afterRenderCallbacks.push f
+        null
 
 
     reactSpec.componentWillUnmount = ->
@@ -434,7 +442,7 @@ J._defineComponent = (componentName, componentSpec) ->
         if Tracker.active
             throw "Can't call render inside a reactive computation: #{Tracker.currentComputation._id}"
 
-        if @_elementVar? and not @_elementVar.stopped
+        if @_elementVar? and not @_elementVar.invalidated
             throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components
                 don't allow forceUpdate(). Use reactive expressions instead."
 
@@ -498,8 +506,10 @@ J._defineComponent = (componentName, componentSpec) ->
         _popDebugFlag()
 
         if element is undefined
+            @_showingLoader = true
             @renderLoader()
         else
+            @_showingLoader = false
             element
 
 
