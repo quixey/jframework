@@ -378,6 +378,11 @@ J._defineComponent = (componentName, componentSpec) ->
 
         componentSpec.componentDidMount?.apply @
 
+        return if @_showingLoader
+        prevAfterRenderCallbacks = @_afterRenderCallbacks ? []
+        @_afterRenderCallbacks = []
+        callback() for callback in prevAfterRenderCallbacks
+
 
     reactSpec.shouldComponentUpdate = (nextProps, nextState) ->
         not @_elementVar? or @_elementVar.invalidated
@@ -385,7 +390,6 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
         return if @_showingLoader
-
         prevAfterRenderCallbacks = @_afterRenderCallbacks ? []
         @_afterRenderCallbacks = []
         callback() for callback in prevAfterRenderCallbacks
@@ -428,6 +432,17 @@ J._defineComponent = (componentName, componentSpec) ->
                 return true
             ancestor = ancestor._owner
         false
+
+
+    reactSpec.tryGet = (reactiveName, defaultValue) ->
+        if reactiveName not of @reactives
+            throw new Meteor.Error "Invalid reactive name: #{@}.#{reactiveName}"
+
+        J.tryGet(
+            => @reactives[reactiveName].get()
+            defaultValue
+        )
+
 
 
     reactSpec.renderLoader ?= ->
