@@ -241,8 +241,8 @@ class J.Dict
 
 
     forEach: (f) ->
+        # Returns an array
         f key, value for key, value of @getFields()
-        null
 
 
     get: (key) ->
