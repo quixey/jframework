@@ -85,11 +85,15 @@ Tinytest.add "AutoDict - create with list of keys instead of keyFunc", (test) ->
     size.set 4
     Tracker.flush()
 
-    test.equal ad.getFields(),
-        '0-k': '0-k-v'
-        '1-k': '1-k-v'
-        '2-k': '2-k-v'
-        '3-k': '3-k-v'
+    if false
+        # Old test when we wouldn't invalidate
+        # the dict because its keys were an
+        # actual J.List not an array
+        test.equal ad.getFields(),
+            '0-k': '0-k-v'
+            '1-k': '1-k-v'
+            '2-k': '2-k-v'
+            '3-k': '3-k-v'
     al.stop()
     ad.stop()
 

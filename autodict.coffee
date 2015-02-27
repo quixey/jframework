@@ -33,18 +33,18 @@ class J.AutoDict extends J.Dict
             # Passing an array seems like good evidence that
             # the creator might want to call a fieldFunc.
             withFieldFuncs = _.isArray keysFunc
-            @_keysList = J.List.wrap keysFunc
-            keysFunc = => @_keysList
+            @_keysArr = J.List.unwrap keysFunc
+            keysFunc = => @_keysArr
 
         else if J.util.isPlainObject(keysFunc) or keysFunc instanceof J.Dict
             # Overload (3) -> (1)
-            @_fieldSpecs = J.Dict.wrap keysFunc
-            @_setupGetterSetter key for key of @_fieldSpecs
+            @_fieldSpecs = _.clone J.Dict.unwrap keysFunc
+            @_setupGetterSetter key for key in @_fieldSpecs
             options = onChange
             onChange = valueFunc
-            keysFunc = => @_fieldSpecs.getKeys()
+            keysFunc = => _.keys @_fieldSpecs
             valueFunc = (key) =>
-                v = @_fieldSpecs.forceGet key
+                v = @_fieldSpecs[key]
                 if _.isFunction v then v(key) else v
             withFieldFuncs = true
 
@@ -107,11 +107,11 @@ class J.AutoDict extends J.Dict
             wrap: false
         )
 
-        if @_keysList? and @withFieldFuncs
-            @_keysList.forEach (key) => @_setupGetterSetter key
+        if @_keysArr? and @withFieldFuncs
+            @_setupGetterSetter key for key in @_keysArr
         else if @_fieldSpecs?
             J.assert @withFieldFuncs
-            @_fieldSpecs.getKeys().forEach (key) => @_setupGetterSetter key
+            @_setupGetterSetter key for key of @_fieldSpecs
 
         @_hasKeyDeps = {} # realOrImaginedKey: Dependency
 
