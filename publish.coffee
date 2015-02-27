@@ -165,7 +165,7 @@ updateObservers = (dataSessionId) ->
         modelClass = J.models[querySpec.modelName]
 
         options = {}
-        for optionName in ['sort', 'skip', 'limit']
+        for optionName in ['fields', 'sort', 'skip', 'limit']
             if querySpec[optionName]?
                 options[optionName] = querySpec[optionName]
 

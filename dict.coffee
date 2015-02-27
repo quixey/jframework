@@ -364,8 +364,11 @@ class J.Dict
         obj
 
 
-    tryGet: (key) ->
-        J.tryGet => @get key
+    tryGet: (key, defaultValue) ->
+        J.tryGet(
+            => @get key
+            defaultValue
+        )
 
 
     toString: ->

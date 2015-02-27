@@ -485,9 +485,10 @@ class J.List
         s
 
 
-    tryGet: (index) ->
+    tryGet: (index, defaultValue) ->
         if index < @size()
-            J.tryGet => @get index
+            ret = J.tryGet => @get index
+            if ret is undefined then defaultValue else ret
         else
             undefined
 
