@@ -95,7 +95,7 @@ class J.AutoVar extends Tracker.Computation
 
 
     _hasInvalidComponentAncestor: ->
-        if @component?._hasInvalidAncestor() then true
+        if @component?._owner?._hasInvalidAncestor?() then true
         else @creator?._hasInvalidComponentAncestor?() ? false
 
 

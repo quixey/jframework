@@ -102,7 +102,7 @@ Tracker.Computation::invalidate = ->
         Tracker.pendingComputations.push @
 
         if Tracker.pendingComputations.length > 1 and (
-            @sortKey < Tracker.pendingComputations[Tracker.pendingComputations.length - 1].sortKey
+            @sortKey < Tracker.pendingComputations[Tracker.pendingComputations.length - 2].sortKey
         )
             J.inc 'pcSort'
             Tracker.pendingComputations.sort (a, b) ->
@@ -170,7 +170,7 @@ Tracker.flush = ->
         # Recompute all pending computations
         while Tracker.pendingComputations.length
             comp = Tracker.pendingComputations.shift()
-            # console.debug 'recompute', comp, comp.stopped
+            # console.debug 'recompute'
             comp._compute() unless comp.stopped
             J.inc 'recompute'
 

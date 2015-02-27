@@ -484,7 +484,6 @@ J._defineComponent = (componentName, componentSpec) ->
             (
                 component: @
                 tag: "#{@toString()}.render"
-                sortKey: @_componentId + 10
             )
 
             (elementVar) =>
@@ -509,6 +508,7 @@ J._defineComponent = (componentName, componentSpec) ->
             null
 
             component: @
+            sortKey: @_componentId + 10
         )
 
         @_valid.set true
