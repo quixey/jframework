@@ -230,6 +230,20 @@ class J.Dict
             console.groupEnd()
 
 
+    deepClone: (options = {}) ->
+        objSnapshot = Tracker.nonreactive => @toObj()
+        @constructor objSnapshot, _.extend(
+            {
+                creator: Tracker.currentComputation
+                tag:
+                    deepClonedFrom: @
+                    tag: "deep clone of #{@toString}"
+                onChange: null
+            }
+            options
+        )
+
+
     delete: (key) ->
         if Tracker.nonreactive(=> @hasKey key)
             @_delete key

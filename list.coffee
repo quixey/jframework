@@ -218,7 +218,7 @@ class J.List
         @pop() for i in [0...Tracker.nonreactive -> @size()]
 
 
-    clone: ->
+    clone: (options = {}) ->
         # Nonreactive because a clone's fields are their
         # own new piece of application state
         valuesSnapshot = Tracker.nonreactive => @getValues()
@@ -230,6 +230,7 @@ class J.List
                     tag: "clone of #{@toString}"
                 onChange: null
             }
+            options
         )
 
 
@@ -250,6 +251,20 @@ class J.List
             console.group i
             v.debug()
             console.groupEnd()
+
+
+    deepClone: (options = {}) ->
+        arrSnapshot = Tracker.nonreactive => @toArr()
+        @constructor arrSnapshot, _.extend(
+            {
+                creator: Tracker.currentComputation
+                tag:
+                    deepClonedFrom: @
+                    tag: "deep clone of #{@toString}"
+                onChange: null
+            }
+            options
+        )
 
 
     extend: (values) ->

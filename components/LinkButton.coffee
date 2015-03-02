@@ -1,12 +1,18 @@
 J.dc 'LinkButton',
     props:
+        style:
+            default: {}
         onClick:
             type: React.PropTypes.func
 
     render: ->
         $$ ('span'),
             style:
-                cursor: 'pointer'
-                color: 'blue'
-            onClick: @prop.onClick()
+                _.extend(
+                    cursor: 'pointer'
+                    color: 'blue'
+                ,
+                    @prop.style().toObj()
+                )
+            onClick: (e) => @prop.onClick()? e
             (@prop.children())
