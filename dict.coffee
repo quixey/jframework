@@ -12,7 +12,7 @@ class J.Dict
                     memory but doesn't invalidate unnecessarily.
         ###
 
-        unless @ instanceof J.Dict
+        unless @ instanceof J.Dict and not @_id?
             return new J.Dict fieldsOrKeys, options
 
         @_id = J.getNextId()

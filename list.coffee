@@ -9,13 +9,13 @@ class J.List
         ###
             Options:
                 creator: The computation which "created"
-                    this Dict, which makes it inactive
+                    this List, which makes it inactive
                     when it invalidates.
                 tag: A toString-able object for debugging
                 onChange: function(key, oldValue, newValue) or null
         ###
 
-        unless @ instanceof J.List
+        unless @ instanceof J.List and not @_id?
             return new J.List values, options
 
         @_id = J.getNextId()
@@ -111,13 +111,13 @@ class J.List
             undefined
         else
             lastValue = undefined
-            Tracker.nonreactive =>
-                if @_arr[size - 1] instanceof J.Var
-                    lastValue = @_arr[size - 1]._value
-                    if lastValue is undefined or lastValue instanceof J.VALUE_NOT_READY
-                        lastValue = @_arr[size - 1]._previousReadyValue
-                else
-                    lastValue = @_arr[size - 1]
+            if @_arr[size - 1] instanceof J.Var
+                lastValue = @_arr[size - 1]._value
+                if lastValue is undefined or lastValue instanceof J.VALUE_NOT_READY
+                    lastValue = @_arr[size - 1]._previousReadyValue
+            else
+                lastValue = @_arr[size - 1]
+
             if lastValue isnt undefined and _.isFunction @onChange
                 Tracker.afterFlush =>
                     if @isActive()
@@ -445,6 +445,24 @@ class J.List
 
     slice: (startIndex, endIndex = @size()) ->
         J.List @map().getValues().slice startIndex, endIndex
+
+
+    splice: (startIndex, length) ->
+        size = Tracker.nonreactive => @size()
+        startIndex = Math.min startIndex, size
+        endIndex = Math.min startIndex + length, size
+        length = endIndex - startIndex
+
+        ret = J.List Tracker.nonreactive =>
+            @get i for i in [startIndex...endIndex]
+
+        for i in [startIndex...size - length]
+            @set i, Tracker.nonreactive => @get i + length
+
+        for i in [0...length]
+            @pop()
+
+        ret
 
 
     sort: (keySpec = J.util.sortKeyFunc) ->

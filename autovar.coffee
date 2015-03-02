@@ -16,7 +16,7 @@ class J.AutoVar extends Tracker.Computation
                 wrap: Same as Var.wrap
         ###
 
-        unless @ instanceof J.AutoVar
+        unless @ instanceof J.AutoVar and not @_id?
             return new J.AutoVar tag, valueFunc, onChange, options
 
         if _.isFunction tag

@@ -134,6 +134,10 @@ class J.AutoList extends J.List
         @_sizeVar.get()
 
 
+    splice: ->
+        throw new Meteor.Error "There is no AutoList.splice"
+
+
     snapshot: ->
         values = Tracker.nonreactive => @getValues()
         if values is undefined

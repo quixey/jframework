@@ -74,6 +74,7 @@ Package.onUse(function(api) {
         "components/Button.coffee",
         "components/CancelButton.coffee",
         "components/DeleteButton.coffee",
+        "components/EditButton.coffee",
         "components/KeyValueTable.coffee",
         "components/LinkButton.coffee",
         "components/Loader.coffee",

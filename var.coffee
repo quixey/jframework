@@ -48,7 +48,7 @@ class J.Var
         if arguments.length is 0
             value = J.makeValueNotReadyObject()
 
-        unless @ instanceof J.Var
+        unless @ instanceof J.Var and not @_id?
             return new J.Var value, options
 
         @_id = J.getNextId()
