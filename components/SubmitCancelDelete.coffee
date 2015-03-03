@@ -1,5 +1,8 @@
 J.dc 'SubmitCancelDelete',
     props:
+        showSubmit:
+            type: $$.bool
+            default: true
         showCancel:
             type: React.PropTypes.bool.isRequired
             default: true
@@ -33,12 +36,13 @@ J.dc 'SubmitCancelDelete',
                             opacity: .5
                         ('Delete')
 
-            $$ ('Button'),
-                style:
-                    marginRight: 8
-                onClick: =>
-                    @prop.onSubmit()? {}
-                ('Submit')
+            if @prop.showSubmit()
+                $$ ('Button'),
+                    style:
+                        marginRight: 8
+                    onClick: =>
+                        @prop.onSubmit()? {}
+                    ('Submit')
 
             if @prop.showCancel()
                 $$ ('CancelButton'),

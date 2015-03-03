@@ -441,7 +441,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             fetchIds: (docIds, includeHoles = false) ->
                 instanceDict = @fetchDict docIds
                 instanceList = J.List()
-                for docId in docIds
+                for docId in J.List.unwrap docIds
                     if instanceDict.get(docId)?
                         instanceList.push instanceDict.get(docId)
                     else if includeHoles
