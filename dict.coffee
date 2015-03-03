@@ -93,7 +93,7 @@ class J.Dict
             @_keysDep?.changed()
 
         else
-            fields = _.clone @_fieldsVar.get()
+            fields = _.clone Tracker.nonreactive => @_fieldsVar.get()
             delete fields[key]
             @_fieldsVar.set fields
 
@@ -121,7 +121,7 @@ class J.Dict
                     @_fields[key] = value
 
         else
-            newFields = _.clone @_fieldsVar.get()
+            newFields = _.clone Tracker.nonreactive => @_fieldsVar.get()
             for key, value of fields
                 if key not of newFields
                     throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
@@ -184,7 +184,7 @@ class J.Dict
             @_keysDep?.changed()
 
         else
-            fields = _.clone @_fieldsVar.get()
+            fields = _.clone Tracker.nonreactive => @_fieldsVar.get()
             fields[key] = J.Var.wrap value, @withFieldFuncs
             @_fieldsVar.set fields
 

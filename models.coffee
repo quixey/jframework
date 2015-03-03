@@ -312,8 +312,9 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @_fields.set fieldName, J.Var.wrap value, true
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
-            unless @_id is @key()
-                console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{@key()}"
+            key = Tracker.nonreactive => @key()
+            unless @_id is key
+                console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{key}"
 
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs

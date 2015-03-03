@@ -21,3 +21,20 @@ Tinytest.add "Dict - coarse grained", (test) ->
     Tracker.flush()
     test.equal aRunCount, 3
     a.stop()
+
+Tinytest.add "Dict - mutation reactivity", (test) ->
+    runCount = 0
+    av = J.AutoVar(
+        'av'
+        ->
+            runCount += 1
+            J.Dict(
+                a: b: 5
+            )
+    )
+    d = av.get()
+    test.equal runCount, 1
+    d.a().b 6
+    test.equal d.a().b(), 6
+    Tracker.flush()
+    test.equal runCount, 1
