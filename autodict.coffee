@@ -5,6 +5,15 @@ class J.AutoDict extends J.Dict
             (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange, [options]]
             (2) J.AutoDict [tag], keysList, valueFunc, [onChange, [options]]
             (3) J.AutoDict [tag], fieldSpecs, [onChange, [options]]
+
+            Options:
+                creator
+                onChange
+                withFieldFuncs
+                fineGrained
+                filterFunc
+                    Pretend like the only keys are ones whose corresponding
+                    value passes filterFunc
         ###
 
         unless @ instanceof J.AutoDict
@@ -68,6 +77,10 @@ class J.AutoDict extends J.Dict
 
         @keysFunc = keysFunc
         @valueFunc = valueFunc
+        @filterFunc =
+            if options?.filter? is true
+                (value) => true
+            else options?.filter ? null
 
         @_keysVar = J.AutoVar(
             (
@@ -176,7 +189,7 @@ class J.AutoDict extends J.Dict
             )
 
             =>
-                if not @hasKey key
+                if not @hasKey key, false
                     # This field has just been deleted
                     return J.makeValueNotReadyObject()
 
@@ -212,10 +225,15 @@ class J.AutoDict extends J.Dict
 
 
     getKeys: ->
-        @_keysVar.get()
+        if @filterFunc?
+            @_keysVar.get().filter (key) =>
+                value = @_fields[key].tryGet()
+                value isnt undefined and @filterFunc value
+        else
+            @_keysVar.get()
 
 
-    hasKey: (key) ->
+    hasKey: (key, _filtered = true) ->
         if @_keysVar._value is undefined or @_keysVar._invalidAncestors.length
             # This might have a special @_replaceKeys side effect
             # which then makes the logic in super work
@@ -226,7 +244,10 @@ class J.AutoDict extends J.Dict
             @_hasKeyDeps[key] ?= new Tracker.Dependency @creator
             @_hasKeyDeps[key].depend()
 
-        key of @_fields
+        if _filtered and @filterFunc?
+            key of @_fields and @tryGet(key) isnt undefined
+        else
+            key of @_fields
 
 
     isActive: ->
