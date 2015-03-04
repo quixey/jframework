@@ -236,3 +236,7 @@ class J.AutoVar extends Tracker.Computation
         s = "AutoVar[#{J.util.stringifyTag @tag ? ''}##{@_id}]=#{J.util.stringify @_value}"
         if @stopped then s += " (stopped)"
         s
+
+
+    tryGet: ->
+        J.tryGet => @get()

@@ -1,14 +1,13 @@
 class J.AutoDict extends J.Dict
-    constructor: (tag, keysFunc, valueFunc, onChange, options) ->
+    constructor: (tag, keysFunc, valueFunc, options) ->
         ###
             Overloads
-            (1) J.AutoDict [tag], keysFunc, valueFunc, [onChange, [options]]
-            (2) J.AutoDict [tag], keysList, valueFunc, [onChange, [options]]
-            (3) J.AutoDict [tag], fieldSpecs, [onChange, [options]]
+            (1) J.AutoDict [tag], keysFunc, valueFunc, [options]
+            (2) J.AutoDict [tag], keysList, valueFunc, [options]
+            (3) J.AutoDict [tag], fieldSpecs, [options]
 
             Options:
                 creator
-                onChange
                 withFieldFuncs
                 fineGrained
                 filterFunc
@@ -17,7 +16,7 @@ class J.AutoDict extends J.Dict
         ###
 
         unless @ instanceof J.AutoDict
-            return new J.AutoDict tag, keysFunc, valueFunc, onChange
+            return new J.AutoDict tag, keysFunc, valueFunc, options
 
         # Reshuffle arguments to make overloads work. We can just
         # convert everything to (tag, keysFunc, valueFunc, onChange).
@@ -31,8 +30,7 @@ class J.AutoDict extends J.Dict
             )
         )
             # tag argument not provided
-            options = onChange
-            onChange = valueFunc
+            options = valueFunc
             valueFunc = keysFunc
             keysFunc = tag
             tag = undefined
@@ -49,8 +47,7 @@ class J.AutoDict extends J.Dict
             # Overload (3) -> (1)
             @_fieldSpecs = _.clone J.Dict.unwrap keysFunc
             @_setupGetterSetter key for key in @_fieldSpecs
-            options = onChange
-            onChange = valueFunc
+            options = valueFunc
             keysFunc = => _.keys @_fieldSpecs
             valueFunc = (key) =>
                 v = @_fieldSpecs[key]
@@ -68,7 +65,7 @@ class J.AutoDict extends J.Dict
 
         super {},
             creator: Tracker.currentComputation
-            onChange: onChange
+            onChange: options?.onChange
             tag: tag
             withFieldFuncs: withFieldFuncs
             fineGrained: options?.fineGrained
@@ -78,7 +75,7 @@ class J.AutoDict extends J.Dict
         @keysFunc = keysFunc
         @valueFunc = valueFunc
         @filterFunc =
-            if options?.filter? is true
+            if options?.filter is true
                 (value) => true
             else options?.filter ? null
 
@@ -227,6 +224,7 @@ class J.AutoDict extends J.Dict
     getKeys: ->
         if @filterFunc?
             @_keysVar.get().filter (key) =>
+                if @_fields[key] is null then @_initFieldAutoVar key
                 value = @_fields[key].tryGet()
                 value isnt undefined and @filterFunc value
         else
@@ -245,7 +243,7 @@ class J.AutoDict extends J.Dict
             @_hasKeyDeps[key].depend()
 
         if _filtered and @filterFunc?
-            key of @_fields and @tryGet(key) isnt undefined
+            key in @getKeys()
         else
             key of @_fields
 

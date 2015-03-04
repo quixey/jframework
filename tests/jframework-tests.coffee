@@ -13,7 +13,8 @@ Tinytest.add "AutoDict - create with fieldSpec instead of keyFunc", (test) ->
         y: [6, 7]
         z: -> 'eight'
         w: -> w.get()
-        (key, oldValue, newValue) ->
+    ,
+        onChange: (key, oldValue, newValue) ->
             changeHist.push [key, oldValue ? null, newValue ? null]
     )
     test.equal ad.toObj(),
@@ -219,7 +220,7 @@ Tinytest.add "AutoDict - delete element onChange", (test) ->
     al = J.AutoDict(
         -> "#{x}" for x in [0...size.get()]
         (key) -> "val #{key}"
-        (key, oldValue, newValue) ->
+        onChange: (key, oldValue, newValue) ->
             changeHistory.push [key, oldValue, newValue]
     )
     test.equal al.toObj(),
@@ -265,7 +266,7 @@ Tinytest.add "AutoDict - onChange", (test) ->
     ad = J.AutoDict(
         -> keysVar.get()
         (key) -> 5
-        (key, oldValue, newValue) ->
+        onChange: (key, oldValue, newValue) ->
             changeHistory.push [key, oldValue, newValue]
     )
     test.equal changeHistory, []
@@ -317,7 +318,7 @@ Tinytest.add "List - extend", (test) ->
         (x) ->
             valFuncHistory.push x
             "val for #{x}"
-        (x, oldVal, newVal) ->
+        onChange: true
     )
     Tracker.flush()
     test.equal valFuncHistory, ['zero', 'one']
