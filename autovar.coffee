@@ -238,5 +238,8 @@ class J.AutoVar extends Tracker.Computation
         s
 
 
-    tryGet: ->
-        J.tryGet => @get()
+    tryGet: (defaultValue) ->
+        J.tryGet(
+            => @get()
+            defaultValue
+        )

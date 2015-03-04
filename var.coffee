@@ -165,8 +165,11 @@ class J.Var
         s
 
 
-    tryGet: ->
-        J.tryGet => @get()
+    tryGet: (defaultValue) ->
+        J.tryGet(
+            => @get()
+            defaultValue
+        )
 
 
     maybeWrap: (value, withFieldFuncs = true) ->
