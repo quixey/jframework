@@ -252,6 +252,14 @@ class J.AutoDict extends J.Dict
         not @_keysVar?.stopped
 
 
+    isReady: (key) ->
+        if @hasKey(key, false)
+            if @_fields[key] is null then @_initFieldAutoVar key
+            @_fields[key].tryGet() isnt undefined
+        else
+            true
+
+
     replaceKeys: ->
         throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
 
