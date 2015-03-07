@@ -107,8 +107,7 @@ class J.Var
                 @_value.creator._addSideGetter getter
 
         if @_value instanceof J.VALUE_NOT_READY
-            throw @_value if getter?
-            undefined
+            throw @_value
         else
             @_value
 

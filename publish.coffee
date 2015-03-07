@@ -56,10 +56,10 @@ Meteor.methods
             console.log.apply console, newArgs
 
         log '_updateDataQueries'
-        if addedQuerySpecs.length
-            log '    added:', J.util.stringify qs for qs in addedQuerySpecs
-        if deletedQuerySpecs.length
-            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
+#        if addedQuerySpecs.length
+#            log '    added:', J.util.stringify qs for qs in addedQuerySpecs
+#        if deletedQuerySpecs.length
+#            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
 
         session = dataSessions[dataSessionId]
         if not session?
@@ -91,7 +91,7 @@ Meteor.methods
         updateObservers.call dataSessionPublisherContexts[dataSessionId], dataSessionId
         session.updateObserversFiber = null
 
-        log '..._updateDataQueries done'
+        # log '..._updateDataQueries done'
 
 
 Meteor.publish '_jdata', (dataSessionId) ->

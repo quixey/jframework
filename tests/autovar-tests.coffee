@@ -134,8 +134,8 @@ Tinytest.add "AutoVar - onchange", (test) ->
     v.set 6
     v.set 'x'
     v.set J.makeValueNotReadyObject()
-    test.isUndefined v.get()
-    test.isUndefined a.get()
+    test.throws -> v.get()
+    test.throws -> a.get()
     v.set 'x'
     v.set J.makeValueNotReadyObject()
     v.set 6

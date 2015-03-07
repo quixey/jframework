@@ -299,8 +299,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         # They never come back to life, but a new
         # attached instance with the same ID may
         # eventually replace them in the collection.
-        # Detached instances are always alive.
+        # Detached instances dies when their creator
+        # computation dies, if there is one.
         @alive = true
+        if Tracker.active then Tracker.onInvalidate =>
+            @alive = false
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
@@ -311,6 +314,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     to #{modelClass.name} constructor"
 
         @_fields = J.Dict()
+
         for fieldName of @modelClass.fieldSpecs
             @_fields.setOrAdd fieldName, null
         for fieldName, value of nonIdInitFields

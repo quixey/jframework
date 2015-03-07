@@ -235,7 +235,7 @@ class J.AutoDict extends J.Dict
         if @_keysVar._value is undefined or @_keysVar._invalidAncestors.length
             # This might have a special @_replaceKeys side effect
             # which then makes the logic in super work
-            keysArr = Tracker.nonreactive => @_keysVar.get()
+            keysArr = Tracker.nonreactive => @_keysVar.tryGet()
             return undefined if keysArr is undefined
 
         if Tracker.active
@@ -276,7 +276,7 @@ class J.AutoDict extends J.Dict
 
 
     snapshot: ->
-        keys = Tracker.nonreactive => @getKeys()
+        keys = Tracker.nonreactive => J.tryGet => @getKeys()
         if keys is undefined
             undefined
         else

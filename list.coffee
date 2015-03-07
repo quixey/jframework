@@ -455,7 +455,8 @@ class J.List
 
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
-            J.Dict._deepSetReadOnly Tracker.nonreactive => @getValues()
+            for i in [0...Tracker.nonreactive => @size()]
+                J.Dict._deepSetReadOnly @tryGet i
 
 
     slice: (startIndex, endIndex = @size()) ->

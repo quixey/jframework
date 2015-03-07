@@ -140,11 +140,7 @@ class J.FineGrainedAutoList extends J.List
 
 
     snapshot: ->
-        values = Tracker.nonreactive => @getValues()
-        if values is undefined
-            undefined
-        else
-            J.List values
+        J.List Tracker.nonreactive => @getValues()
 
 
     sort: ->

@@ -212,7 +212,7 @@ J._defineComponent = (componentName, componentSpec) ->
         for propName, propSpec of propSpecs
             if propName of @props and @props[propName] is undefined
                 throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
-            @_props[propName] = J.Var @props[propName],
+            @_props[propName] = J.Var J.makeValueNotReadyObject(),
                 tag:
                     component: @
                     propName: propName
@@ -223,22 +223,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-
-                        if true
-                            propSpec.onChange.call @, oldValue, newValue
-                        else
-                            # If the onChange functions try to use not-ready values,
-                            # we want that to be an error (unless they use J.tryGet).
-                            # So wrap the call in a computation.
-                            Tracker.autorun (c) =>
-                                c.tag =
-                                    component: @
-                                    propName: propName
-                                    tag: "#{@toString}.prop.#{propName} onChange!"
-                                try
-                                    propSpec.onChange.call @, oldValue, newValue
-                                finally
-                                    c.stop()
+                        propSpec.onChange.call @, oldValue, newValue
 
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
@@ -250,6 +235,10 @@ J._defineComponent = (componentName, componentSpec) ->
                 _popDebugFlag()
 
                 ret
+
+            # Trigger onChange for the initial value
+            @_props[propName].set @props[propName]
+
 
         # Set up @state
         initialState = {}
@@ -288,22 +277,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-
-                        if true
-                            stateFieldSpec.onChange.call @, oldValue, newValue
-                        else
-                            # If the onChange functions try to use not-ready values,
-                            # we want that to be an error (unless they use J.tryGet).
-                            # So wrap the call in a computation.
-                            Tracker.autorun (c) =>
-                                c.tag =
-                                    component: @
-                                    stateFieldName: stateFieldName
-                                    tag: "#{@toString()}.state.#{stateFieldName} onChange!"
-                                try
-                                    stateFieldSpec.onChange.call @, oldValue, newValue
-                                finally
-                                    c.stop()
+                        stateFieldSpec.onChange.call @, oldValue, newValue
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
@@ -317,13 +291,6 @@ J._defineComponent = (componentName, componentSpec) ->
                     )
 
                     =>
-#                        hasInvalidAncestor = Tracker.nonreactive => @_hasInvalidAncestor()
-#                        if hasInvalidAncestor
-#                            @_hasInvalidAncestor() # we want to recompute when it's false
-#                            return J.makeValueNotReadyObject()
-#                        else
-#                            # We don't gain anything from recomputing if/when it's true
-
                         _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
                             console.debug _getDebugPrefix(@), "!#{reactiveName}()"
@@ -339,28 +306,13 @@ J._defineComponent = (componentName, componentSpec) ->
 
                         retValue
 
-                    if reactiveSpec.onChange? then (oldValue, newValue) =>
+                    if _.isFunction reactiveSpec.onChange then (oldValue, newValue) =>
                         if componentDebug
                             console.debug "    #{@toString()}.#{reactiveName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
-
-                        if true
-                            reactiveSpec.onChange.call @, oldValue, newValue
-                        else
-                            # If the onChange functions use not-ready/computing values,
-                            # we want that to be an error (unless they use J.tryGet).
-                            # So wrap the call in a computation.
-                            Tracker.autorun (c) =>
-                                c.tag =
-                                    component: @
-                                    reactiveName: reactiveName
-                                    tag: "#{@toString()}.reactives.#{reactiveName} onChange!"
-                                try
-                                    reactiveSpec.onChange.call @, oldValue, newValue
-                                finally
-                                    c.stop()
-                    else null
+                        reactiveSpec.onChange.call @, oldValue, newValue
+                    else reactiveSpec.onChange ? null
 
                     component: @
                 )
@@ -496,14 +448,15 @@ J._defineComponent = (componentName, componentSpec) ->
             @_elementVar.stop()
             J.fetching._deleteComputationQsRequests @_elementVar
         else
-            # First render
-            # Pre-compute all the reactives with onChanges in parallel. This is
-            # so we won't waste time fetching data in series when render needs it.
-            for reactiveName, reactive of @reactives
-                if reactive.onChange
-                    if componentDebug
-                        console.debug "Precomputing !#{reactiveName}"
-                    reactive.get()
+            if false
+                # First render
+                # Pre-compute all the reactives with onChanges in parallel. This is
+                # so we won't waste time fetching data in series when render needs it.
+                for reactiveName, reactive of @reactives
+                    if reactive.onChange
+                        if componentDebug
+                            console.debug "Precomputing !#{reactiveName}"
+                        reactive.tryGet()
 
         firstRun = true
         @_elementVar = J.AutoVar(
@@ -539,7 +492,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
         @_valid.set true
 
-        element = @_elementVar.get()
+        element = @_elementVar.tryGet()
 
         if componentDebug
             console.debug _getDebugPrefix(), if element? then "[Rendered #{@}]" else "[Loader for #{@}]"

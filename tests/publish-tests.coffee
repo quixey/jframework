@@ -39,8 +39,7 @@ addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
 
             ['fake1', 'fake2']
 
-    aVal = a.get()
-    test.isUndefined aVal
+    test.throws -> a.get()
     setTimeout(
         ->
             console.log 1, a._value, a.stopped, Tracker.pendingComputations, (aa.tag + "-" + aa._id for aa in a._invalidAncestors)
@@ -374,8 +373,7 @@ addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
                     test.isUndefined oldFoo
                     test.equal newFoo._id, foo._id
                     selector.setOrAdd 'nonExistentField', 5
-                    aVal = a.get()
-                    test.isUndefined aVal, "a should be throwing COMPUTE"
+                    test.throws -> a.get()
                 else
                     test.equal oldFoo._id, foo._id, "should have continuity since before a was undefined"
                     test.equal newFoo, null, "newFoo should be null after fetching nothing"

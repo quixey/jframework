@@ -352,7 +352,8 @@ class J.Dict
 
     setReadOnly: (@readOnly = true, deep = false) ->
         if deep
-            @constructor._deepSetReadOnly Tracker.nonreactive => @getFields()
+            for key in (Tracker.nonreactive => @getKeys())
+                @constructor._deepSetReadOnly Tracker.nonreactive => @tryGet key
 
 
     size: ->
