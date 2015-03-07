@@ -108,15 +108,16 @@ J.fetching =
                 obj
 
             if addedQuerySpecs.length
-                console.groupCollapsed("+")
+                console.groupCollapsed "+"
                 for qsString in unmergedQsStringsDiff.added
                     for computationId, computation of @_requestersByQs[qsString]
                         if false then console.log computation
-                console.groupEnd()
                 console.debug "    ", consolify(qs) for qs in addedQuerySpecs
+                console.groupEnd()
             if deletedQuerySpecs.length
-                console.debug "-"
+                console.groupCollapsed "-"
                 console.debug "    ", consolify(qs) for qs in deletedQuerySpecs
+                console.groupEnd()
 
         @_requestInProgress = true
         Meteor.call '_updateDataQueries',
