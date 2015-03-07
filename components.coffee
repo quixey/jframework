@@ -78,6 +78,22 @@ J._defineComponent = (componentName, componentSpec) ->
     delete reactSpec.reactives
     delete reactSpec.debug
 
+    # Wrap function calls with debug logs
+    for memberName, member of componentSpec
+        if memberName isnt 'render' and _.isFunction member
+            reactSpec[memberName] = do (memberName, member) -> ->
+                _pushDebugFlag componentSpec.debug
+                if componentDebug
+                    console.debug _getDebugPrefix(@), "#{memberName}!"
+                    _debugDepth += 1
+
+                ret = member.apply @, arguments
+
+                if componentDebug
+                    _debugDepth -= 1
+                    _popDebugFlag()
+                ret
+
     propSpecs = _.clone componentSpec.props ? {}
     propSpecs.className ?=
         type: React.PropTypes.string
