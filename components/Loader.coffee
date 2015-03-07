@@ -5,8 +5,9 @@ J.dc 'Loader',
             default: 20
 
     render: ->
-        $$ 'img',
+        $$ ('img'),
             src: '/images/loader.gif'
             style:
                 width: @prop.size()
                 height: @prop.size()
+                opacity: 0.5

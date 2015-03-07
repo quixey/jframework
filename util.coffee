@@ -186,6 +186,7 @@ J.util =
             => c.invalidate()
             ms
         )
+        null
 
     isPlainObject: (obj) ->
         ### Based on $.isPlainObject ###
