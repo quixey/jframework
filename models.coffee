@@ -91,6 +91,11 @@ class J.Model
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
+        if Tracker.active and @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
+            console.groupCollapsed "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
+            console.trace()
+            console.groupEnd()
+
         @_fields.forceGet fieldName
 
 
