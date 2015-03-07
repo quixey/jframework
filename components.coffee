@@ -379,6 +379,14 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentDidMount?.apply @
 
         return if @_showingLoader
+        @_doAfterRender()
+
+
+    reactSpec._doAfterRender = ->
+        if not @_valid.get()
+            # Will try again after render
+            return
+
         prevAfterRenderCallbacks = @_afterRenderCallbacks ? []
         @_afterRenderCallbacks = []
         callback() for callback in prevAfterRenderCallbacks
@@ -390,9 +398,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
         return if @_showingLoader
-        prevAfterRenderCallbacks = @_afterRenderCallbacks ? []
-        @_afterRenderCallbacks = []
-        callback() for callback in prevAfterRenderCallbacks
+        @_doAfterRender()
 
         componentSpec.componentDidUpdate?.call @
 
@@ -402,6 +408,10 @@ J._defineComponent = (componentName, componentSpec) ->
             from within render function or from outside a reactive computation."
 
         @_afterRenderCallbacks.push f
+        Tracker.afterFlush(
+            => @_doAfterRender()
+            Number.POSITIVE_INFINITY
+        )
         null
 
 
