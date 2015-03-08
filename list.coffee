@@ -13,6 +13,7 @@ class J.List
                     when it invalidates.
                 tag: A toString-able object for debugging
                 onChange: function(key, oldValue, newValue) or null
+                fineGrained:
         ###
 
         unless @ instanceof J.List and not @_id?
@@ -35,6 +36,11 @@ class J.List
         else
             throw new Meteor.Error "#{@constructor} values argument must be a List or
                 array. Got: #{values}"
+
+        # Check for undefined
+        for v in arr
+            if v is undefined
+                throw "Can't have undefined value in List"
 
         if options?.creator is undefined
             @creator = Tracker.currentComputation

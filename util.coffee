@@ -83,6 +83,32 @@ J.util =
         else
             false
 
+    withoutUndefined: (x) ->
+        helper = (y) ->
+            trivial = true
+
+            if _.isArray y
+                ret = []
+                for value in y
+                    if value is undefined
+                        trivial = false
+                    else
+                        ret.push v = helper value
+                        if v isnt value then trivial = false
+
+            else if J.util.isPlainObject y
+                ret = {}
+                for key, value of y
+                    if value is undefined
+                        trivial = false
+                    else
+                        ret[key] = helper value
+                        if ret[key] isnt value then trivial = false
+
+            if trivial then y else ret
+
+        helper x
+
     deepEquals: (a, b) ->
         if a is b
             true
@@ -92,7 +118,7 @@ J.util =
                 J.util.deepEquals(a[i], b[i]) for i in [0...a.length]
             )
 
-        else if J.util.isPlainObject(a) and J.util.isPlainObject(b) and
+        else if J.util.isPlainObject(a) and J.util.isPlainObject(b)
             J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
                 J.util.equals(a[k], b[k]) for k of a
             )

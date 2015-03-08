@@ -37,6 +37,11 @@ class J.Dict
         else
             fields = {}
 
+        # Check for undefined value
+        for k, v of fields
+            if v is undefined
+                throw "Can't have undefined value in Dict"
+
         if options?.creator is undefined
             @creator = Tracker.currentComputation
         else

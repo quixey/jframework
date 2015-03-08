@@ -237,7 +237,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 ret
 
             # Trigger onChange for the initial value
-            @_props[propName].set @props[propName]
+            @_props[propName].set J.util.withoutUndefined @props[propName]
 
 
         # Set up @state
@@ -336,7 +336,7 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         for propName, newValue of nextProps
-            @_props[propName].set newValue
+            @_props[propName].set J.util.withoutUndefined newValue
 
 
     reactSpec.componentDidMount = ->

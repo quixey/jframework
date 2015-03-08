@@ -173,11 +173,8 @@ class J.Var
 
     maybeWrap: (value, withFieldFuncs = true) ->
         if value is undefined
-            if Tracker.active
-                throw new Meteor.Error "Can't set #{@toString()} value to undefined.
-                    Use null or new J.VALUE_NOT_READY instead."
-            else
-                J.makeValueNotReadyObject()
+            throw new Meteor.Error "Can't set #{@toString()} value to undefined.
+                Use null or new J.VALUE_NOT_READY instead."
         else if value instanceof J.AutoVar
             throw new Meteor.Error "Can't put an AutoVar inside #{@toString()}:
                 #{value}. Get its value with .get() first."
