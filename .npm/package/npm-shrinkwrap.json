@@ -1,28 +1,28 @@
 {
   "dependencies": {
     "react": {
-      "version": "http://registry.npmjs.org/react/-/react-0.12.2.tgz",
+      "version": "0.12.2",
       "dependencies": {
         "envify": {
-          "version": "http://registry.npmjs.org/envify/-/envify-3.3.1.tgz",
+          "version": "3.3.0",
           "dependencies": {
             "through": {
-              "version": "http://registry.npmjs.org/through/-/through-2.3.6.tgz"
+              "version": "2.3.6"
             },
             "jstransform": {
-              "version": "http://registry.npmjs.org/jstransform/-/jstransform-10.1.0.tgz",
+              "version": "10.1.0",
               "dependencies": {
                 "base62": {
-                  "version": "http://registry.npmjs.org/base62/-/base62-0.1.1.tgz"
+                  "version": "0.1.1"
                 },
                 "esprima-fb": {
-                  "version": "http://registry.npmjs.org/esprima-fb/-/esprima-fb-13001.1001.0-dev-harmony-fb.tgz"
+                  "version": "13001.1001.0-dev-harmony-fb"
                 },
                 "source-map": {
-                  "version": "http://registry.npmjs.org/source-map/-/source-map-0.1.31.tgz",
+                  "version": "0.1.31",
                   "dependencies": {
                     "amdefine": {
-                      "version": "http://registry.npmjs.org/amdefine/-/amdefine-0.1.0.tgz"
+                      "version": "0.1.0"
                     }
                   }
                 }
@@ -33,13 +33,13 @@
       }
     },
     "react-router": {
-      "version": "http://registry.npmjs.org/react-router/-/react-router-0.11.6.tgz",
+      "version": "0.11.6",
       "dependencies": {
         "qs": {
-          "version": "http://registry.npmjs.org/qs/-/qs-2.2.2.tgz"
+          "version": "2.2.2"
         },
         "when": {
-          "version": "http://registry.npmjs.org/when/-/when-3.4.6.tgz"
+          "version": "3.4.6"
         }
       }
     }
