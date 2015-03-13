@@ -355,10 +355,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     memberSpecs = _.clone members
     modelClass.idSpec = memberSpecs._id
     delete memberSpecs._id
-    modelClass.fieldSpecs = memberSpecs.fields
+    modelClass.fieldSpecs = memberSpecs.fields ? {}
     delete memberSpecs.fields
-    modelClass.reactiveSpecs = memberSpecs.reactives
+    modelClass.reactiveSpecs = memberSpecs.reactives ? {}
     delete memberSpecs.reactives
+    modelClass.indexSpecs = memberSpecs.indexes ? []
+    delete memberSpecs.indexes
 
     modelClass.prototype = new J.Model()
     _.extend modelClass.prototype, memberSpecs
@@ -430,12 +432,14 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         if Meteor.isServer
             # The server uses exclusively detached instances and
             # doesn't make use of much reactivity.
-
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance
+
+            for indexSpec in modelClass.indexSpecs
+                collection._ensureIndex indexSpec
 
 
         _.extend modelClass,
