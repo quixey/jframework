@@ -107,16 +107,16 @@ J.fetching =
                     if x of obj then obj[x] = J.util.stringify obj[x]
                 obj
 
+            if deletedQuerySpecs.length
+                console.groupCollapsed "-"
+                console.debug "    ", consolify(qs) for qs in deletedQuerySpecs
+                console.groupEnd()
             if addedQuerySpecs.length
                 console.groupCollapsed "+"
                 for qsString in unmergedQsStringsDiff.added
                     for computationId, computation of @_requestersByQs[qsString]
                         if false then console.log computation
                 console.debug "    ", consolify(qs) for qs in addedQuerySpecs
-                console.groupEnd()
-            if deletedQuerySpecs.length
-                console.groupCollapsed "-"
-                console.debug "    ", consolify(qs) for qs in deletedQuerySpecs
                 console.groupEnd()
 
         @_requestInProgress = true

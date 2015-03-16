@@ -137,14 +137,17 @@ J._defineComponent = (componentName, componentSpec) ->
 
     # Make reactive getters for @reactives, e.g. @a gets/sets @reactives.a
 
-    # For J.Routable components, make an automatic _route reactive
+    # For J.Routable components, make sure there is an explicit or implicit route reactive.
+    # This reactive has the special ability to return dicts with undefined values because
+    # we wrap it in withoutUndefined.
     reactiveSpecByName = _.clone componentSpec.reactives ? {}
     if J.Routable in (componentSpec.mixins ? [])
-        reactiveSpecByName.route ?=
-            type: J.$object
-            val: ->
-                params: {}
-                query: {}
+        origRouteValFunc = reactiveSpecByName.route?.val ? ->
+            params: {}
+            query: {}
+        reactiveSpecByName.route ?= {}
+        reactiveSpecByName.route.val = ->
+            J.util.withoutUndefined origRouteValFunc.call @
 
         pushNewRoute = (oldRouteSpec, newRouteSpec) ->
             currentRoutes = @getRoutes()
@@ -244,7 +247,7 @@ J._defineComponent = (componentName, componentSpec) ->
         initialState = {}
         stateFromRoute =
             if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
-                @stateFromRoute @getParams(), @_cleanQueryFromRaw()
+                J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
             else
                 {}
         for stateFieldName, stateFieldSpec of componentSpec.state
