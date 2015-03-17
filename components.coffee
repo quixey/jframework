@@ -349,12 +349,11 @@ J._defineComponent = (componentName, componentSpec) ->
 
         componentSpec.componentDidMount?.apply @
 
-        return if @_showingLoader
         @_doAfterRender()
 
 
     reactSpec._doAfterRender = ->
-        if not @_valid.get()
+        if @_showingLoader or not @_valid.get()
             # Will try again after render
             return
 
@@ -368,7 +367,6 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.componentDidUpdate = (prevProps, prevState) ->
-        return if @_showingLoader
         @_doAfterRender()
 
         componentSpec.componentDidUpdate?.call @
