@@ -55,8 +55,11 @@ if Meteor.isClient then Meteor.startup ->
             if J._routeGenerator?
                 rootRoute = J._routeGenerator()
 
+                pageContainer = document.createElement 'div'
+                pageContainer.id = 'jframework-page-container'
+                document.body.appendChild pageContainer
                 ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
-                    React.render $$(Handler), document.body
+                    React.render $$(Handler), pageContainer
 
             else
                 console.warn "No router defined. Call J.defineRouter to define a router."
