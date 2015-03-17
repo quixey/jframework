@@ -296,7 +296,7 @@ J.util =
     sortKeyFunc: (x) ->
         if _.isString(x)
             x.toUpperCase()
-        else if _.isNumber(x)
+        else if _.isNumber(x) or x instanceof Date
             x
         else if _.isBoolean(x)
             if x then 1 else 0
