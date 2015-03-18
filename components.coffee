@@ -215,18 +215,24 @@ J._defineComponent = (componentName, componentSpec) ->
         for propName, propSpec of propSpecs
             if propName of @props and @props[propName] is undefined
                 throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
-            @_props[propName] = J.Var J.makeValueNotReadyObject(),
+
+            initialValue = J.util.withoutUndefined @props[propName]
+            @_props[propName] = J.Var initialValue,
                 tag:
                     component: @
                     propName: propName
                     tag: "#{@toString()}.prop.#{propName}"
                 onChange: if propSpec.onChange? then do (propName, propSpec) =>
                     (oldValue, newValue) =>
+                        _pushDebugFlag propSpec.debug ? componentSpec.debug
                         if componentDebug
-                            console.debug _getDebugPrefix(@), "props.#{propName}.onChange!"
+                            console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
+
                         propSpec.onChange.call @, oldValue, newValue
+
+                        _popDebugFlag()
 
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
@@ -238,10 +244,6 @@ J._defineComponent = (componentName, componentSpec) ->
                 _popDebugFlag()
 
                 ret
-
-            # Trigger onChange for the initial value
-            @_props[propName].set J.util.withoutUndefined @props[propName]
-
 
         # Set up @state
         initialState = {}
@@ -276,11 +278,15 @@ J._defineComponent = (componentName, componentSpec) ->
                     tag: "#{@toString()}.state.#{stateFieldName}"
                 onChange: if stateFieldSpec.onChange? then do (stateFieldName, stateFieldSpec) =>
                     (oldValue, newValue) =>
+                        _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                         if componentDebug
                             console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
+
                         stateFieldSpec.onChange.call @, oldValue, newValue
+
+                        _popDebugFlag()
 
         # Set up @reactives
         @reactives = {} # reactiveName: autoVar
@@ -310,15 +316,28 @@ J._defineComponent = (componentName, componentSpec) ->
                         retValue
 
                     if _.isFunction reactiveSpec.onChange then (oldValue, newValue) =>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
                             console.debug "    #{@toString()}.#{reactiveName}.onChange!"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
+
                         reactiveSpec.onChange.call @, oldValue, newValue
+
+                        _popDebugFlag()
                     else reactiveSpec.onChange ? null
 
                     component: @
                 )
+
+        # This is what React is going to do after this function returns, but we need
+        # to do it early because of the synchronous prop onChanges.
+        @state = initialState
+
+        # Call all the prop onChange handlers synchronously because they might initialize
+        # the state during a cascading React render thread.
+        for propName, propVar of @_props
+            propVar.onChange? undefined, propVar._value
 
         # Return initialState to React
         initialState
@@ -434,7 +453,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
     reactSpec.render = ->
         if Tracker.active
-            throw "Can't call render inside a reactive computation: #{Tracker.currentComputation._id}"
+            throw new Error "Can't call render inside a reactive computation: #{Tracker.currentComputation._id}"
 
         if @_elementVar? and not @_elementVar.invalidated
             throw new Meteor.Error "Called #{@toString()}.forceUpdate() - J.components
