@@ -7,6 +7,22 @@ _.extend J,
                 throw new Meteor.Error "Assertion failed."
 
 J.util =
+    arrToObj: (arr, keySpec = 'key', dropDups = false) ->
+        if not _.isArray arr
+            throw new Error "Argument must be Array: #{arr}"
+        keyFunc = @_makeKeyFunc keySpec
+        obj = {}
+        for x in arr
+            key = keyFunc x
+            if not _.isString key
+                throw new Error "Key must be a string: #{key}"
+            if key of obj
+                if not dropDups
+                    throw new Error "Duplicate key: #{key}"
+            else
+                obj[key] = x
+        obj
+
     compare: (a, b) ->
         ###
             All this function does is:
@@ -32,7 +48,7 @@ J.util =
 
         else if _.isArray(a) or _.isArray(b)
             unless _.isArray(a) and _.isArray(b)
-                throw 'Can\'t compare array with non-array'
+                throw new Error "Can't compare array with non-array"
 
             lastResult = 0
             i = 0
@@ -131,8 +147,8 @@ J.util =
             throw new Meteor.Error "Diff only works on arrays of strings. Got:
                 #{arrA}, #{arrB}"
 
-        setA = J.util.makeDictSet arrA
-        setB = J.util.makeDictSet arrB
+        setA = J.util.makeSet arrA
+        setB = J.util.makeSet arrB
         added: _.filter arrB, (x) -> x not of setA
         deleted: _.filter arrA, (x) -> x not of setB
 
@@ -154,7 +170,7 @@ J.util =
         else if isNaN(fraction) or not fraction?
             '#999'
         else
-            throw 'Invalid fraction: #{fraction}'
+            throw new Error "Invalid fraction: #{fraction}"
 
     getField: (obj, fieldSpec) ->
         ###
@@ -169,7 +185,7 @@ J.util =
         ###
 
         if not _.isObject obj
-            throw "Invalid obj passed to getField: #{obj}"
+            throw new Error "Invalid obj passed to getField: #{obj}"
 
         # 'a?.b.c' -> ['a', '?', 'b', '', 'c']
         fieldSpecParts = fieldSpec.split /(\??)\./
@@ -186,9 +202,12 @@ J.util =
             if value instanceof J.Dict
                 value = value.get nextKey
             else if value instanceof J.Model
-                if not _.isFunction value[nextKey]
-                    throw new Meteor.Error "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
-                value = value[nextKey]()
+                if nextKey is '_id'
+                    value = value._id
+                else
+                    if not _.isFunction value[nextKey]
+                        throw new Meteor.Error "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
+                    value = value[nextKey]()
             else
                 value = value[nextKey]
 
@@ -212,7 +231,7 @@ J.util =
 
     groupByKey: (arr, keySpec = J.util.sortKeyFunc) ->
         if not _.isArray arr
-            throw "groupByKey argument must be Array"
+            throw new Error "groupByKey argument must be Array"
         keyFunc = @_makeKeyFunc keySpec
         ret = {}
         for x in arr
@@ -239,7 +258,7 @@ J.util =
         return false if obj._isReactElement
         true
 
-    makeDictSet: (arr) ->
+    makeSet: (arr) ->
         dictSet = {}
         for x in arr
             dictSet[x] = true
@@ -288,7 +307,7 @@ J.util =
 
     setField: (obj, fieldSpec, value) ->
         if fieldSpec.indexOf('?') >= 0
-            throw 'No question marks allowed in setter fieldSpecs'
+            throw new Error "No question marks allowed in setter fieldSpecs"
 
         fieldSpecParts = fieldSpec.split '.'
         if fieldSpecParts.length > 1

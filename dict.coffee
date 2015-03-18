@@ -40,7 +40,7 @@ class J.Dict
         # Check for undefined value
         for k, v of fields
             if v is undefined
-                throw "Can't have undefined value in Dict"
+                throw new Error "Can't have undefined value in Dict"
 
         if options?.creator is undefined
             @creator = Tracker.currentComputation

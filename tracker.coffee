@@ -158,10 +158,10 @@ Tracker.flush = ->
     # console.debug "Tracker.flush!"
 
     if Tracker.inFlush
-        throw "Can't call Tracker.flush while flushing"
+        throw new Error "Can't call Tracker.flush while flushing"
 
     if Tracker.inCompute
-        throw "Can't flush inside Tracker.autorun"
+        throw new Error "Can't flush inside Tracker.autorun"
 
     Tracker.inFlush = true
     Tracker.willFlush = true

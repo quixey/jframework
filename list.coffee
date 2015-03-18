@@ -40,7 +40,7 @@ class J.List
         # Check for undefined
         for v in arr
             if v is undefined
-                throw "Can't have undefined value in List"
+                throw new Error "Can't have undefined value in List"
 
         if options?.creator is undefined
             @creator = Tracker.currentComputation
@@ -204,7 +204,7 @@ class J.List
         ###
 
         if compact
-            throw "not implemented yet"
+            throw new Error "not implemented yet"
         else
             return if @_arr?
 

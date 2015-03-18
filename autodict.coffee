@@ -97,7 +97,7 @@ class J.AutoDict extends J.Dict
                 unless _.all (_.isString(key) for key in keysArr)
                     throw new Meteor.Error "AutoDict keys must all be type string.
                         Got #{J.util.stringify keys}"
-                if _.size(J.util.makeDictSet keysArr) < keys.length
+                if _.size(J.util.makeSet keysArr) < keys.length
                     throw new Meteor.Error "AutoDict keys must be unique."
 
                 # Side effects during AutoVar recompute functions are usually not okay.
