@@ -219,7 +219,6 @@ J.util =
         return false unless obj?
         return false if typeof obj isnt 'object'
         return false if obj is obj.window
-        return false if obj.nodeType
         return false if obj.constructor and not ({}).hasOwnProperty.call(obj.constructor.prototype, 'isPrototypeOf')
         return false if obj._isReactElement
         true
