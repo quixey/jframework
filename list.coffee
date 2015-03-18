@@ -362,7 +362,7 @@ class J.List
 
 
     getSorted: (keySpec = J.util.sortKeyFunc) ->
-        sortKeys = @map(J.util._makeSortKeyFunc keySpec).getValues()
+        sortKeys = @map(J.util._makeKeyFunc keySpec).getValues()
         items = _.map @getValues(), (v, i) => index: i, value: v
         J.List(
             _.map(

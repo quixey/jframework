@@ -168,6 +168,9 @@ J.util =
             <error>
         ###
 
+        if not _.isObject obj
+            throw "Invalid obj passed to getField: #{obj}"
+
         # 'a?.b.c' -> ['a', '?', 'b', '', 'c']
         fieldSpecParts = fieldSpec.split /(\??)\./
         numFieldSpecParts = fieldSpecParts.length // 2 + 1
@@ -180,8 +183,10 @@ J.util =
             if questionMark and not value?
                 return
 
-            if J.Model? and value instanceof J.Model
-                unless _.isFunction value[nextKey]
+            if value instanceof J.Dict
+                value = value.get nextKey
+            else if value instanceof J.Model
+                if not _.isFunction value[nextKey]
                     throw new Meteor.Error "Invalid fieldSpec part #{value.modelClass.name}.#{nextKey} (from #{fieldSpec})"
                 value = value[nextKey]()
             else
@@ -204,6 +209,17 @@ J.util =
         uri = URI url
         uri.setQuery extraParams
         uri.href()
+
+    groupByKey: (arr, keySpec = J.util.sortKeyFunc) ->
+        if not _.isArray arr
+            throw "groupByKey argument must be Array"
+        keyFunc = @_makeKeyFunc keySpec
+        ret = {}
+        for x in arr
+            key = keyFunc x
+            ret[key] ?= []
+            ret[key].push x
+        ret
 
     invalidateAtTime: (ms) ->
         # TODO: ms can be a Date in the future too
@@ -280,7 +296,7 @@ J.util =
 
         obj[fieldSpecParts[fieldSpecParts.length - 1]] = value
 
-    _makeSortKeyFunc: (keySpec) ->
+    _makeKeyFunc: (keySpec) ->
         if _.isString keySpec
             (x) -> J.util.getField x, keySpec
         else if _.isFunction keySpec
@@ -289,7 +305,7 @@ J.util =
             throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
     sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
-        keyFunc = @_makeSortKeyFunc keySpec
+        keyFunc = @_makeKeyFunc keySpec
         arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
 
     sortKeyFunc: (x) ->
