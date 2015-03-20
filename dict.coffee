@@ -85,9 +85,8 @@ class J.Dict
 
 
     _delete: (key) ->
-        J.assert key of @_fields, "Missing key #{J.util.stringify key}"
-
         if @fineGrained
+            J.assert key of @_fields, "Missing key #{J.util.stringify key}"
             oldValue = Tracker.nonreactive => @_get key
             if oldValue isnt undefined and @onChange?
                 Tracker.afterFlush =>

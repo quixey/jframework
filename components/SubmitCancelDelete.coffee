@@ -31,6 +31,7 @@ J.dc 'SubmitCancelDelete',
                     $$ ('span'),
                         style:
                             float: 'right'
+                            paddingLeft: 8
                             fontSize: 12
                             color: 'red'
                             opacity: .5
