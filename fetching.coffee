@@ -154,23 +154,23 @@ J.fetching =
 
 
     requestQuery: (querySpec) ->
+        J.assert Tracker.active
+
         qsString = EJSON.stringify querySpec
         computation = Tracker.currentComputation
 
-        if Tracker.active
-            # We may not need reactivity per se, since the query should
-            # never stop once it's started. But we still want to track
-            # which computations need this querySpec.
-            # console.log computation.tag, 'requests a query', querySpec.modelName,
-            #     querySpec.selector, @isQueryReady querySpec
-            @_requestersByQs[qsString] ?= {}
-            if computation._id not of @_requestersByQs[qsString]
-                @_requestersByQs[qsString][computation._id] = computation
-                computation._requestingData = true
-                # Note: AutoVar handles logic to remove from @_requestersByQueue
-                # because it involves complicated sequencing with React component
-                # rendering.
-
+        # We may not need reactivity per se, since the query should
+        # never stop once it's started. But we still want to track
+        # which computations need this querySpec.
+        # console.log computation.tag, 'requests a query', querySpec.modelName,
+        #     querySpec.selector, @isQueryReady querySpec
+        @_requestersByQs[qsString] ?= {}
+        if computation._id not of @_requestersByQs[qsString]
+            @_requestersByQs[qsString][computation._id] = computation
+            computation._requestingData = true
+            # Note: AutoVar handles logic to remove from @_requestersByQueue
+            # because it involves complicated sequencing with React component
+            # rendering.
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
@@ -202,9 +202,6 @@ J.fetching =
                 J.List modelClass.find(querySpec.selector, options).fetch()
 
         else
-            if Tracker.active
-                @_requestsChanged = true
-                Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
-                throw J.makeValueNotReadyObject()
-            else
-                undefined
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+            throw J.makeValueNotReadyObject()

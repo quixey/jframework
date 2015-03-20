@@ -467,6 +467,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 instanceList
 
             fetch: (selector = {}, options = {}) ->
+                if Meteor.isClient and not Tracker.active
+                    throw new Error "On the client, must call #{modelName}.fetch
+                        from a reactive computation."
+
                 if selector instanceof J.Dict
                     selector = selector.toObj()
                 else if J.util.isPlainObject selector

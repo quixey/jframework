@@ -247,11 +247,14 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Set up @state
         initialState = {}
-        stateFromRoute =
-            if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
-                J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
-            else
-                {}
+        if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
+            stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
+            for stateFieldName, initialValue of stateFromRoute
+                if stateFieldName not of componentSpec.state
+                    throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
+                        #{JSON.stringify stateFieldName}"
+        else
+            stateFromRoute = {}
         for stateFieldName, stateFieldSpec of componentSpec.state
             if stateFromRoute[stateFieldName] isnt undefined
                 initialValue = stateFromRoute[stateFieldName]
