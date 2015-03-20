@@ -164,17 +164,20 @@ class J.List
         if Tracker.active and @fineGrained
             @_setCompact false
 
+        if not @isActive()
+            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+
+        size = Tracker.nonreactive => @size()
+        if index < 0
+            index = size + index
+        unless 0 <= index < size
+            throw new Error "List index out of range"
+
         if @_valuesVar?
             values = _.clone Tracker.nonreactive => @_valuesVar.get()
             values[index] = J.Var.wrap value
             @_valuesVar.set values
             return value
-
-        if not @isActive()
-            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
-
-        unless index of @_arr
-            throw new Meteor.Error "List index out of range"
 
         if @_arr[index] not instanceof J.Var
             # We need a Var to set this object up to invalidate getters

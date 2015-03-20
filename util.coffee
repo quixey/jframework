@@ -187,6 +187,12 @@ J.util =
         if not _.isObject obj
             throw new Error "Invalid obj passed to getField: #{obj}"
 
+        if _.isArray(fieldSpec) or fieldSpec instanceof J.List
+            fieldSpec = fieldSpec.join('.')
+
+        if fieldSpec is ''
+            return obj
+
         # 'a?.b.c' -> ['a', '?', 'b', '', 'c']
         fieldSpecParts = fieldSpec.split /(\??)\./
         numFieldSpecParts = fieldSpecParts.length // 2 + 1
