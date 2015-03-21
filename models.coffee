@@ -61,7 +61,21 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        fields = EJSON.fromJSONValue doc
+        unescapeDot = (key) ->
+            key.replace /\*DOT\*/g, '.'
+
+        getUnescaped = (subDoc) ->
+            if J.util.isPlainObject subDoc
+                ret = {}
+                for key, value of subDoc
+                    ret[unescapeDot key] = getUnescaped value
+                ret
+            else if _.isArray subDoc
+                getUnescaped x for x in subDoc
+            else
+                subDoc
+
+        fields = EJSON.fromJSONValue getUnescaped doc
 
         for fieldName of @fieldSpecs
             if fieldName not of fields
@@ -196,13 +210,16 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
+        escapeDot = (key) ->
+            key.replace /\./g, '*DOT*'
+
         toPrimitiveEjsonObj = (value) =>
             if _.isArray(value)
                 (toPrimitiveEjsonObj v for v in value)
             else if J.util.isPlainObject(value)
                 ret = {}
                 for k, v of value
-                    ret[k] = toPrimitiveEjsonObj v
+                    ret[escapeDot k] = toPrimitiveEjsonObj v
                 ret
             else if value instanceof J.Model
                 value.toDoc denormalize
