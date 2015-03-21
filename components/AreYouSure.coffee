@@ -12,7 +12,10 @@ J.dc 'AreYouSure',
     render: ->
         if @showingAreYouSure()
             $$ ('div'),
-                style: @prop.style() ? {}
+                style: _.extend(
+                    fontSize: 12
+                    @prop.style() ? {}
+                )
 
                 $$ ('span'),
                     style:
