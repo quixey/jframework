@@ -71,6 +71,7 @@ Package.onUse(function(api) {
     ]);
 
     api.addFiles([
+        "components/AreYouSure.coffee",
         "components/Button.coffee",
         "components/CancelButton.coffee",
         "components/DeleteButton.coffee",
