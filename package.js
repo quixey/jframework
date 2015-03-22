@@ -67,7 +67,8 @@ Package.onUse(function(api) {
         "components.coffee",
         "proptypes.coffee",
         "models.coffee",
-        "routing.coffee"
+        "routing.coffee",
+        "dom.coffee"
     ]);
 
     api.addFiles([
