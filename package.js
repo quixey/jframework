@@ -8,7 +8,8 @@
 
 Package.describe({
     summary: "JFramework for Meteor + React",
-    version: "0.0.1"
+    version: "1.0.0",
+    git: "https://github.com/quixey/jframework.git"
 });
 
 Npm.depends({
