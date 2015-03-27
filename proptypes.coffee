@@ -1,5 +1,22 @@
+###
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
+
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
+
+# NOTE:
+# Using "_id: type: J.PropTypes.key" in a model definition is a useful feature
+# that actually works right now.
+# But all the other type stuff in J is not implemented at all, it's just
+# a vague thought.
+
+
 J.PropTypes =
     instanceOfModel: (modelName) ->
+        # XXX This doesn't currently work.
+
         # Here at definition time, J.Models[modelName]
         # probably hasn't been created yet. So we'll
         # just wait until validator call time.

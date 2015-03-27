@@ -1,45 +1,28 @@
 ###
-  TODO:
-  * Each fieldspec should be declared with type, default value (optional) and docstring (optional)
-  * isValid() function so we can't insert/update an invalid model
-  * key() function which either returns _id or is computed from other fields
-    with a field type system to have a special value to indicate when _id is computed,
-    like a "key" type for the _id, as opposed to being its own entropy.
-    It's saying whether "_id" is part of the Normalized Kernel.
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
 
-  *
-    fetch and fetchOne - like find and findOne
-        * Acts like a Reactive, throwing a notReadyError
-        * Supports
-        * Being ready means
-            * More info from the server wouldn't change the query result
-        * fetchOne returns null (not undefined) meaning "Doesn't currently exist on source"
-        * Return Lists
-        * Supports recursive "fields"
-
-  *
-    Model instance field getters like .name():
-        If this is an attached instance, treat it like a Reactive's get
-            whose val is -> @fetchOne(@_id, fields: name: true)
-        Otherwise naively return the value, even if it's undefined, like a tryGet.
-
-  *
-    Each field can have a default include: true/false
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
 
 
-Notes about the difference between reactives and normal functions:
-    * Reactives should be pure functions of the database and the current time
-        * No outside inputs - not the current user's ID or the current UI state
-        * Time is okay because we want to allow stuff like User.latestPosts
-        * That means the only notReadyError should be ultimately propagated
-          from a fetch call somewhere in the AutoVar stack. No not-ready external calls.
-    * When a normal function throws a notReady error, the system knows to fetch
-      any non-ready fetch objects that were instantiated during the partially-run
-      code. When a J.Model Reactive throws a notReady error, the system also
-      knows to @modelClass.fetchOne @_id, fields: reactiveName: true
-      i.e. anticipate all data in that reactive.
-    * Reactives can have include: true, or even include: {name: true, posts: {votes: true}},
-      just like fields.
+###
+    FIXME:
+    1. If modelInstance has some fetched fields but modelInstance.a isn't one of them,
+       then calling modelInstance.a() should register a dependency on a query for that
+       field. Right now it just throws VALUE_NOT_READY and never does anything about it.
+
+    TODO:
+    1. Let fieldSpecs have default values for fields, applicable when using "new"
+    2. A special method like modelInstance.isValid() to prevent inserting/updating an
+       invalid model
+    3. Type system with support for nested data structure schemas
+    4. Server-side read/write security specs
+    5. The field selector in a query should let you select names of reactives too,
+       and make the server compute their value
+    6. The field selector in a query should be more like GraphQL, so you can make the
+       server follow foreign keys for you without making an extra round trip.
 ###
 
 

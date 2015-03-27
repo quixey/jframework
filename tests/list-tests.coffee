@@ -1,3 +1,12 @@
+###
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
+
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
+
+
 Tinytest.addAsync "List - map", (test, onComplete) ->
     lst = J.List ['zero', 'one', 'two', 'three']
     mappedLst = []

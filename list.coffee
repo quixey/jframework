@@ -1,8 +1,16 @@
 ###
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
+
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
+
+
+###
     TODO: Add a @observe() and @observeChanges() just like
     Meteor's collection API. Good for List and AutoList.
 ###
-
 
 class J.List
     constructor: (values, options) ->

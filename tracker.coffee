@@ -1,11 +1,19 @@
 ###
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
+
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
+
+
+###
     A few things to augment Meteor's Tracker.
 
     We monkey patch the tracker package because
     we want other Meteor packages like "mongo"
     to use the same global object.
 ###
-
 
 
 dummyComputation = Tracker.autorun ->

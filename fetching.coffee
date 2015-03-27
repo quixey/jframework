@@ -1,7 +1,10 @@
-# FIXME: EJSON.stringify doesn't canonically order the keys
-# so {a: 5, b: 6} and {b: 6, a: 5} look like different
-# querySpecs. More generally, we need a querySpec consolidation.
+###
+    Copyright 2015, Quixey Inc.
+    All rights reserved.
 
+    Licensed under the Modified BSD License found in the
+    LICENSE file in the root directory of this source tree.
+###
 
 J.fetching =
     SESSION_ID: "#{parseInt Math.random() * 1000}"
@@ -55,6 +58,16 @@ J.fetching =
 
 
     getMerged: (querySpecs) ->
+        # FIXME: EJSON.stringify doesn't canonically order the keys
+        # so {a: 5, b: 6} and {b: 6, a: 5} may look like different
+        # querySpecs.
+        # TODO: The client can make more inferences about which
+        # of its requested data is already available for use.
+        # For example, the client should realize that any query
+        # for an _id can be satisfied synchronously if that _id
+        # is present in the local collection, even as the result
+        # of previously watching a non-id-based query.
+
         requestedIdsByModel = {} # modelName: {id: true}
 
         mergedQuerySpecs = []
