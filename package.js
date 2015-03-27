@@ -8,6 +8,7 @@
 
 Package.describe({
     summary: "JFramework for Meteor + React",
+    name: "quixey:jframework",
     version: "1.0.0",
     git: "https://github.com/quixey/jframework.git"
 });
@@ -17,6 +18,8 @@ Npm.depends({
 });
 
 Package.onUse(function(api) {
+    api.versionsFrom("1.0.5");
+
     // Sets up window.ReactRouter
     api.addFiles(
         '.npm/package/node_modules/react-router/dist/react-router.js', 'client'
@@ -44,7 +47,7 @@ Package.onUse(function(api) {
         "coffeescript",
         "reload",
         "autoupdate",
-        "quixey:react"
+        "quixey:react@0.12.2"
     ]);
 
     api.imply([
@@ -58,7 +61,7 @@ Package.onUse(function(api) {
         "jquery",
         "random",
         "ejson",
-        "quixey:react"
+        "quixey:react@0.12.2"
     ]);
 
     api.addFiles([
@@ -110,14 +113,14 @@ Package.onUse(function(api) {
 Package.onTest(function(api) {
     api.use([
         "tinytest",
-        "jframework",
+        "quixey:jframework",
         "coffeescript",
         "insecure"
     ]);
 
     api.imply([
         "tinytest",
-        "jframework"
+        "quixey:jframework"
     ]);
 
     api.addFiles([
