@@ -9,7 +9,7 @@
 Package.describe({
     summary: "JFramework for Meteor + React",
     name: "quixey:jframework",
-    version: "1.0.0",
+    version: "1.0.1",
     git: "https://github.com/quixey/jframework.git"
 });
 
@@ -18,7 +18,7 @@ Npm.depends({
 });
 
 Package.onUse(function(api) {
-    api.versionsFrom("1.0.5");
+    api.versionsFrom("1.0.2.1");
 
     // Sets up window.ReactRouter
     api.addFiles(
