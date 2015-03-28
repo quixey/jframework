@@ -4,9 +4,7 @@ J.defineModel 'Book', 'books',
         title: $$.string
         picUrl: $$.string
         authorId: $$.string
-    reactives:
-        author:
-            val: -> $$.Author.fetchOne @authorId()
+    author: -> $$.Author.fetchOne @authorId()
 
 J.defineModel 'Author', 'authors',
     _id: $$.string
@@ -94,7 +92,8 @@ J.defineComponent 'BooksPage',
                                 fontWeight: 'bold'
                             (book.title())
 
-                        if @showAuthors() # To prevent focus-losing issues, add `and book.tryGet('author')?`
+                        # To prevent focus-losing issues, prefix this block with `J.tryGet =>`
+                        if @showAuthors()
                             $$ ('div'),
                                 style:
                                     color: 'gray'
