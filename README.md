@@ -91,3 +91,18 @@ Normally, it sucks to spend time wrangling with your URLs. But with JFramework, 
 See how JFramework lets you create a web app with no boilerplate code at all.
 
 [JFramework demo video (5:12)](https://www.youtube.com/watch?v=g-zCt8DPs3E)
+
+
+# Examples
+### BooksDemo
+
+The 97-line project from the video.
+
+##### [demo](http://booksdemo.meteor.com/books) | [source](https://github.com/quixey/jframework/tree/master/examples/booksdemo)
+
+
+### LastBreath
+
+A social network for people with 1% battery life. Relies on the HTML5 battery API, so only works on Chrome for desktop and Chrome for Android.
+
+##### [demo](http://lastbreath.meteor.com) | [source](https://github.com/quixey/jframework/tree/master/examples/lastbreath)
