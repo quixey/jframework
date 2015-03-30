@@ -27,6 +27,21 @@
 
 
 class J.Model
+    @_getUnescapedSubDoc = (subDoc) ->
+        unescapeDot = (key) =>
+            key.replace /\*DOT\*/g, '.'
+
+        if J.util.isPlainObject subDoc
+            ret = {}
+            for key, value of subDoc
+                ret[unescapeDot key] = @_getUnescapedSubDoc value
+            ret
+        else if _.isArray subDoc
+            @_getUnescapedSubDoc x for x in subDoc
+        else
+            subDoc
+
+
     @fromJSONValue: (jsonValue) ->
         ###
             jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
@@ -44,21 +59,7 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        unescapeDot = (key) ->
-            key.replace /\*DOT\*/g, '.'
-
-        getUnescaped = (subDoc) ->
-            if J.util.isPlainObject subDoc
-                ret = {}
-                for key, value of subDoc
-                    ret[unescapeDot key] = getUnescaped value
-                ret
-            else if _.isArray subDoc
-                getUnescaped x for x in subDoc
-            else
-                subDoc
-
-        fields = EJSON.fromJSONValue getUnescaped doc
+        fields = EJSON.fromJSONValue @_getUnescapedSubDoc doc
 
         for fieldName of @fieldSpecs
             if fieldName not of fields
@@ -420,7 +421,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                 changed: (id, fields) ->
                     instance = collection._attachedInstances[id]
-                    instance._fields._forceSet fields
+                    instance._fields._forceSet modelClass._getUnescapedSubDoc fields
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]

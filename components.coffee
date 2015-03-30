@@ -253,6 +253,49 @@ J._defineComponent = (componentName, componentSpec) ->
 
                 ret
 
+        # Set up @reactives
+        # Note that stateFieldSpec.default functions can try calling reactives.
+        @reactives = {} # reactiveName: autoVar
+        for reactiveName, reactiveSpec of reactiveSpecByName
+            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
+                J.AutoVar(
+                    (
+                        component: @
+                        reactiveName: reactiveName
+                        tag: "#{@toString()}.reactives.#{reactiveName}",
+                    )
+
+                    =>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
+                        if componentDebug
+                            console.debug _getDebugPrefix(@), "!#{reactiveName}()"
+                            _debugDepth += 1
+
+                        try
+                            retValue = reactiveSpec.val.call @
+                        finally
+                            if componentDebug
+                                console.debug _getDebugPrefix(), retValue
+                                _debugDepth -= 1
+                            _popDebugFlag()
+
+                        retValue
+
+                    if _.isFunction reactiveSpec.onChange then (oldValue, newValue) =>
+                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
+                        if componentDebug
+                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
+                            console.debug "        old:", J.util.consolify oldValue
+                            console.debug "        new:", J.util.consolify newValue
+
+                        reactiveSpec.onChange.call @, oldValue, newValue
+
+                        _popDebugFlag()
+                    else reactiveSpec.onChange ? null
+
+                    component: @
+                )
+
         # Set up @state
         initialState = {}
         if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
@@ -298,48 +341,6 @@ J._defineComponent = (componentName, componentSpec) ->
                         stateFieldSpec.onChange.call @, oldValue, newValue
 
                         _popDebugFlag()
-
-        # Set up @reactives
-        @reactives = {} # reactiveName: autoVar
-        for reactiveName, reactiveSpec of reactiveSpecByName
-            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
-                J.AutoVar(
-                    (
-                        component: @
-                        reactiveName: reactiveName
-                        tag: "#{@toString()}.reactives.#{reactiveName}",
-                    )
-
-                    =>
-                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
-                        if componentDebug
-                            console.debug _getDebugPrefix(@), "!#{reactiveName}()"
-                            _debugDepth += 1
-
-                        try
-                            retValue = reactiveSpec.val.call @
-                        finally
-                            if componentDebug
-                                console.debug _getDebugPrefix(), retValue
-                                _debugDepth -= 1
-                            _popDebugFlag()
-
-                        retValue
-
-                    if _.isFunction reactiveSpec.onChange then (oldValue, newValue) =>
-                        _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
-                        if componentDebug
-                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
-                            console.debug "        old:", J.util.consolify oldValue
-                            console.debug "        new:", J.util.consolify newValue
-
-                        reactiveSpec.onChange.call @, oldValue, newValue
-
-                        _popDebugFlag()
-                    else reactiveSpec.onChange ? null
-
-                    component: @
-                )
 
         # This is what React is going to do after this function returns, but we need
         # to do it early because of the synchronous prop onChanges.
