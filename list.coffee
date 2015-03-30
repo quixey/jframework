@@ -340,6 +340,8 @@ class J.List
                     ready = false
                     e
                 else
+                    console.log e.stack
+                    console.trace()
                     throw e
         if not ready then throw J.makeValueNotReadyObject()
         ret
