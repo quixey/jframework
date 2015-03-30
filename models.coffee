@@ -440,7 +440,13 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     instance
 
             for indexSpec in modelClass.indexSpecs
-                collection._ensureIndex indexSpec
+                indexFieldsSpec = _.clone indexSpec
+                if _.isObject indexSpec.options
+                    delete indexFieldsSpec.options
+                    indexOptionsSpec = indexSpec.options
+                else
+                    indexOptionsSpec = {}
+                collection._ensureIndex indexFieldsSpec, indexOptionsSpec
 
 
         _.extend modelClass,
