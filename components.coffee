@@ -343,13 +343,15 @@ J._defineComponent = (componentName, componentSpec) ->
                         _popDebugFlag()
 
         # This is what React is going to do after this function returns, but we need
-        # to do it early because of the synchronous prop onChanges.
+        # to do it early because of the synchronous onChanges.
         @state = initialState
 
-        # Call all the prop onChange handlers synchronously because they might initialize
+        # Call all the onChange handlers synchronously because they might initialize
         # the state during a cascading React render thread.
         for propName, propVar of @_props
             propVar.onChange? undefined, propVar._value
+        for stateFieldName, stateVar of @state
+            stateVar.onChange? undefined, stateVar._value
 
         # Return initialState to React
         initialState
