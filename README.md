@@ -1,5 +1,10 @@
 # JFramework: Rapid prototyping for Meteor + React
 
+Play with our 97-line example app using the sandbox on MeteorPad: [http://meteorpad.com/fork/mC4wQPmJNpWBqvXZ2](http://meteorpad.com/fork/mC4wQPmJNpWBqvXZ2)
+
+
+# Cut through the CRUD
+
 How would you like to build a web app with no boilerplate code at all?
 
 JFramework gives you these rapid prototyping features:
