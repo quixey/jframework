@@ -6,6 +6,13 @@
     LICENSE file in the root directory of this source tree.
 ###
 
+J.defineModel 'JDataSession', 'jframework_datasessions',
+    _id: $$.string
+
+    fields:
+        querySpecStrings:
+            type: $$.array
+
 
 Fiber = Npm.require 'fibers'
 
@@ -100,6 +107,11 @@ Meteor.methods
         updateObservers.call dataSessionPublisherContexts[dataSessionId], dataSessionId
         session.updateObserversFiber = null
 
+        jDataSession = new $$.JDataSession
+            _id: dataSessionId
+            querySpecStrings: session.querySpecSet().getKeys()
+        jDataSession.save()
+
         # log '..._updateDataQueries done'
 
 
@@ -124,6 +136,13 @@ Meteor.publish '_jdata', (dataSessionId) ->
     dataSessionPublisherContexts[dataSessionId] = @
     dataSessionFieldsByModelIdQuery[dataSessionId] = {}
 
+    existingSessionInstance = $$.JDataSession.fetchOne dataSessionId
+    if existingSessionInstance?
+        existingQuerySpecs = existingSessionInstance.querySpecStrings().map(
+            (querySpecString) => EJSON.parse querySpecString
+        ).toArr()
+        Meteor.call '_updateDataQueries', dataSessionId, existingQuerySpecs, []
+
     @onStop =>
         console.log "[#{dataSessionId}] PUBLISHER STOPPED"
         session.stop()
@@ -135,6 +154,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         delete dataSessionFieldsByModelIdQuery[dataSessionId]
         delete dataSessionPublisherContexts[dataSessionId]
         delete dataSessions[dataSessionId]
+        $$.JDataSession.remove dataSessionId
 
     @ready()
 

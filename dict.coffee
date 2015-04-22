@@ -37,6 +37,8 @@ class J.Dict
             else if _.isArray fieldsOrKeys
                 fields = {}
                 for key in fieldsOrKeys
+                    if not _.isString(key)
+                        throw new Error "Can't instantiate Dict with non-string fieldname"
                     fields[key] = undefined
             else if J.util.isPlainObject fieldsOrKeys
                 fields = fieldsOrKeys

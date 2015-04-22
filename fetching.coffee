@@ -7,7 +7,7 @@
 ###
 
 J.fetching =
-    SESSION_ID: "#{parseInt Math.random() * 1000}"
+    SESSION_ID: "#{parseInt Math.random() * 1000000}"
 
     _requestInProgress: false
 

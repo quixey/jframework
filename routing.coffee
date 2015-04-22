@@ -72,5 +72,5 @@ if Meteor.isClient then Meteor.startup ->
 
             else
                 console.warn "No router defined. Call J.defineRouter to define a router."
-        onError: ->
-            console.log "Subscription stopped!"
+        onError: (err) ->
+            console.log "Subscription stopped!", err
