@@ -9,7 +9,7 @@
 Package.describe({
     summary: "JFramework for Meteor + React",
     name: "quixey:jframework",
-    version: "1.0.4",
+    version: "1.0.5",
     git: "https://github.com/quixey/jframework.git"
 });
 
@@ -94,7 +94,8 @@ Package.onUse(function(api) {
         "components/LinkButton.coffee",
         "components/Loader.coffee",
         "components/SubmitCancelDelete.coffee",
-        "components/TableRow.coffee"
+        "components/TableRow.coffee",
+        "components/TextBox.coffee"
     ]);
 
     api.addFiles([

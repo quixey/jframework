@@ -18,6 +18,9 @@ J.dc 'Expandable',
             default: false
         iconSize:
             default: 14
+        style:
+            type: $$.style
+            default: {}
 
     state:
         expanded:
@@ -26,16 +29,19 @@ J.dc 'Expandable',
 
     render: ->
         $$ ('div'),
+            style: @prop.style().toObj()
             onClick:
                 if not @expanded()
                     (e) => @expanded true
 
             $$ ('TableRow'),
-                {}
+                style:
+                    width: '100%'
 
                 $$ ('td'),
                     style:
                         verticalAlign: 'top'
+                        width: 18
                         paddingRight: 4
                         cursor: 'pointer'
                     onClick:
