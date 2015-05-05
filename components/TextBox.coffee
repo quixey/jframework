@@ -8,7 +8,7 @@
 J.dc 'TextBox',
     props:
         defaultValue:
-            type: $$.string
+            type: $$.str
         enabled:
             default: true
         onChange:
@@ -18,7 +18,7 @@ J.dc 'TextBox',
         onKeyUp:
             type: $$.func
         placeholder:
-            type: $$.string
+            type: $$.str
         style:
             type: $$.obj
             default: J.Dict()

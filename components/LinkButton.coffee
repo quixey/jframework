@@ -12,7 +12,7 @@ J.dc 'LinkButton',
         style:
             default: {}
         onClick:
-            type: React.PropTypes.func
+            type: $$.func
 
     render: ->
         $$ ('span'),

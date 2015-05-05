@@ -13,15 +13,15 @@
 
 J.dm 'Foo', 'foos',
     _id:
-        type: $$.string
+        type: $$.str
 
     fields:
         a:
-            type: $$.string
+            type: $$.str
         b:
-            type: $$.string
+            type: $$.str
         c:
-            type: $$.string
+            type: $$.str
 
     reactives:
         d:

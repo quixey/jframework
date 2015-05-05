@@ -1,12 +1,12 @@
 J.dm 'Chat', 'chats',
-    _id: $$.string
+    _id: $$.str
 
     fields:
         username:
-            type: $$.string
+            type: $$.str
         message:
-            type: $$.string
+            type: $$.str
         timestamp:
-            type: $$.string
+            type: $$.str
         battery:
             type: $$.obj

@@ -10,7 +10,7 @@
 J.dc 'TableRow',
     props:
         style:
-            type: React.PropTypes.object
+            type: $$.dict
             default: {}
 
 

@@ -10,7 +10,7 @@
 J.dc 'Loader',
     props:
         size:
-            type: React.PropTypes.number
+            type: $$.num
             default: 20
 
     render: ->

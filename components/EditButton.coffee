@@ -10,7 +10,7 @@
 J.dc 'EditButton',
     props:
         onClick:
-            type: React.PropTypes.func
+            type: $$.func
 
     render: ->
         $$ ('LinkButton'),

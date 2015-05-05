@@ -13,19 +13,21 @@ J.dc 'SubmitCancelDelete',
             type: $$.bool
             default: true
         showCancel:
-            type: React.PropTypes.bool.isRequired
+            type: $$.bool
+            required: true
             default: true
         showDelete:
-            type: React.PropTypes.bool.isRequired
+            type: $$.bool
+            required: true
             default: false
         onSubmit:
-            type: React.PropTypes.func
+            type: $$.func
         onCancel:
-            type: React.PropTypes.func
+            type: $$.func
         onDelete:
-            type: React.PropTypes.func
+            type: $$.func
         style:
-            type: React.PropTypes.object
+            type: $$.dict
             default: {}
 
 

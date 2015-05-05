@@ -1,7 +1,7 @@
 J.dc 'ChatRoom',
     props:
         username:
-            type: $$.string
+            type: $$.str
             onChange: (oldUsername, newUsername) ->
                 return if oldUsername is undefined
                 @messages().push
@@ -24,7 +24,7 @@ J.dc 'ChatRoom',
         onSubmitUsername:
             type: $$.func
         width:
-            type: $$.number
+            type: $$.num
             default: 600
 
     state:

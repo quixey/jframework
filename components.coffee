@@ -95,21 +95,21 @@ J._defineComponent = (componentName, componentSpec) ->
                     console.debug _getDebugPrefix(@), "#{memberName}!"
                     _debugDepth += 1
 
-                ret = member.apply @, arguments
+                memberValue = member.apply @, arguments
 
                 if componentDebug
                     _debugDepth -= 1
                     _popDebugFlag()
-                ret
+                memberValue
 
     propSpecs = _.clone componentSpec.props ? {}
     propSpecs.className ?=
-        type: React.PropTypes.string
+        type: $$.str
     propSpecs.children ?=
-        type: React.PropTypes.oneOfType [
-            React.PropTypes.element
-            React.PropTypes.arrayOf(React.PropTypes.element)
-        ]
+        type: $$.or(
+            $$.elem
+            $$.list of: $$.elem
+        )
 
     reactSpec.displayName = componentName
 
@@ -129,13 +129,13 @@ J._defineComponent = (componentName, componentSpec) ->
                 # Getter
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
 
-                ret = @state[stateFieldName].get()
+                stateValue = @state[stateFieldName].get()
 
                 if componentDebug
-                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", ret
+                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", stateValue
                 _popDebugFlag()
 
-                ret
+                stateValue
             else
                 # Setter
                 stateFields = {}
@@ -225,6 +225,7 @@ J._defineComponent = (componentName, componentSpec) ->
                 throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
 
             initialValue = J.util.withoutUndefined @props[propName]
+            # TODO: Validate type of initialValue
             @_props[propName] = J.Var initialValue,
                 tag:
                     component: @
@@ -245,13 +246,23 @@ J._defineComponent = (componentName, componentSpec) ->
             @prop[propName] = do (propName, propSpec) => =>
                 _pushDebugFlag propSpec.debug ? componentSpec.debug
 
-                ret = @_props[propName].get()
+                propValue = @_props[propName].get()
+
+                if _.isFunction(propValue) and propSpec.type isnt $$.func
+                    ###
+                        Support passing functions as props to get lazily-evaluated during a
+                        child component's @prop call. That way the parent can finish returning its
+                        render tree without being hypersensitive to sub-values being NOT_READY.
+                    ###
+                    propValue = propValue()
+
+                # TODO: Validate type of propValue
 
                 if componentDebug
-                    console.debug _getDebugPrefix(@), "prop.#{propName}()", ret
+                    console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
                 _popDebugFlag()
 
-                ret
+                propValue
 
         # Set up @reactives
         # Note that stateFieldSpec.default functions can try calling reactives.
@@ -450,11 +461,14 @@ J._defineComponent = (componentName, componentSpec) ->
         if reactiveName not of @reactives
             throw new Meteor.Error "Invalid reactive name: #{@}.#{reactiveName}"
 
-        J.tryGet(
-            => @reactives[reactiveName].get()
-            defaultValue
-        )
+        @reactives[reactiveName].tryGet defaultValue
 
+
+    reactSpec.tryGetProp = (propName, defaultValue) ->
+        if propName not of @_props
+            throw new Meteor.Error "Invalid prop name: #{@}.#{propName}"
+
+        J.tryGet @prop[propName], defaultValue
 
 
     reactSpec.renderLoader ?= ->
