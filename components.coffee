@@ -254,13 +254,33 @@ J._defineComponent = (componentName, componentSpec) ->
                         child component's @prop call. That way the parent can finish returning its
                         render tree without being hypersensitive to sub-values being NOT_READY.
                     ###
-                    propValue = propValue()
+                    if componentDebug
+                        console.debug _getDebugPrefix(@), "!prop.#{propName}()"
+                        _debugDepth += 1
+
+                    valueReady = true
+                    try
+                        propValue = propValue()
+                    catch e
+                        if e instanceof J.VALUE_NOT_READY
+                            valueReady = false
+                        throw e
+                    finally
+                        if componentDebug
+                            console.debug _getDebugPrefix(@),
+                                if valueReady then propValue else "[VALUE_NOT_READY]"
+                            _debugDepth -= 1
+                        _popDebugFlag()
+
+                    propValue
+
+                else
+                    if componentDebug
+                        console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
+
+                    _popDebugFlag()
 
                 # TODO: Validate type of propValue
-
-                if componentDebug
-                    console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
-                _popDebugFlag()
 
                 propValue
 
