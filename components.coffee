@@ -167,8 +167,6 @@ J._defineComponent = (componentName, componentSpec) ->
                     newRouteSpec.get('params')?.toObj() ? {},
                     newRouteSpec.get('query')?.toObj() ? {}
                 if newPath isnt URI().resource()
-                    # TODO: Block the re-rendering here; it's completely unnecessary.
-                    # console.debug 'PUSH', newPath
                     ReactRouter.HistoryLocation.push newPath
 
         origOnChange = reactiveSpecByName.route.onChange
@@ -178,6 +176,17 @@ J._defineComponent = (componentName, componentSpec) ->
                 pushNewRoute.call @, oldRouteSpec, newRouteSpec
         else
             reactiveSpecByName.route.onChange = pushNewRoute
+
+        if componentSpec.stateFromRoute?
+            reactiveSpecByName._urlWatcher =
+                val: -> J._urlVar.get()
+                onChange: ->
+                    stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
+                    for stateFieldName, initialValue of stateFromRoute
+                        if stateFieldName not of componentSpec.state
+                            throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
+                                    #{JSON.stringify stateFieldName}"
+                    @set stateFromRoute
 
     for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
@@ -357,18 +366,8 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Set up @state
         initialState = {}
-        if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
-            stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
-            for stateFieldName, initialValue of stateFromRoute
-                if stateFieldName not of componentSpec.state
-                    throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
-                        #{JSON.stringify stateFieldName}"
-        else
-            stateFromRoute = {}
         for stateFieldName, stateFieldSpec of componentSpec.state
-            if stateFromRoute[stateFieldName] isnt undefined
-                initialValue = stateFromRoute[stateFieldName]
-            else if _.isFunction stateFieldSpec.default
+            if _.isFunction stateFieldSpec.default
                 # TODO: If the type is J.$function then use the other if-branch
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                 if componentDebug
@@ -587,6 +586,13 @@ J._defineComponent = (componentName, componentSpec) ->
                 if firstRun
                     firstRun = false
                     Tracker.onInvalidate => @_valid.set false
+
+                    if J.Routable in (componentSpec.mixins ? [])
+                        # If the URL changes, that will cause all the Routable
+                        # components to need to be re-rendered. Otherwise
+                        # shouldComponentUpdate will block ReactRouter functionality.
+                        J._urlVar.get()
+
                     unpackRenderSpec componentSpec.render.apply @
 
                 else
