@@ -432,7 +432,7 @@ J._defineComponent = (componentName, componentSpec) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
         ###
-            When props have type $$.dict or $$.list, we'll do a deep EJSON comparison
+            When props have type $$.dict or $$.list, we'll do a deep comparison
             to avoid unnecessary reactive triggers.
             To switch this behavior to naive J.Var behavior, use type $$.var.
         ###
@@ -448,15 +448,15 @@ J._defineComponent = (componentName, componentSpec) ->
 
                 if oldValue instanceof J.Dict and (
                     (oldValue is newValue) or
-                    (newValue instanceof J.Dict and EJSON.equals(oldValue.toObj(), newValue.toObj())) or
-                    (J.util.isPlainObject(newValue) and EJSON.equals oldValue.toObj(), newValue)
+                    (newValue instanceof J.Dict and J.util.deepEquals(oldValue.toObj(), newValue.toObj())) or
+                    (J.util.isPlainObject(newValue) and J.util.deepEquals oldValue.toObj(), newValue)
                 )
                     continue
 
                 else if oldValue instanceof J.List and (
                     (oldValue is newValue) or
-                    (newValue instanceof J.List and EJSON.equals(oldValue.toArr(), newValue.toArr())) or
-                    (_.isArray(newValue) and EJSON.equals oldValue.toArr(), newValue)
+                    (newValue instanceof J.List and J.util.deepEquals(oldValue.toArr(), newValue.toArr())) or
+                    (_.isArray(newValue) and J.util.deepEquals oldValue.toArr(), newValue)
                 )
                     continue
 
