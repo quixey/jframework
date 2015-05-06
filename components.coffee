@@ -446,19 +446,10 @@ J._defineComponent = (componentName, componentSpec) ->
 
                 oldValue = Tracker.nonreactive => @_props[propName].get()
 
-                if oldValue instanceof J.Dict and (
-                    (oldValue is newValue) or
-                    (newValue instanceof J.Dict and J.util.deepEquals(oldValue.toObj(), newValue.toObj())) or
-                    (J.util.isPlainObject(newValue) and J.util.deepEquals oldValue.toObj(), newValue)
+                continue if (
+                    (oldValue instanceof J.Dict or oldValue instanceof J.List) and
+                    oldValue.deepEquals(newValue)
                 )
-                    continue
-
-                else if oldValue instanceof J.List and (
-                    (oldValue is newValue) or
-                    (newValue instanceof J.List and J.util.deepEquals(oldValue.toArr(), newValue.toArr())) or
-                    (_.isArray(newValue) and J.util.deepEquals oldValue.toArr(), newValue)
-                )
-                    continue
 
             @_props[propName].set J.util.withoutUndefined newValue
 

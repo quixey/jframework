@@ -171,7 +171,7 @@ class J.AutoVar extends Tracker.Computation
 
     get: ->
         if @stopped
-            throw new Meteor.Error "#{Tracker.currentComputation?._id} can't get
+            throw new Error "#{Tracker.currentComputation?._id} can't get
                 value of inactive AutoVar: #{@}"
 
         if @_getting
