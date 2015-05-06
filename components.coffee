@@ -124,7 +124,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
         reactSpec[stateFieldName] = do (stateFieldName) -> (value) ->
             if arguments.length > 0 and value is undefined
-                throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
+                throw new Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
@@ -251,8 +251,6 @@ J._defineComponent = (componentName, componentSpec) ->
                         )
 
                         =>
-                            console.log 'calculate lazyProp: ', @toString(), propName
-
                             propValue = @_props[propName].get()
 
                             if _.isFunction(propValue) and propSpec.type isnt $$.func
@@ -260,7 +258,13 @@ J._defineComponent = (componentName, componentSpec) ->
                             else
                                 propValue
 
-                        if propSpec.onChange? then (oldValue, newValue) =>
+                        if propSpec.onChange? then (oldValue, newValue, isEarlyInitTime) =>
+                            if oldValue is undefined and not isEarlyInitTime
+                                # Since we have a hack to call all the onChange handlers early at component
+                                # init time, we need to stifly the onChange function called with the same arguments
+                                # again at afterFlush time.
+                                return
+
                             _pushDebugFlag propSpec.debug ? componentSpec.debug
                             if componentDebug
                                 console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
@@ -403,8 +407,9 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Call all the onChange handlers synchronously because they might initialize
         # the state during a cascading React render thread.
-        for propName, propVar of @_props
-            propVar.onChange? undefined, propVar._value
+        for lazyPropName, lazyPropAutoVar of @_lazyProps
+            propVar = @_props[lazyPropName]
+            lazyPropAutoVar.onChange? undefined, propVar._value, true
         for stateFieldName, stateVar of @state
             stateVar.onChange? undefined, stateVar._value
 
@@ -426,7 +431,35 @@ J._defineComponent = (componentName, componentSpec) ->
     reactSpec.componentWillReceiveProps = (nextProps) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
+        ###
+            When props have type $$.dict or $$.list, we'll do a deep EJSON comparison
+            to avoid unnecessary reactive triggers.
+            To switch this behavior to naive J.Var behavior, use type $$.var.
+        ###
+
         for propName, newValue of nextProps
+            propSpec = propSpecs[propName]
+
+            if propSpec.type isnt $$.var
+                # Consider equal deep values to be equal and skip setting
+                # the J.Var to avoid invalidation propagation
+
+                oldValue = Tracker.nonreactive => @_props[propName].get()
+
+                if oldValue instanceof J.Dict and (
+                    (oldValue is newValue) or
+                    (newValue instanceof J.Dict and EJSON.equals(oldValue.toObj(), newValue.toObj())) or
+                    (J.util.isPlainObject(newValue) and EJSON.equals oldValue.toObj(), newValue)
+                )
+                    continue
+
+                else if oldValue instanceof J.List and (
+                    (oldValue is newValue) or
+                    (newValue instanceof J.List and EJSON.equals(oldValue.toArr(), newValue.toArr())) or
+                    (_.isArray(newValue) and EJSON.equals oldValue.toArr(), newValue)
+                )
+                    continue
+
             @_props[propName].set J.util.withoutUndefined newValue
 
 

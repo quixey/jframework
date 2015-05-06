@@ -62,6 +62,8 @@ J.PropTypes =
 
     str: {name: "J.PropTypes.str"}
 
+    var: {name: "J.PropTypes.var"}
+
 
 ###
     Alias all PropTypes into $$
