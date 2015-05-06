@@ -219,70 +219,94 @@ J._defineComponent = (componentName, componentSpec) ->
                     Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
         @_props = {} # Vars for the props
+        @_lazyProps = {} # Vars for the evaluated lazy props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
-            if propName of @props and @props[propName] is undefined
-                throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
+            do (propName, propSpec) =>
+                if propName of @props and @props[propName] is undefined
+                    throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
 
-            initialValue = J.util.withoutUndefined @props[propName]
-            # TODO: Validate type of initialValue
-            @_props[propName] = J.Var initialValue,
-                tag:
-                    component: @
-                    propName: propName
-                    tag: "#{@toString()}.prop.#{propName}"
-                onChange: if propSpec.onChange? then do (propName, propSpec) =>
-                    (oldValue, newValue) =>
+                initialValue = J.util.withoutUndefined @props[propName]
+                # TODO: Validate type of initialValue
+
+                @_props[propName] = J.Var initialValue,
+                    tag:
+                        component: @
+                        propName: propName
+                        tag: "#{@toString()}.prop.#{propName}"
+
+
+                ###
+                    @_lazyProps[propName] is a relatively heavy reactive computation that
+                    we only need if there's ever a time when prop laziness is used.
+                    We also need it if there's a propSpec.onChange, because the semantics
+                    of onChange get tricky if and when they mix with laziness semantics.
+                ###
+                setupLazyProp = =>
+                    @_lazyProps[propName] = J.AutoVar(
+                        (
+                            component: @
+                            lazyPropName: propName
+                            tag: "Lazy #{@toString()}.prop.#{propName}"
+                        )
+
+                        =>
+                            console.log 'calculate lazyProp: ', @toString(), propName
+
+                            propValue = @_props[propName].get()
+
+                            if _.isFunction(propValue) and propSpec.type isnt $$.func
+                                propValue()
+                            else
+                                propValue
+
+                        if propSpec.onChange? then (oldValue, newValue) =>
+                            _pushDebugFlag propSpec.debug ? componentSpec.debug
+                            if componentDebug
+                                console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
+                                console.debug "        old:", J.util.consolify oldValue
+                                console.debug "        new:", J.util.consolify newValue
+
+                            propSpec.onChange?.call @, oldValue, newValue
+
+                            _popDebugFlag()
+
+                        creator: null
+                    )
+
+                if propSpec.onChange? then setupLazyProp()
+
+                @prop[propName] = =>
+                    if @_lazyProps[propName]?
                         _pushDebugFlag propSpec.debug ? componentSpec.debug
+
+                        try
+                            propValue = @_lazyProps[propName].get()
+                        catch e
+                            if e instanceof J.VALUE_NOT_READY
+                                propValue = e
+                            else
+                                throw e
+
                         if componentDebug
-                            console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
-                            console.debug "        old:", J.util.consolify oldValue
-                            console.debug "        new:", J.util.consolify newValue
-
-                        propSpec.onChange.call @, oldValue, newValue
-
+                            console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
                         _popDebugFlag()
 
-            @prop[propName] = do (propName, propSpec) => =>
-                _pushDebugFlag propSpec.debug ? componentSpec.debug
+                        if propValue instanceof J.VALUE_NOT_READY
+                            throw propValue
+                        else
+                            return propValue
 
-                propValue = @_props[propName].get()
+                    propValue = @_props[propName].get()
 
-                if _.isFunction(propValue) and propSpec.type isnt $$.func
-                    ###
-                        Support passing functions as props to get lazily-evaluated during a
-                        child component's @prop call. That way the parent can finish returning its
-                        render tree without being hypersensitive to sub-values being NOT_READY.
-                    ###
-                    if componentDebug
-                        console.debug _getDebugPrefix(@), "!prop.#{propName}()"
-                        _debugDepth += 1
+                    if _.isFunction(propValue) and propSpec.type isnt $$.func
+                        setupLazyProp()
+                        @prop[propName]()
 
-                    valueReady = true
-                    try
-                        propValue = propValue()
-                    catch e
-                        if e instanceof J.VALUE_NOT_READY
-                            valueReady = false
-                        throw e
-                    finally
-                        if componentDebug
-                            console.debug _getDebugPrefix(@),
-                                if valueReady then propValue else "[VALUE_NOT_READY]"
-                            _debugDepth -= 1
-                        _popDebugFlag()
+                    else
+                        propValue
 
-                    propValue
 
-                else
-                    if componentDebug
-                        console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
-
-                    _popDebugFlag()
-
-                # TODO: Validate type of propValue
-
-                propValue
 
         # Set up @reactives
         # Note that stateFieldSpec.default functions can try calling reactives.
@@ -460,6 +484,8 @@ J._defineComponent = (componentName, componentSpec) ->
         @_elementVar.stop()
 
         J.fetching._deleteComputationQsRequests @_elementVar
+        for lazyPropName, lazyPropVar of @_lazyProps
+            lazyPropVar.stop()
         for reactiveName, reactiveVar of @reactives
             reactiveVar.stop()
 
