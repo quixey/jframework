@@ -14,43 +14,60 @@
 
 
 J.PropTypes =
-    instanceOfModel: (modelName) ->
-        # XXX This doesn't currently work.
+    dict: {name: "J.PropTypes.dict"}
 
-        # Here at definition time, J.Models[modelName]
-        # probably hasn't been created yet. So we'll
-        # just wait until validator call time.
-        validator = ->
-            # Okay, it's validator call time.
-            modelClass = J.models[modelName]
-            unless modelClass?
-                throw new Meteor.Error "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
+    elem: (componentSpec = null) ->
+        # TODO
 
-            React.PropTypes.instanceOf(modelClass).apply @, arguments
+    func: {name: "J.PropTypes.func"}
 
-        validator.isRequired = ->
-            # Okay, it's validator call time.
-            modelClass = J.models[modelName]
-            unless modelClass?
-                throw new Meteor.Error "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
+    instance: (classSpec) ->
+        if _.isString(classSpec)
+            # Instance of a J.Model
+            # FIXME: Doesn't work yet
 
-            React.PropTypes.instanceOf(modelClass).isRequired.apply @, arguments
+            # Here at definition time, J.Models[modelName]
+            # probably hasn't been created yet. So we'll
+            # just wait until validator call time.
+            validator = ->
+                # Okay, it's validator call time.
+                modelClass = J.models[modelName]
+                unless modelClass?
+                    throw new Meteor.Error "Invalid modelName #{JSON.stringify modelName} in instanceOfModel"
 
-        validator
+                $$.instance(modelClass).apply @, arguments
+
+        else
+            # Instance of an arbitrary JS class
+
+    list: (params) ->
+        ###
+            Params:
+                of:
+                    A typeSpec to apply recursively to the elements of the list
+        ###
+        # TODO
 
     # J.PropTypes.key is a pseudo-propType that the
     # _id fieldSpec can use to declare that it isn't
     # part of the Normalized Kernel of our data model, i.e.
     # the model's key() instance function computed it
     # from other fields at db-insert time.
-    key: {}
+    key: {name: "J.PropTypes.key"}
 
-    number: {}
+    num: {name: "J.PropTypes.num"}
 
-    object: {}
+    or: (typeSpecs...) ->
+        # TODO
 
-    string: {}
+    str: {name: "J.PropTypes.str"}
+
+    var: {name: "J.PropTypes.var"}
 
 
+###
+    Alias all PropTypes into $$
+    E.g. $$.key, $$.func, $$.num
+###
 for propTypeName, propTypeFunc of J.PropTypes
     $$[propTypeName] = propTypeFunc

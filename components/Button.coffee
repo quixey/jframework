@@ -10,12 +10,13 @@
 J.dc 'Button',
     props:
         enabled:
-            type: React.PropTypes.bool.isRequired
+            type: $$.bool
+            required: true
             default: true
         onClick:
-            type: React.PropTypes.func
+            type: $$.func
         style:
-            type: React.PropTypes.object
+            type: $$.dict
             default: {}
 
     render: ->

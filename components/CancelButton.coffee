@@ -10,7 +10,7 @@
 J.dc 'CancelButton',
     props:
         onClick:
-            type: React.PropTypes.func
+            type: $$.func
 
     render: ->
         $$ ('LinkButton'),

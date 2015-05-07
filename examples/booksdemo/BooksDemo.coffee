@@ -1,15 +1,15 @@
 J.defineModel 'Book', 'books',
-    _id: $$.string
+    _id: $$.str
     fields:
-        title: $$.string
-        picUrl: $$.string
-        authorId: $$.string
+        title: $$.str
+        picUrl: $$.str
+        authorId: $$.str
     author: -> $$.Author.fetchOne @authorId()
 
 J.defineModel 'Author', 'authors',
-    _id: $$.string
+    _id: $$.str
     fields:
-        name: $$.string
+        name: $$.str
 
 J.defineRouter ->
     $$ (ReactRouter.Route),

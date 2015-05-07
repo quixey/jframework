@@ -452,6 +452,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         _.extend modelClass,
             collection: collection,
             fetchDict: (docIdsOrQuery) ->
+                if docIdsOrQuery instanceof J.List or _.isArray docIdsOrQuery
+                    if J.List.unwrap(docIdsOrQuery).length is 0
+                        return J.Dict()
+
                 query =
                     if docIdsOrQuery instanceof J.List or _.isArray docIdsOrQuery
                         _id: $in: docIdsOrQuery

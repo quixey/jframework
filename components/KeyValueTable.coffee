@@ -10,11 +10,13 @@
 J.dc 'KeyValueTable',
     props:
         obj:
-            type: React.PropTypes.object.isRequired
+            type: $$.dict
+            required: true
         keyStyle:
-            type: React.PropTypes.object
+            type: $$.dict
         sortKeys:
-            type: React.PropTypes.bool.isRequired
+            type: $$.bool
+            required: true
             default: false
 
 

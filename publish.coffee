@@ -7,11 +7,11 @@
 ###
 
 J.defineModel 'JDataSession', 'jframework_datasessions',
-    _id: $$.string
+    _id: $$.str
 
     fields:
         querySpecStrings:
-            type: $$.array
+            type: $$.arr
 
 
 Fiber = Npm.require 'fibers'

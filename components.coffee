@@ -95,21 +95,21 @@ J._defineComponent = (componentName, componentSpec) ->
                     console.debug _getDebugPrefix(@), "#{memberName}!"
                     _debugDepth += 1
 
-                ret = member.apply @, arguments
+                memberValue = member.apply @, arguments
 
                 if componentDebug
                     _debugDepth -= 1
                     _popDebugFlag()
-                ret
+                memberValue
 
     propSpecs = _.clone componentSpec.props ? {}
     propSpecs.className ?=
-        type: React.PropTypes.string
+        type: $$.str
     propSpecs.children ?=
-        type: React.PropTypes.oneOfType [
-            React.PropTypes.element
-            React.PropTypes.arrayOf(React.PropTypes.element)
-        ]
+        type: $$.or(
+            $$.elem
+            $$.list of: $$.elem
+        )
 
     reactSpec.displayName = componentName
 
@@ -124,18 +124,18 @@ J._defineComponent = (componentName, componentSpec) ->
 
         reactSpec[stateFieldName] = do (stateFieldName) -> (value) ->
             if arguments.length > 0 and value is undefined
-                throw new Meteor.Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
+                throw new Error "Can't pass undefined to #{componentName}.#{stateFieldName}"
             else if value is undefined
                 # Getter
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
 
-                ret = @state[stateFieldName].get()
+                stateValue = @state[stateFieldName].get()
 
                 if componentDebug
-                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", ret
+                    console.debug _getDebugPrefix(@), "#{stateFieldName}()", stateValue
                 _popDebugFlag()
 
-                ret
+                stateValue
             else
                 # Setter
                 stateFields = {}
@@ -167,8 +167,6 @@ J._defineComponent = (componentName, componentSpec) ->
                     newRouteSpec.get('params')?.toObj() ? {},
                     newRouteSpec.get('query')?.toObj() ? {}
                 if newPath isnt URI().resource()
-                    # TODO: Block the re-rendering here; it's completely unnecessary.
-                    # console.debug 'PUSH', newPath
                     ReactRouter.HistoryLocation.push newPath
 
         origOnChange = reactiveSpecByName.route.onChange
@@ -178,6 +176,17 @@ J._defineComponent = (componentName, componentSpec) ->
                 pushNewRoute.call @, oldRouteSpec, newRouteSpec
         else
             reactiveSpecByName.route.onChange = pushNewRoute
+
+        if componentSpec.stateFromRoute?
+            reactiveSpecByName._urlWatcher =
+                val: -> J._urlVar.get()
+                onChange: ->
+                    stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
+                    for stateFieldName, initialValue of stateFromRoute
+                        if stateFieldName not of componentSpec.state
+                            throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
+                                    #{JSON.stringify stateFieldName}"
+                    @set stateFromRoute
 
     for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
@@ -219,39 +228,98 @@ J._defineComponent = (componentName, componentSpec) ->
                     Only has #{JSON.stringify _.keys propSpecs}."
         # Set up @prop
         @_props = {} # Vars for the props
+        @_lazyProps = {} # Vars for the evaluated lazy props
         @prop = {} # Reactive getters for the props
         for propName, propSpec of propSpecs
-            if propName of @props and @props[propName] is undefined
-                throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
+            do (propName, propSpec) =>
+                if propName of @props and @props[propName] is undefined
+                    throw new Meteor.Error "Can't pass undefined #{@}.props.#{propName}"
 
-            initialValue = J.util.withoutUndefined @props[propName]
-            @_props[propName] = J.Var initialValue,
-                tag:
-                    component: @
-                    propName: propName
-                    tag: "#{@toString()}.prop.#{propName}"
-                onChange: if propSpec.onChange? then do (propName, propSpec) =>
-                    (oldValue, newValue) =>
+                initialValue = J.util.withoutUndefined @props[propName]
+                # TODO: Validate type of initialValue
+
+                @_props[propName] = J.Var initialValue,
+                    tag:
+                        component: @
+                        propName: propName
+                        tag: "#{@toString()}.prop.#{propName}"
+
+
+                ###
+                    @_lazyProps[propName] is a relatively heavy reactive computation that
+                    we only need if there's ever a time when prop laziness is used.
+                    We also need it if there's a propSpec.onChange, because the semantics
+                    of onChange get tricky if and when they mix with laziness semantics.
+                ###
+                setupLazyProp = =>
+                    @_lazyProps[propName] = J.AutoVar(
+                        (
+                            component: @
+                            lazyPropName: propName
+                            tag: "Lazy #{@toString()}.prop.#{propName}"
+                        )
+
+                        =>
+                            propValue = @_props[propName].get()
+
+                            if _.isFunction(propValue) and propSpec.type isnt $$.func
+                                propValue()
+                            else
+                                propValue
+
+                        if propSpec.onChange? then (oldValue, newValue, isEarlyInitTime) =>
+                            if oldValue is undefined and not isEarlyInitTime
+                                # Since we have a hack to call all the onChange handlers early at component
+                                # init time, we need to stifly the onChange function called with the same arguments
+                                # again at afterFlush time.
+                                return
+
+                            _pushDebugFlag propSpec.debug ? componentSpec.debug
+                            if componentDebug
+                                console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
+                                console.debug "        old:", J.util.consolify oldValue
+                                console.debug "        new:", J.util.consolify newValue
+
+                            propSpec.onChange?.call @, oldValue, newValue
+
+                            _popDebugFlag()
+
+                        creator: null
+                    )
+
+                if propSpec.onChange? then setupLazyProp()
+
+                @prop[propName] = =>
+                    if @_lazyProps[propName]?
                         _pushDebugFlag propSpec.debug ? componentSpec.debug
+
+                        try
+                            propValue = @_lazyProps[propName].get()
+                        catch e
+                            if e instanceof J.VALUE_NOT_READY
+                                propValue = e
+                            else
+                                throw e
+
                         if componentDebug
-                            console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
-                            console.debug "        old:", J.util.consolify oldValue
-                            console.debug "        new:", J.util.consolify newValue
-
-                        propSpec.onChange.call @, oldValue, newValue
-
+                            console.debug _getDebugPrefix(@), "prop.#{propName}()", propValue
                         _popDebugFlag()
 
-            @prop[propName] = do (propName, propSpec) => =>
-                _pushDebugFlag propSpec.debug ? componentSpec.debug
+                        if propValue instanceof J.VALUE_NOT_READY
+                            throw propValue
+                        else
+                            return propValue
 
-                ret = @_props[propName].get()
+                    propValue = @_props[propName].get()
 
-                if componentDebug
-                    console.debug _getDebugPrefix(@), "prop.#{propName}()", ret
-                _popDebugFlag()
+                    if _.isFunction(propValue) and propSpec.type isnt $$.func
+                        setupLazyProp()
+                        @prop[propName]()
 
-                ret
+                    else
+                        propValue
+
+
 
         # Set up @reactives
         # Note that stateFieldSpec.default functions can try calling reactives.
@@ -298,18 +366,8 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Set up @state
         initialState = {}
-        if J.Routable in (componentSpec.mixins ? []) and @stateFromRoute?
-            stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
-            for stateFieldName, initialValue of stateFromRoute
-                if stateFieldName not of componentSpec.state
-                    throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
-                        #{JSON.stringify stateFieldName}"
-        else
-            stateFromRoute = {}
         for stateFieldName, stateFieldSpec of componentSpec.state
-            if stateFromRoute[stateFieldName] isnt undefined
-                initialValue = stateFromRoute[stateFieldName]
-            else if _.isFunction stateFieldSpec.default
+            if _.isFunction stateFieldSpec.default
                 # TODO: If the type is J.$function then use the other if-branch
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                 if componentDebug
@@ -348,8 +406,9 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Call all the onChange handlers synchronously because they might initialize
         # the state during a cascading React render thread.
-        for propName, propVar of @_props
-            propVar.onChange? undefined, propVar._value
+        for lazyPropName, lazyPropAutoVar of @_lazyProps
+            propVar = @_props[lazyPropName]
+            lazyPropAutoVar.onChange? undefined, propVar._value, true
         for stateFieldName, stateVar of @state
             stateVar.onChange? undefined, stateVar._value
 
@@ -371,7 +430,26 @@ J._defineComponent = (componentName, componentSpec) ->
     reactSpec.componentWillReceiveProps = (nextProps) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
+        ###
+            When props have type $$.dict or $$.list, we'll do a deep comparison
+            to avoid unnecessary reactive triggers.
+            To switch this behavior to naive J.Var behavior, use type $$.var.
+        ###
+
         for propName, newValue of nextProps
+            propSpec = propSpecs[propName]
+
+            if propSpec.type isnt $$.var
+                # Consider equal deep values to be equal and skip setting
+                # the J.Var to avoid invalidation propagation
+
+                oldValue = Tracker.nonreactive => @_props[propName].get()
+
+                continue if (
+                    (oldValue instanceof J.Dict or oldValue instanceof J.List) and
+                    oldValue.deepEquals(newValue)
+                )
+
             @_props[propName].set J.util.withoutUndefined newValue
 
 
@@ -429,6 +507,8 @@ J._defineComponent = (componentName, componentSpec) ->
         @_elementVar.stop()
 
         J.fetching._deleteComputationQsRequests @_elementVar
+        for lazyPropName, lazyPropVar of @_lazyProps
+            lazyPropVar.stop()
         for reactiveName, reactiveVar of @reactives
             reactiveVar.stop()
 
@@ -450,11 +530,14 @@ J._defineComponent = (componentName, componentSpec) ->
         if reactiveName not of @reactives
             throw new Meteor.Error "Invalid reactive name: #{@}.#{reactiveName}"
 
-        J.tryGet(
-            => @reactives[reactiveName].get()
-            defaultValue
-        )
+        @reactives[reactiveName].tryGet defaultValue
 
+
+    reactSpec.tryGetProp = (propName, defaultValue) ->
+        if propName not of @_props
+            throw new Meteor.Error "Invalid prop name: #{@}.#{propName}"
+
+        J.tryGet @prop[propName], defaultValue
 
 
     reactSpec.renderLoader ?= ->
@@ -503,6 +586,13 @@ J._defineComponent = (componentName, componentSpec) ->
                 if firstRun
                     firstRun = false
                     Tracker.onInvalidate => @_valid.set false
+
+                    if J.Routable in (componentSpec.mixins ? [])
+                        # If the URL changes, that will cause all the Routable
+                        # components to need to be re-rendered. Otherwise
+                        # shouldComponentUpdate will block ReactRouter functionality.
+                        J._urlVar.get()
+
                     unpackRenderSpec componentSpec.render.apply @
 
                 else

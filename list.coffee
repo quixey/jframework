@@ -284,6 +284,38 @@ class J.List
         )
 
 
+    deepEquals: (other) ->
+        ###
+            Like J.util.deepEquals except returns false if
+            @ or other have any dead parts (unless the dead parts
+            are equal by reference)
+        ###
+        return true if @ is other
+
+        deadNodesToIds = (node) ->
+            if node instanceof J.Dict
+                if node.isActive()
+                    deadNodesToIds node.getFields()
+                else
+                    node._id
+            else if node instanceof J.List
+                if node.isActive()
+                    deadNodesToIds node.getValues()
+                else
+                    return node._id
+            else if J.util.isPlainObject node
+                ret = {}
+                for key, value of node
+                    ret[key] = deadNodesToIds value
+                ret
+            else if _.isArray node
+                (deadNodesToIds(v) for v in node)
+            else
+                node
+
+        J.util.deepEquals deadNodesToIds(@), deadNodesToIds(other)
+
+
     extend: (values) ->
         size = Tracker.nonreactive => @size()
         for value in (Tracker.nonreactive => @constructor.unwrap values)
