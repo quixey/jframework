@@ -14,7 +14,7 @@ J.c = J._componentById = {} # componentId: component
 J.cid = J._componentDomById = {} # componentId: componentDOMNode
 J.cn = J._componentsByName = {} # componentName: {componentId: component}
 J.cd = J._componentDomsByName = {} # componentName: {componentId: componentDOMNode}
-nextComponentId = 0
+J._nextComponentId = 0
 
 # Queue up all component definitions to help the J
 # framework startup sequence. E.g. all models
@@ -150,6 +150,28 @@ J._defineComponent = (componentName, componentSpec) ->
     # we wrap it in withoutUndefined.
     reactiveSpecByName = _.clone componentSpec.reactives ? {}
     if J.Routable in (componentSpec.mixins ? [])
+        ###
+            Set up reactives._urlWatcher whose onChange triggers stateFromRoute. This
+            onChange handler should run *before* the first onChange handler of
+            reactives.route.
+        ###
+        if componentSpec.stateFromRoute?
+            reactiveSpecByName._urlWatcher =
+                val: ->
+                    J._urlVar.get()
+                early: true
+                onChange: (oldUrl, newUrl) ->
+                    stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
+                    for stateFieldName, initialValue of stateFromRoute
+                        if stateFieldName not of componentSpec.state
+                            throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
+                                    #{JSON.stringify stateFieldName}"
+                    @set stateFromRoute
+
+
+        ###
+            Set up reactives.route.
+        ###
         origRouteValFunc = reactiveSpecByName.route?.val ? ->
             params: {}
             query: {}
@@ -161,11 +183,14 @@ J._defineComponent = (componentName, componentSpec) ->
             currentRoutes = @getRoutes()
             lastRoute = currentRoutes[currentRoutes.length - 1]
             isLastRoute = lastRoute.handler.displayName is @constructor.displayName
+            console.log 'pushNewRoute', @toString(), isLastRoute, lastRoute.name, oldRouteSpec?.toObj(), newRouteSpec?.toObj()
 
             if isLastRoute and lastRoute.name?
                 newPath = @makeGoodPath lastRoute.name,
                     newRouteSpec.get('params')?.toObj() ? {},
                     newRouteSpec.get('query')?.toObj() ? {}
+                console.log 'newPath: ', newPath
+                console.log 'URI().resource: ', URI().resource()
                 if newPath isnt URI().resource()
                     ReactRouter.HistoryLocation.push newPath
 
@@ -176,17 +201,6 @@ J._defineComponent = (componentName, componentSpec) ->
                 pushNewRoute.call @, oldRouteSpec, newRouteSpec
         else
             reactiveSpecByName.route.onChange = pushNewRoute
-
-        if componentSpec.stateFromRoute?
-            reactiveSpecByName._urlWatcher =
-                val: -> J._urlVar.get()
-                onChange: ->
-                    stateFromRoute = J.util.withoutUndefined @stateFromRoute @getParams(), @_cleanQueryFromRaw()
-                    for stateFieldName, initialValue of stateFromRoute
-                        if stateFieldName not of componentSpec.state
-                            throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
-                                    #{JSON.stringify stateFieldName}"
-                    @set stateFromRoute
 
     for reactiveName, reactiveSpec of reactiveSpecByName
         if reactiveName of reactSpec
@@ -211,8 +225,8 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.getInitialState = ->
-        @_componentId = nextComponentId
-        nextComponentId += 1
+        @_componentId = J._nextComponentId
+        J._nextComponentId += 1
         J._componentById[@_componentId] = @
         J._componentsByName[componentName] ?= {}
         J._componentsByName[componentName][@_componentId] = @
@@ -270,13 +284,14 @@ J._defineComponent = (componentName, componentSpec) ->
                         if propSpec.onChange? then (oldValue, newValue, isEarlyInitTime) =>
                             if oldValue is undefined and not isEarlyInitTime
                                 # Since we have a hack to call all the onChange handlers early at component
-                                # init time, we need to stifly the onChange function called with the same arguments
+                                # init time, we need to stifle the onChange function called with the same arguments
                                 # again at afterFlush time.
                                 return
 
                             _pushDebugFlag propSpec.debug ? componentSpec.debug
                             if componentDebug
-                                console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!"
+                                console.debug _getDebugPrefix(@), "prop.#{propName}.onChange!
+                                    #{if isEarlyInitTime then '(early)' else ''}"
                                 console.debug "        old:", J.util.consolify oldValue
                                 console.debug "        new:", J.util.consolify newValue
 
@@ -349,10 +364,17 @@ J._defineComponent = (componentName, componentSpec) ->
 
                         retValue
 
-                    if _.isFunction reactiveSpec.onChange then (oldValue, newValue) =>
+                    if _.isFunction reactiveSpec.onChange then (oldValue, newValue, isEarlyInitTime) =>
+                        if reactiveSpec.early and oldValue is undefined and not isEarlyInitTime
+                            # Since we have a hack to call all the onChange handlers early at component
+                            # init time, we need to stifle the onChange function called with the same arguments
+                            # again at afterFlush time.
+                            return
+
                         _pushDebugFlag reactiveSpec.debug ? componentSpec.debug
                         if componentDebug
-                            console.debug "    #{@toString()}.#{reactiveName}.onChange!"
+                            console.debug "    #{@toString()}.#{reactiveName}.onChange!
+                                #{if isEarlyInitTime then '(early)' else ''}"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
@@ -389,10 +411,11 @@ J._defineComponent = (componentName, componentSpec) ->
                     stateFieldName: stateFieldName
                     tag: "#{@toString()}.state.#{stateFieldName}"
                 onChange: if stateFieldSpec.onChange? then do (stateFieldName, stateFieldSpec) =>
-                    (oldValue, newValue) =>
+                    (oldValue, newValue, isEarlyInitTime) =>
                         _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                         if componentDebug
-                            console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!"
+                            console.debug _getDebugPrefix(@), "state.#{stateFieldName}.onChange!
+                                #{if isEarlyInitTime then '(early)' else ''}"
                             console.debug "        old:", J.util.consolify oldValue
                             console.debug "        new:", J.util.consolify newValue
 
@@ -409,8 +432,13 @@ J._defineComponent = (componentName, componentSpec) ->
         for lazyPropName, lazyPropAutoVar of @_lazyProps
             propVar = @_props[lazyPropName]
             lazyPropAutoVar.onChange? undefined, propVar._value, true
+        for reactiveName, reactiveAutoVar of @reactives
+            reactiveSpec = reactiveSpecByName[reactiveName]
+            if reactiveSpec.early
+                reactiveValue = reactiveAutoVar.get()
+                reactiveAutoVar.onChange undefined, reactiveValue, true
         for stateFieldName, stateVar of @state
-            stateVar.onChange? undefined, stateVar._value
+            stateVar.onChange? undefined, stateVar._value, true
 
         # Return initialState to React
         initialState
@@ -646,6 +674,18 @@ $$ = (elemType, props, children...) ->
         args[0] = J.components[elemType]
 
     React.createElement.apply React, args
+
+
+J.lazy = (childrenFunc) ->
+    componentName = "_Lazy#{J.getNextId()}"
+
+    J._defineComponent componentName,
+        _isLazy: true
+
+        render: ->
+            childrenFunc()
+
+    $$ (componentName)
 
 
 Meteor.startup ->

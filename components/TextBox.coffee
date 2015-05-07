@@ -23,32 +23,17 @@ J.dc 'TextBox',
             type: $$.obj
             default: J.Dict()
         value:
-            doc: """
-                Can be a string or a reactive expression. If set,
-                the component behavior is that of a Controlled Component
-                just like React's native textbox.
-            """
-            type: $$.var
+            type: $$.str
 
     state:
-        _refreshOnValueChange:
-            default: true
-
         localValue:
-            default: -> @prop.value() ? @prop.defaultValue() ? ''
+            default: -> @prop.defaultValue() ? ''
 
     reactives:
         value:
             val: ->
-                if @prop.value()?
-                    if _.isFunction @prop.value()
-                        @prop.value()()
-                    else if _.isString @prop.value()
-                        @prop.value()
-                    else
-                        throw new Error "Invalid prop.value for #{@toString()}: #{@prop.value()}"
-                else
-                    @localValue()
+                @prop.value() ? @localValue()
+            early: true
             onChange: (oldValue, newValue) ->
                 @afterRender => @_refreshText()
 
@@ -94,7 +79,7 @@ J.dc 'TextBox',
                     @prop.onChange()? e
                     @afterRender => @_refreshText()
                 else
-                    @value e.target.value
+                    @localValue e.target.value
                     @prop.onChange()? e
             onKeyDown: @prop.onKeyDown()
             onKeyUp: @prop.onKeyUp()
