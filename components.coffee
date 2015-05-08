@@ -166,6 +166,7 @@ J._defineComponent = (componentName, componentSpec) ->
                         if stateFieldName not of componentSpec.state
                             throw new Error "#{@toString()}.stateFromRoute returned invalid stateFieldName:
                                     #{JSON.stringify stateFieldName}"
+                    _.extend @_canonicalState, stateFromRoute
                     @set stateFromRoute
 
 
@@ -186,13 +187,31 @@ J._defineComponent = (componentName, componentSpec) ->
             console.log 'pushNewRoute', @toString(), isLastRoute, lastRoute.name, oldRouteSpec?.toObj(), newRouteSpec?.toObj()
 
             if isLastRoute and lastRoute.name?
-                newPath = @makeGoodPath lastRoute.name,
-                    newRouteSpec.get('params')?.toObj() ? {},
-                    newRouteSpec.get('query')?.toObj() ? {}
-                console.log 'newPath: ', newPath
-                console.log 'URI().resource: ', URI().resource()
+                newParams = newRouteSpec.get('params')?.toObj() ? {}
+                newQuery = newRouteSpec.get('query')?.toObj() ? {}
+                newStateDelta =
+                    if @stateFromRoute?
+                        J.util.withoutUndefined @stateFromRoute newParams, newQuery
+                    else
+                        {}
+
+                oldStateFields = J.Dict()
+                for stateFieldName, stateFieldValue of newStateDelta
+                    oldStateFields.setOrAdd stateFieldName, @_canonicalState[stateFieldName]
+
+                newPath = @makeGoodPath lastRoute.name, newParams, newQuery
+
+                console.log 'Old URI().resource: ', URI().resource()
+
+                console.log "oldStateFields", oldStateFields.toObj(), "newStateDelta", newStateDelta
+
+                console.log newPath, "different?", newPath isnt URI().resource(), "push?", not oldStateFields.deepEquals(newStateDelta)
+
                 if newPath isnt URI().resource()
-                    ReactRouter.HistoryLocation.push newPath
+                    if oldStateFields.deepEquals(newStateDelta)
+                        ReactRouter.HistoryLocation.replace newPath
+                    else
+                        ReactRouter.HistoryLocation.push newPath
 
         origOnChange = reactiveSpecByName.route.onChange
         if origOnChange?
@@ -388,9 +407,12 @@ J._defineComponent = (componentName, componentSpec) ->
 
         # Set up @state
         initialState = {}
+
+        # Keep this around to implement stateFromRoute semantics
+        @_canonicalState = {}
+
         for stateFieldName, stateFieldSpec of componentSpec.state
-            if _.isFunction stateFieldSpec.default
-                # TODO: If the type is J.$function then use the other if-branch
+            if _.isFunction(stateFieldSpec.default) and stateFieldSpec.type isnt $$.func
                 _pushDebugFlag stateFieldSpec.debug ? componentSpec.debug
                 if componentDebug
                     console.debug _getDebugPrefix(@), "#{stateFieldName} !default()"
@@ -404,6 +426,8 @@ J._defineComponent = (componentName, componentSpec) ->
                 _popDebugFlag()
             else
                 initialValue = stateFieldSpec.default ? null
+
+            @_canonicalState[stateFieldName] = initialValue
 
             initialState[stateFieldName] = J.Var initialValue,
                 tag:

@@ -145,7 +145,7 @@ J.util =
 
         else if J.util.isPlainObject(a) and J.util.isPlainObject(b)
             J.util.equals(_.keys(a).sort(), _.keys(b).sort()) and _.all(
-                J.util.equals(a[k], b[k]) for k of a
+                J.util.deepEquals(a[k], b[k]) for k of a
             )
 
         else
