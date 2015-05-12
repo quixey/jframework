@@ -276,7 +276,11 @@ J._defineComponent = (componentName, componentSpec) ->
                         component: @
                         propName: propName
                         tag: "#{@toString()}.prop.#{propName}"
-
+                    equalsFunc: (a, b) =>
+                        J.util.equals(a, b) or (
+                            (a instanceof J.Dict or a instanceof J.List) and
+                            a.deepEquals(b)
+                        )
 
                 ###
                     @_lazyProps[propName] is a relatively heavy reactive computation that
@@ -459,8 +463,11 @@ J._defineComponent = (componentName, componentSpec) ->
         for reactiveName, reactiveAutoVar of @reactives
             reactiveSpec = reactiveSpecByName[reactiveName]
             if reactiveSpec.early
+                if not reactiveAutoVar.onChange?
+                    throw new Error "AutoVar is set to early but has no onChange value"
                 reactiveValue = reactiveAutoVar.get()
-                reactiveAutoVar.onChange undefined, reactiveValue, true
+                if _.isFunction reactiveAutoVar.onChange
+                    reactiveAutoVar.onChange undefined, reactiveValue, true
         for stateFieldName, stateVar of @state
             stateVar.onChange? undefined, stateVar._value, true
 
@@ -482,26 +489,7 @@ J._defineComponent = (componentName, componentSpec) ->
     reactSpec.componentWillReceiveProps = (nextProps) ->
         componentSpec.componentWillReceiveProps?.call @, nextProps
 
-        ###
-            When props have type $$.dict or $$.list, we'll do a deep comparison
-            to avoid unnecessary reactive triggers.
-            To switch this behavior to naive J.Var behavior, use type $$.var.
-        ###
-
         for propName, newValue of nextProps
-            propSpec = propSpecs[propName]
-
-            if propSpec.type isnt $$.var
-                # Consider equal deep values to be equal and skip setting
-                # the J.Var to avoid invalidation propagation
-
-                oldValue = Tracker.nonreactive => @_props[propName].get()
-
-                continue if (
-                    (oldValue instanceof J.Dict or oldValue instanceof J.List) and
-                    oldValue.deepEquals(newValue)
-                )
-
             @_props[propName].set J.util.withoutUndefined newValue
 
 

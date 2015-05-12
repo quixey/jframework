@@ -59,6 +59,7 @@ J.dc 'TextBox',
             inpText.selectionStart = newPos
             inpText.selectionEnd = newPos
 
+
     focus: ->
         @afterRender =>
             @refs.inpText.getDOMNode().focus()

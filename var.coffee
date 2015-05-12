@@ -71,6 +71,8 @@ class J.Var
             throw new Meteor.Error "Invalid Var creator: #{options.creator}"
         @creator?.onInvalidate => delete @creator
 
+        @equalsFunc = options?.equalsFunc ? null
+
         @tag = if J.debugTags then J.util.stringifyTag(options?.tag) else null
         if _.isFunction options?.onChange
             @onChange = options.onChange
@@ -138,7 +140,7 @@ class J.Var
             if previousValue not instanceof J.VALUE_NOT_READY
                 @_previousReadyValue = previousValue
 
-        if not J.util.equals newValue, previousValue
+        if not (@equalsFunc ? J.util.equals) newValue, previousValue
             for getter in _.clone @_getters
                 unless getter is setter is @creator
                     getter.invalidate()
@@ -146,7 +148,7 @@ class J.Var
         if (
             @onChange? and
             @_value not instanceof J.VALUE_NOT_READY and
-            not J.util.equals @_previousReadyValue, @_value
+            not (@equalsFunc ? J.util.equals) @_previousReadyValue, @_value
         )
             # Need lexically scoped oldValue and newValue because the
             # current behavior is to save a series of changes.
