@@ -349,6 +349,8 @@ J.util =
             x
         else if _.isBoolean(x)
             if x then 1 else 0
+        else if x? and typeof x is 'object' and 'sortKey' of x
+            J.util.getField x, 'sortKey'
         else if x? and typeof x is 'object' and 'key' of x
             J.util.getField x, 'key'
         else

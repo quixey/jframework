@@ -300,7 +300,7 @@ J._defineComponent = (componentName, componentSpec) ->
                             propValue = @_props[propName].get()
 
                             if _.isFunction(propValue) and propSpec.type isnt $$.func
-                                propValue()
+                                propValue.call @
                             else
                                 propValue
 

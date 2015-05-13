@@ -355,6 +355,7 @@ class J.List
                 just because making them coarse-grained
                 is saving memory.
         ###
+        f = J.util._makeKeyFunc f
         ready = true
         ret = for i in [0...@size()]
             try
@@ -442,6 +443,7 @@ class J.List
 
     map: (f = _.identity, tag) ->
         # Enables parallel fetching
+        f = J.util._makeKeyFunc f
         tag ?= (
             tag: "mapped(#{@toString()})"
             sourceList: @
