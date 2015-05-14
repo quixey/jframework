@@ -28,18 +28,19 @@
 
 class J.Model
     @_getUnescapedSubDoc = (subDoc) ->
-        unescapeDot = (key) =>
-            key.replace /\*DOT\*/g, '.'
-
         if J.util.isPlainObject subDoc
             ret = {}
             for key, value of subDoc
-                ret[unescapeDot key] = @_getUnescapedSubDoc value
+                ret[@unescapeDot key] = @_getUnescapedSubDoc value
             ret
         else if _.isArray subDoc
             @_getUnescapedSubDoc x for x in subDoc
         else
             subDoc
+
+
+    @escapeDot = (key) ->
+        key.replace /\./g, '*DOT*'
 
 
     @fromJSONValue: (jsonValue) ->
@@ -66,6 +67,37 @@ class J.Model
                 fields[fieldName] = J.makeValueNotReadyObject()
 
         new @ fields
+
+
+    @toSubdoc: (x, denormalizeModels = true) ->
+        helper = (value) =>
+            if value instanceof J.Dict
+                helper value.getFields()
+            else if value instanceof J.List
+                helper value.getValues()
+            if _.isArray(value)
+                (helper v for v in value)
+            else if J.util.isPlainObject(value)
+                ret = {}
+                for k, v of value
+                    ret[@escapeDot k] = helper v
+                ret
+            else if value instanceof J.Model
+                value.toDoc denormalizeModels
+            else if (
+                _.isNumber(value) or _.isBoolean(value) or _.isString(value) or
+                    value instanceof Date or value instanceof RegExp or
+                    value is null or value is undefined
+            )
+                value
+            else
+                throw new Meteor.Error "Unsupported value type: #{value}"
+
+        helper x
+
+
+    @unescapeDot = (key) =>
+        key.replace /\*DOT\*/g, '.'
 
 
     clone: ->
@@ -194,29 +226,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        escapeDot = (key) ->
-            key.replace /\./g, '*DOT*'
-
-        toPrimitiveEjsonObj = (value) =>
-            if _.isArray(value)
-                (toPrimitiveEjsonObj v for v in value)
-            else if J.util.isPlainObject(value)
-                ret = {}
-                for k, v of value
-                    ret[escapeDot k] = toPrimitiveEjsonObj v
-                ret
-            else if value instanceof J.Model
-                value.toDoc denormalize
-            else if (
-                _.isNumber(value) or _.isBoolean(value) or _.isString(value) or
-                value instanceof Date or value instanceof RegExp or
-                value is null or value is undefined
-            )
-                value
-            else
-                throw new Meteor.Error "Unsupported value type: #{value}"
-
-        doc = toPrimitiveEjsonObj @_fields.toObj()
+        doc = J.Model.toSubdoc(@_fields.toObj(), denormalize)
 
         if denormalize and @modelClass.idSpec is J.PropTypes.key
             key = @key()
