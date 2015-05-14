@@ -346,6 +346,17 @@ class J.Dict
         not @creator?.invalidated
 
 
+    map: (f = _.identity) ->
+        items = J.List(
+            (
+                key: key
+                value: value
+            ) for key, value of @getFields()
+        )
+        items.map (item) =>
+            f item.key(), item.value()
+
+
     set: (fields) ->
         setter = Tracker.currentComputation
         if not @isActive()

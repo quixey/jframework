@@ -273,10 +273,24 @@ J.util =
         return false if obj._isReactElement
         true
 
-    makeSet: (arr) ->
+    makeObj: (arr, keySpec = 'key') ->
+        keyFunc = J.util._makeKeyFunc keySpec
         dictSet = {}
-        for x in arr
-            dictSet[x] = true
+        for value in arr
+            key = keyFunc value
+            if key of dictSet
+                throw new Error 'Duplicate key'
+            dictSet[key] = value
+        dictSet
+
+    makeSet: (arr, keySpec = _.identity) ->
+        keyFunc = J.util._makeKeyFunc keySpec
+        dictSet = {}
+        for value in arr
+            key = keyFunc value
+            if key of dictSet
+                throw new Error 'Duplicate key'
+            dictSet[key] = true
         dictSet
 
     makeParamString: (params) ->
