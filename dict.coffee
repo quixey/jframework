@@ -302,8 +302,10 @@ class J.Dict
 
     forEach: (f) ->
         # Returns an array
-        f key, value for key, value of @getFields()
-
+        i = 0
+        for key, value of @getFields()
+            i += 1
+            f key, value, i
 
     get: (key) ->
         @_get key, false
@@ -353,8 +355,8 @@ class J.Dict
                 value: value
             ) for key, value of @getFields()
         )
-        items.map (item) =>
-            f item.key(), item.value()
+        items.map (item, i) =>
+            f item.key(), item.value(), i
 
 
     set: (fields) ->

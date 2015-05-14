@@ -695,7 +695,7 @@ J.lazy = (childrenFunc) ->
         _isLazy: true
 
         render: ->
-            childrenFunc()
+            childrenFunc() ? null
 
     $$ (componentName)
 

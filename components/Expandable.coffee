@@ -14,25 +14,46 @@ J.dc 'Expandable',
         contractedChildren:
             type: $$.bool
             default: true
+        expanded:
+            type: $$.bool
         initialExpanded:
+            type: $$.bool
             default: false
         iconSize:
             default: 14
+        onChange:
+            type: $$.func
         style:
             type: $$.style
             default: {}
 
     state:
-        expanded:
+        localExpanded:
+            type: $$.bool
             default: -> @prop.initialExpanded()
+            onChange: (__, localExpanded) ->
+                if not @prop.expanded()?
+                    @prop.onChange()? expanded: localExpanded
 
+    reactives:
+        expanded:
+            val: ->
+                @prop.expanded() ? @localExpanded()
 
     render: ->
+        handleChangeEvent = (newExpanded) =>
+            if @prop.expanded()?
+                # Controlled Component mode
+                @prop.onChange()? expanded: newExpanded
+            else
+                @localExpanded newExpanded
+            null
+
         $$ ('div'),
             style: @prop.style().toObj()
             onClick:
                 if not @expanded()
-                    (e) => @expanded true
+                    (e) => handleChangeEvent true
 
             $$ ('TableRow'),
                 style:
@@ -46,7 +67,7 @@ J.dc 'Expandable',
                         cursor: 'pointer'
                     onClick:
                         if @expanded()
-                            (e) => @expanded false
+                            (e) => handleChangeEvent false
 
                     $$ ('img'),
                         src: "/images/#{if @expanded() then 'expanded.png' else 'contracted.png'}"
@@ -64,7 +85,7 @@ J.dc 'Expandable',
                                 cursor: 'pointer'
                             onClick:
                                 if @expanded()
-                                    (e) => @expanded false
+                                    (e) => handleChangeEvent false
 
                             (@prop.heading())
 
