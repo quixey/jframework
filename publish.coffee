@@ -287,4 +287,4 @@ updateObservers = (dataSessionId) ->
                 @removed modelClass.collection._name, docId
             else if not _.isEmpty changedFields
                 # log querySpec, "passing along CHANGED", docId, changedFields
-                @changed modelClass.collection._name, id, changedFields
+                @changed modelClass.collection._name, docId, changedFields
