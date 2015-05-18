@@ -565,6 +565,24 @@ class J.List
         arr
 
 
+    tryGetValues: ->
+        @tryGet(i) for i in [0...@size()]
+
+
+    tryToArr: ->
+        values = @tryGetValues()
+
+        arr = []
+        for value, i in values
+            if value instanceof J.Dict
+                arr.push value.tryToObj()
+            else if value instanceof J.List
+                arr.push value.tryToArr()
+            else
+                arr.push value
+        arr
+
+
     toString: ->
         s = "List[#{@_id}]"
         if @tag then s += "(#{J.util.stringifyTag @tag})"
