@@ -445,6 +445,22 @@ class J.Dict
         )
 
 
+    tryGetFields: (keys = @getKeys()) ->
+        keysArr = J.List.unwrap keys
+        fields = {}
+        if @fineGrained
+            for key in keysArr
+                fields[key] = @tryGet key
+        else
+            allFields = @_fieldsVar.tryGet()
+            if allFields is undefined
+                fields = undefined
+            else
+                for key in keysArr
+                    fields[key] = allFields[key]
+        fields
+
+
     toString: ->
         s = "Dict[#{@_id}]"
         if @tag then s += "(#{J.util.stringifyTag @tag})"

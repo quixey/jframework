@@ -206,7 +206,23 @@ updateObservers = (dataSessionId) ->
             added: (id, fields) =>
                 # log querySpec, "server says ADDED:", id, fields
 
-                if id not of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
+                if id of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
+                    # The set of fieldSpecs being watched on this doc may have grown.
+                    changedFields = {}
+
+                    for fieldName, value of fields
+                        oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
+                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                        newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                        if not EJSON.equals oldValue, newValue
+                            changedFields[fieldName] = value
+
+                    if not _.isEmpty changedFields
+                        # log querySpec, "sending CHANGED:", id, changedFields
+                        @changed modelClass.collection._name, id, changedFields
+
+                else
                     # log querySpec, "sending ADDED:", id, fields
                     @added modelClass.collection._name, id, fields
 
