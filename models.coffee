@@ -431,7 +431,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                 changed: (id, fields) ->
                     instance = collection._attachedInstances[id]
-                    instance._fields._forceSet modelClass._getUnescapedSubDoc fields
+                    setter = modelClass._getUnescapedSubDoc fields
+                    for fieldName, value of setter
+                        if value is undefined
+                            setter[fieldName] = J.makeValueNotReadyObject()
+                    instance._fields._forceSet setter
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
