@@ -461,6 +461,20 @@ class J.Dict
         fields
 
 
+    tryToObj: ->
+        fields = @tryGetFields()
+
+        obj = {}
+        for key, value of fields
+            if value instanceof J.Dict
+                obj[key] = value.tryToObj()
+            else if value instanceof J.List
+                obj[key] = value.tryToArr()
+            else
+                obj[key] = value
+        obj
+
+
     toString: ->
         s = "Dict[#{@_id}]"
         if @tag then s += "(#{J.util.stringifyTag @tag})"

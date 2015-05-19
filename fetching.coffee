@@ -36,6 +36,41 @@ J.fetching =
                 qs.selector._id.$in
 
 
+    checkQuerySpec: (querySpec) ->
+        ###
+            Throws an error if the querySpec is invalid
+        ###
+
+        if querySpec.fields?
+            for sKey, sValue of querySpec.selector
+                if sKey[0] isnt '$'
+                    ok = false
+                    for fKey, fValue of querySpec.fields
+                        if fKey.split('.')[0] is sKey
+                            ok = true
+                            break
+                    if not ok
+                        throw new Error "
+                            Missing projection for selector key #{JSON.stringify sKey}.
+                            When fetching with a projection, the projection must
+                            include/exclude every key in the selector so that
+                            the fetch also works as expected on the client."
+
+            if querySpec.sort? then for sKey, sValue of querySpec.sort
+                if sKey[0] isnt '$'
+                    ok = false
+                    for fKey, fValue of querySpec.fields
+                        if fKey.split('.')[0] is sKey
+                            ok = true
+                            break
+                    if not ok
+                        throw new Error "
+                            Missing projection for sort key #{JSON.stringify sKey}.
+                            When fetching with a projection, the projection must
+                            include/exclude every key in the sort so that
+                            the fetch also works as expected on the client."
+
+
     isQueryReady: (querySpec) ->
         querySpecString = EJSON.stringify querySpec
         simpleIds = @_getIdsForSimpleIdQs querySpec
@@ -168,6 +203,8 @@ J.fetching =
 
     requestQuery: (querySpec) ->
         J.assert Tracker.active
+
+        @checkQuerySpec querySpec
 
         qsString = EJSON.stringify querySpec
         computation = Tracker.currentComputation
