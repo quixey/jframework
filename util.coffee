@@ -334,15 +334,26 @@ J.util =
         # This hack works
         textInputDomNode.value = textInputDomNode.value
 
-    setField: (obj, fieldSpec, value) ->
+    setField: (obj, fieldSpec, value, autoDeep = false) ->
         if fieldSpec.indexOf('?') >= 0
             throw new Error "No question marks allowed in setter fieldSpecs"
+        if not J.util.isPlainObject obj
+            throw new Error "Invalid obj argument to setField: #{obj}"
 
         fieldSpecParts = fieldSpec.split '.'
-        if fieldSpecParts.length > 1
-            obj = J.util.getField obj, fieldSpecParts[0...-1].join('.')
 
-        obj[fieldSpecParts[fieldSpecParts.length - 1]] = value
+        if fieldSpecParts.length is 1
+            obj[fieldSpecParts[0]] = value
+        else
+            if fieldSpecParts[0] not of obj
+                if autoDeep
+                    obj[fieldSpecParts[0]] = {}
+                else
+                    throw new Error "Can't find fieldSpec to set: #{fieldSpec}"
+
+            @setField obj[fieldSpecParts[0]], fieldSpecParts[1...].join(','), value, autoDeep
+
+        null
 
     _makeKeyFunc: (keySpec) ->
         if _.isString keySpec

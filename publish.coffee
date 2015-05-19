@@ -168,6 +168,13 @@ getMergedQuerySpecs = (querySpecSet) =>
     mergedQuerySpecs
 
 
+TIME = 0
+setInterval(
+    ->
+        console.log "GETFIELD TIME = ", TIME
+    2000
+)
+
 updateObservers = (dataSessionId) ->
     log = ->
         newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
@@ -185,6 +192,30 @@ updateObservers = (dataSessionId) ->
     # console.log "qsStringsDiff", qsStringsDiff
 
     fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
+
+    getMergedSubfields = (a, b) ->
+        return a if b is undefined
+        return b if a is undefined
+
+        if J.util.isPlainObject(a) and J.util.isPlainObject(b)
+            keySet = {}
+            keySet[key] = true for key of a
+            keySet[key] = true for key of b
+            ret = {}
+            for key of keySet
+                ret[key] = getMergedSubfields a[key], b[key]
+            ret
+        else
+            if not EJSON.equals a, b
+                throw new Error "Can't merge subfields: #{JSON.stringify a}, #{JSON.stringify b}"
+            a
+
+    getField = (modelName, id, fieldName) ->
+        startTime = new Date().getTime()
+        fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
+        ret = _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
+        TIME += new Date().getTime() - startTime
+        ret
 
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
@@ -207,16 +238,16 @@ updateObservers = (dataSessionId) ->
                 # log querySpec, "server says ADDED:", id, fields
 
                 if id of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
-                    # The set of fieldSpecs being watched on this doc may have grown.
+                    # The set of projections being watched on this doc may have grown.
                     changedFields = {}
 
                     for fieldName, value of fields
-                        oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                        oldValue = getField querySpec.modelName, id, fieldName
                         fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
                         fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
-                        newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                        newValue = getField querySpec.modelName, id, fieldName
                         if not EJSON.equals oldValue, newValue
-                            changedFields[fieldName] = value
+                            changedFields[fieldName] = newValue
 
                     if not _.isEmpty changedFields
                         # log querySpec, "sending CHANGED:", id, changedFields
@@ -238,12 +269,12 @@ updateObservers = (dataSessionId) ->
                 changedFields = {}
 
                 for fieldName, value of fields
-                    oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                    oldValue = getField querySpec.modelName, id, fieldName
                     fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
                     fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
-                    newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ? {})?[0]
+                    newValue = getField querySpec.modelName, id, fieldName
                     if not EJSON.equals oldValue, newValue
-                        changedFields[fieldName] = value
+                        changedFields[fieldName] = newValue
 
                 if not _.isEmpty changedFields
                     # log querySpec, "sending CHANGED:", id, changedFields
@@ -255,9 +286,9 @@ updateObservers = (dataSessionId) ->
                 changedFields = {}
 
                 for fieldName in _.keys fieldsByModelIdQuery[querySpec.modelName][id]
-                    oldValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName])[0]
+                    oldValue = getField querySpec.modelName, id, fieldName
                     delete fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString]
-                    newValue = _.values(fieldsByModelIdQuery[querySpec.modelName][id][fieldName])[0]
+                    newValue = getField querySpec.modelName, id, fieldName
                     if not EJSON.equals oldValue, newValue
                         changedFields[fieldName] = newValue
                     if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id][fieldName]
@@ -289,9 +320,9 @@ updateObservers = (dataSessionId) ->
             changedFields = {}
             for fieldName in _.keys cursorValues
                 valueByQsString = cursorValues[fieldName]
-                oldValue = _.values(valueByQsString)[0]
+                oldValue = getField querySpec.modelName, docId, fieldName
                 delete valueByQsString[qsString]
-                newValue = _.values(valueByQsString)[0]
+                newValue = getField querySpec.modelName, docId, fieldName
                 if not EJSON.equals oldValue, newValue
                     changedFields[fieldName] = newValue
                 if _.isEmpty valueByQsString

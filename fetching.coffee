@@ -51,8 +51,8 @@ J.fetching =
                             break
                     if not ok
                         throw new Error "
-                            Missing fieldSpec for selector key #{JSON.stringify sKey}.
-                            When fetching with a fieldSpec, the fieldSpec must
+                            Missing projection for selector key #{JSON.stringify sKey}.
+                            When fetching with a projection, the projection must
                             include/exclude every key in the selector so that
                             the fetch also works as expected on the client."
 
@@ -65,8 +65,8 @@ J.fetching =
                             break
                     if not ok
                         throw new Error "
-                            Missing fieldSpec for sort key #{JSON.stringify sKey}.
-                            When fetching with a fieldSpec, the fieldSpec must
+                            Missing projection for sort key #{JSON.stringify sKey}.
+                            When fetching with a projection, the projection must
                             include/exclude every key in the sort so that
                             the fetch also works as expected on the client."
 
