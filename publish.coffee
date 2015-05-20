@@ -168,13 +168,6 @@ getMergedQuerySpecs = (querySpecSet) =>
     mergedQuerySpecs
 
 
-TIME = 0
-setInterval(
-    ->
-        console.log "GETFIELD TIME = ", TIME
-    2000
-)
-
 updateObservers = (dataSessionId) ->
     log = ->
         newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
@@ -206,16 +199,19 @@ updateObservers = (dataSessionId) ->
                 ret[key] = getMergedSubfields a[key], b[key]
             ret
         else
-            if not EJSON.equals a, b
-                throw new Error "Can't merge subfields: #{JSON.stringify a}, #{JSON.stringify b}"
+            ###
+                It's possible that a != b (by value) right now because
+                one cursor is triggering an observer for an updated value
+                right before all the other cursors are going to trigger
+                observers for the same updated value. It's fine to just
+                arbitrarily pick (a) and let the merge become eventually
+                consistent.
+            ###
             a
 
     getField = (modelName, id, fieldName) ->
-        startTime = new Date().getTime()
         fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
-        ret = _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
-        TIME += new Date().getTime() - startTime
-        ret
+        _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
 
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
