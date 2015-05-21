@@ -21,7 +21,7 @@ J.makeValueNotReadyObject = ->
     # obj.stack = e.stack
     obj
 
-J.tryGet = (func, defaultValue = undefined) ->
+J.tryGet = (func, defaultValue) ->
     # If value is ready then return it, otherwise
     # return undefined (rather than throwing)
     try
