@@ -503,7 +503,17 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 options = J.Dict(options).toObj()
 
                 if Meteor.isServer
-                    return J.List @find(selector, options).fetch()
+                    instances = J.List @find(selector, options).fetch()
+                    if not options.fields?
+                        # Treat fields that are missing in the Mongo doc as
+                        # having a default value of null.
+                        instances.forEach (instance) =>
+                            setter = {}
+                            for fieldName of @fieldSpecs
+                                if instance.tryGet(fieldName) is undefined
+                                    setter[fieldName] = null
+                            instance.set setter
+                    return instances
 
                 querySpec =
                     modelName: modelName

@@ -357,6 +357,7 @@ class J.List
         ###
         f = J.util._makeKeyFunc f
         ready = true
+        firstNotReadyError = null
         ret = for i in [0...@size()]
             try
                 value = @get i
@@ -371,12 +372,12 @@ class J.List
                     # all the not-ready computations with the data
                     # fetcher that runs during afterFlush.
                     ready = false
-                    e
+                    firstNotReadyError ?= e
                 else
                     console.log e.stack
                     console.trace()
                     throw e
-        if not ready then throw J.makeValueNotReadyObject()
+        if not ready then throw firstNotReadyError
         ret
 
 
