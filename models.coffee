@@ -335,7 +335,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
-        delete nonIdInitFields._reactives
 
         for fieldName, value of nonIdInitFields
             if fieldName not of @modelClass.fieldSpecs
@@ -350,8 +349,14 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @_fields.set fieldName, J.Var.wrap value, true
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
-            key = Tracker.nonreactive => @key()
-            unless @_id is key
+            keyReady = false
+            try
+                key = Tracker.nonreactive => @key()
+                keyReady = true
+            catch e
+                throw e if e not instanceof J.VALUE_NOT_READY
+
+            if keyReady and @_id isnt key
                 console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{key}"
 
         @reactives = {} # reactiveName: autoVar
@@ -359,6 +364,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
                 J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
                     => reactiveSpec.val.call @
+
+        @_reactives = J.Dict() # denormedReactiveName: value
 
         null
 
@@ -436,19 +443,37 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 added: (id, fields) ->
                     doc = _.clone fields
                     doc._id = id
+
+                    reactivesObj = modelClass._getUnescapedSubdoc fields._reactives ? {}
+                    delete fields._reactives
+
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance.attached = true
                     instance._fields.setReadOnly true, true
+
+                    instance._reactives.set reactivesObj
+
                     collection._attachedInstances[id] = instance
 
                 changed: (id, fields) ->
+                    fields = _.clone fields
+
                     instance = collection._attachedInstances[id]
-                    setter = modelClass._getUnescapedSubdoc fields
-                    for fieldName, value of setter
+
+                    reactivesSetter = modelClass._getUnescapedSubdoc fields._reactives
+                    delete fields._reactives
+
+                    fieldsSetter = modelClass._getUnescapedSubdoc fields
+                    for fieldName, value of fieldsSetter
                         if value is undefined
-                            setter[fieldName] = J.makeValueNotReadyObject()
-                    instance._fields._forceSet setter
+                            fieldsSetter[fieldName] = J.makeValueNotReadyObject()
+                    instance._fields._forceSet fieldsSetter
+
+                    for reactiveName, value of reactivesSetter
+                        if value is undefined
+                            reactivesSetter[fieldName] = J.makeValueNotReadyObject()
+                    instance._reactives._forceSet reactivesSetter
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
@@ -462,8 +487,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             # doesn't make use of much reactivity.
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
+                    doc = _.clone doc
+                    reactivesObj = modelClass._getUnescapedSubdoc doc._reactives ? {}
+                    delete doc._reactives
+
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
+
+                    instance._reactives.set reactivesObj
+
                     instance
 
             for indexSpec in modelClass.indexSpecs

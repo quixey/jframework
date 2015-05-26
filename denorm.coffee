@@ -35,19 +35,12 @@ J.denorm =
             Returns modelName: [(instance, reactiveName)]
         ###
 
+        # subFieldSelectorMatcher makes sure every
+        # fieldspec in he watching-selector is consistent
+        # with either oldValues or newValues
         subFieldSelectorMatcher = {}
         subFieldSelectorMatcher["selector._id"] = $in: [null, instanceId]
         subFieldSelectorMatcher["selector._id*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null, instanceId]
-        relevantProjectionSpecKeys = []
-
-        # TODO:
-        # Make sure this watching-selector-matcher is saying
-        # "every fieldspec in he watching-selector is consistent
-        # with either oldValues or newValues"
-
-        # Add a separate part that says "make sure one of the
-        # fieldspecs that have a diffed value is present in the
-        # watching-projection.
 
         addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
             subFieldNameSet = {}
@@ -83,12 +76,17 @@ J.denorm =
 
         addClauses 'selector', oldValues, newValues
 
+        # projectionSpecKeys makes sure one of the fieldspecs
+        # that have a diffed value is present in the
+        # watching-projection.
+        relevantProjectionSpecKeys = []
+        # TODO
 
         watchersByModelReactive = {} # modelName: reactiveName: [instanceId]
         for watcherModelName, watcherModelClass of J.models
             for reactiveName, reactiveSpec of watcherModelClass.reactiveSpecs
                 if reactiveSpec.denorm
-                    # TODO: ignore field selectors if too narrow for current mutation
+                    # TODO: add relevantProjectionSpecKeys logic here too
                     selector = {}
                     selector["_reactives.#{reactiveName}.watching"] =
                         $elemMatch:

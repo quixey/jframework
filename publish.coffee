@@ -216,16 +216,56 @@ updateObservers = (dataSessionId) ->
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
 
-        # log "Add observer for: ", querySpec
+        log "Add observer for: ", querySpec
 
         modelClass = J.models[querySpec.modelName]
 
         options = {}
-        for optionName in ['fields', 'sort', 'skip', 'limit']
+        for optionName in ['sort', 'skip', 'limit']
             if querySpec[optionName]?
                 options[optionName] = querySpec[optionName]
 
-        # TODO: Interpret options.fields with fancy semantics
+        for fieldSpec, include of querySpec.fields ? {}
+            fieldName = fieldSpec.split('.')[0]
+            if not (
+                fieldName is '_id' or
+                fieldName of modelClass.fieldSpecs or
+                fieldName of modelClass.reactiveSpecs
+            )
+                throw new Meteor.Error "Invalid fieldSpec in
+                    #{modelClass.name} projection: #{fieldSpec}"
+
+        if _.values(querySpec.fields ? {})[0] is 1
+            projection = querySpec.fields
+
+        else
+            projection = _id: 1 # fieldOrReactiveName: 1
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                if fieldSpec.include ? true
+                    projection[fieldName] = 1
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.include ? false
+                    projection[reactiveName] = 1
+
+            for fieldSpec, include of querySpec.fields ? {}
+                J.assert include is 0, "Projection can't mix 0s and 1s"
+                fieldName = fieldSpec.split('.')[0]
+                if fieldSpec is fieldName
+                    delete projection[fieldSpec]
+                else
+                    projection[fieldSpec] = 0
+
+        options.fields = {}
+        for fieldSpec, include of projection
+            fieldSpecParts = fieldSpec.split('.')
+            fieldName = fieldSpecParts[0]
+            if fieldName of modelClass.reactiveSpecs
+                reactiveFieldSpec = ["_reactives.#{fieldName}.val"].concat(fieldSpecParts[1...]).join('.')
+                options.fields[reactiveFieldSpec] = include
+            else
+                options.fields[fieldSpec] = include
+
+        console.log 'options.fields: ', JSON.stringify options.fields
 
         cursor = modelClass.collection.find querySpec.selector, options
 
