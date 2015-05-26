@@ -427,10 +427,18 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
             if reactiveSpec.denorm
+                if @attached
+                    # Record that the current computation uses the current reactive
+                    projection = {}
+                    projection[reactiveName] = 1
+                    @modelClass.tryFetchOne @_id,
+                        fields: projection
+
                 @_reactives.get reactiveName
             else
                 if Meteor.isServer
-                    reactiveSpec.val.call @
+                    # Wrap the output
+                    J.Var(reactiveSpec.val.call @).get()
                 else
                     @reactives[reactiveName].get()
 
