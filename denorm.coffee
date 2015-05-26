@@ -30,6 +30,34 @@ J.denorm =
                     helper modelClass, reactiveName
 
 
+    recalc: (instance, reactiveName) ->
+        reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
+
+        @_watchedQuerySpecSet = watchedQuerySpecSet = {}
+        @_watchingQueries = true
+
+        value = reactiveSpec.val.call instance
+
+        @_watchingQueries = false
+        @_watchedQuerySpecSet = null
+
+        console.log 'watched: ', watchedQuerySpecSet
+
+        watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
+        watchedQuerySpecs = (
+            EJSON.parse qsString for qsString in watchedQsStrings
+        )
+
+        setter = {}
+        setter["_reactives.#{reactiveName}"] =
+            val: J.Model._getEscapedSubdoc value
+            watching: J.Model._getEscapedSubdoc watchedQuerySpecs
+        instance.modelClass.update(
+            instance._id
+            $set: setter
+        )
+
+
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
         ###
             Returns modelName: [(instance, reactiveName)]
@@ -102,10 +130,11 @@ J.denorm =
                             ]
 
                     console.log "***<#{watcherModelName}>.#{reactiveName}***"
-                    console.log "selector: #{JSON.stringify selector, null, 4}"
+                    # console.log "selector: #{JSON.stringify selector, null, 4}"
 
                     unsetter = {}
                     unsetter["_reactives.#{reactiveName}.val"] = 1
+                    unsetter["_reactives.#{reactiveName}.watching"] = 1
 
                     watchersByModelReactive[watcherModelName] ?= {}
                     numWatchersReset = watchersByModelReactive[watcherModelName][reactiveName] = watcherModelClass.update(
@@ -120,32 +149,6 @@ J.denorm =
         watchersByModelReactive
 
 
-    recalc: (instance, reactiveName) ->
-        reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
-
-        @_watchedQuerySpecSet = watchedQuerySpecSet = {}
-        @_watchingQueries = true
-
-        value = reactiveSpec.val.call instance
-
-        @_watchingQueries = false
-        @_watchedQuerySpecSet = null
-
-        console.log 'watched: ', watchedQuerySpecSet
-
-        watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
-        watchedQuerySpecs = (
-            EJSON.parse qsString for qsString in watchedQsStrings
-        )
-
-        setter = {}
-        setter["_reactives.#{reactiveName}"] =
-            val: J.Model._getEscapedSubdoc value
-            watching: J.Model._getEscapedSubdoc watchedQuerySpecs
-        instance.modelClass.update(
-            instance._id
-            $set: setter
-        )
 
 
 

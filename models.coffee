@@ -418,7 +418,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             if reactiveSpec.denorm
                 @_reactives.get reactiveName
             else
-                @reactives[reactiveName].get()
+                if Meteor.isServer
+                    reactiveSpec.val.call @
+                else
+                    @reactives[reactiveName].get()
 
 
 

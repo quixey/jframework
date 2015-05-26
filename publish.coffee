@@ -30,6 +30,33 @@ J.methods = (methods) ->
     Meteor.methods wrappedMethods
 
 
+# JSON.stringify([modelName, instanceId, reactiveName]): true
+J._recalcBuffer = {}
+_willFlush = false
+_addRecalcBufferKey = (bufferKey) ->
+    J._recalcBuffer[bufferKey] = true
+    if not _willFlush
+        _willFlush = true
+        Meteor.defer ->
+            _flushRecalcBuffer()
+            _willFlush = false
+_flushRecalcBuffer = ->
+    while not _.isEmpty J._recalcBuffer
+        bufferKey = _.keys(J._recalcBuffer)[0]
+        delete J._recalcBuffer[bufferKey]
+
+        console.log "RECALC: #{bufferKey}"
+
+        [modelName, instanceId, reactiveName] = JSON.parse bufferKey
+        modelClass = J.models[modelName]
+        instance = modelClass.fetchOne instanceId
+        if not instance?
+            console.log "Can't denorm #{bufferKey}: instance no longer exists"
+            return
+
+        J.denorm.recalc instance, reactiveName
+
+
 ###
     dataSessionId: J.Dict
         updateObserversFiber: <Fiber>
@@ -186,6 +213,32 @@ updateObservers = (dataSessionId) ->
 
     fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
 
+    getQuerySpecProjection = (querySpec) ->
+        modelClass = J.models[querySpec.modelName]
+
+        if _.values(querySpec.fields ? {})[0] is 1
+            projection = querySpec.fields
+
+        else
+            projection = _id: 1 # fieldOrReactiveName: 1
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                if fieldSpec.include ? true
+                    projection[fieldName] = 1
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.include ? false
+                    projection[reactiveName] = 1
+
+            for fieldSpec, include of querySpec.fields ? {}
+                J.assert include is 0, "Projection can't mix 0s and 1s"
+                fieldName = fieldSpec.split('.')[0]
+                if fieldSpec is fieldName
+                    delete projection[fieldSpec]
+                else
+                    projection[fieldSpec] = 0
+
+        projection
+
+
     getMergedSubfields = (a, b) ->
         return a if b is undefined
         return b if a is undefined
@@ -209,14 +262,43 @@ updateObservers = (dataSessionId) ->
             ###
             a
 
+
     getField = (modelName, id, fieldName) ->
         fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
         _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
 
+
+    setField = (modelName, id, fieldName, querySpec, value) ->
+        modelClass = J.models[modelName]
+        qsString = EJSON.stringify querySpec
+        fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
+        fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
+
+        if fieldName is '_reactives'
+            instance = undefined
+            projection = getQuerySpecProjection querySpec
+
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                included = false
+
+                if reactiveSpec.denorm
+                    for fieldSpec of projection
+                        if fieldSpec.split('.')[0] is reactiveName
+                            included = true
+                            break
+
+                if included and value?[reactiveName]?.val is undefined
+                    bufferKey = JSON.stringify [modelName, id, reactiveName]
+                    console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
+                        #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
+
+                    _addRecalcBufferKey bufferKey
+
+
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
 
-        log "Add observer for: ", querySpec
+        # log "Add observer for: ", querySpec
 
         modelClass = J.models[querySpec.modelName]
 
@@ -235,26 +317,7 @@ updateObservers = (dataSessionId) ->
                 throw new Meteor.Error "Invalid fieldSpec in
                     #{modelClass.name} projection: #{fieldSpec}"
 
-        if _.values(querySpec.fields ? {})[0] is 1
-            projection = querySpec.fields
-
-        else
-            projection = _id: 1 # fieldOrReactiveName: 1
-            for fieldName, fieldSpec of modelClass.fieldSpecs
-                if fieldSpec.include ? true
-                    projection[fieldName] = 1
-            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                if reactiveSpec.include ? false
-                    projection[reactiveName] = 1
-
-            for fieldSpec, include of querySpec.fields ? {}
-                J.assert include is 0, "Projection can't mix 0s and 1s"
-                fieldName = fieldSpec.split('.')[0]
-                if fieldSpec is fieldName
-                    delete projection[fieldSpec]
-                else
-                    projection[fieldSpec] = 0
-
+        projection = getQuerySpecProjection querySpec
         options.fields = {}
         for fieldSpec, include of projection
             fieldSpecParts = fieldSpec.split('.')
@@ -279,8 +342,7 @@ updateObservers = (dataSessionId) ->
 
                     for fieldName, value of fields
                         oldValue = getField querySpec.modelName, id, fieldName
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                        setField querySpec.modelName, id, fieldName, querySpec, value
                         newValue = getField querySpec.modelName, id, fieldName
                         if not EJSON.equals oldValue, newValue
                             changedFields[fieldName] = newValue
@@ -296,8 +358,7 @@ updateObservers = (dataSessionId) ->
                 fieldsByModelIdQuery[querySpec.modelName] ?= {}
                 fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
                 for fieldName, value of fields
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    setField querySpec.modelName, id, fieldName, querySpec, value
 
             changed: (id, fields) =>
                 # log querySpec, "server says CHANGED:", id, fields
@@ -306,8 +367,7 @@ updateObservers = (dataSessionId) ->
 
                 for fieldName, value of fields
                     oldValue = getField querySpec.modelName, id, fieldName
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    setField querySpec.modelName, id, fieldName, querySpec, value
                     newValue = getField querySpec.modelName, id, fieldName
                     if not EJSON.equals oldValue, newValue
                         changedFields[fieldName] = newValue
