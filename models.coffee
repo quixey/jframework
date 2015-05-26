@@ -192,23 +192,13 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        doc = Tracker.nonreactive => @toDoc true
-        J.assert J.util.isPlainObject doc
+        fields = Tracker.nonreactive => @_fields.tryToObj()
 
-        if doc._id?
-            @_id = doc._id
-            fields = _.clone doc
-            delete fields._id
-            collection.upsert @_id,
-                $set: fields,
-                callback
-        else
-            # The Mongo driver will give us an ID but we
-            # can't pass it a null ID
-            delete doc._id
-            @_id = collection.insert doc, callback
+        id = @_id ? Random.hexString(10)
 
-        @_id
+        Meteor.call '_jSave', @modelClass.name, id, fields, callback
+
+        id
 
 
     set: (fields) ->
@@ -640,6 +630,45 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     $$[modelName] = modelClass
 
     EJSON.addType modelName, modelClass.fromJSONValue.bind modelClass
+
+
+
+Meteor.methods
+    _jSave: (modelName, instanceId, fields) ->
+        # This also runs on the client as a stub
+
+        J.assert instanceId?
+        modelClass = J.models[modelName]
+        console.log 'jSave', modelName, instanceId, fields, @isSimulation
+
+        # TODO: Validation
+
+        if @isSimulation
+            modelClass.collection.upsert instanceId,
+                $set: fields
+            return instanceId
+
+        oldDoc = modelClass.findOne(
+            instanceId
+        ,
+            fields:
+                _reactives: 0
+            transform: false
+        )
+
+        setter = {}
+        newDoc = EJSON.parse EJSON.stringify oldDoc ? {_id: instanceId}
+        for fieldName, newValue of fields
+            if newValue isnt undefined
+                setter[fieldName] = newValue
+                newDoc[fieldName] = newValue
+
+        modelClass.collection.upsert instanceId,
+            $set: setter
+
+        J.denorm.resetWatchers modelName, instanceId, oldDoc ? {_id: instanceId}, newDoc
+
+        instanceId
 
 
 Meteor.startup ->

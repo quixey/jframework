@@ -35,8 +35,11 @@ J.denorm =
             Returns modelName: [(instance, reactiveName)]
         ###
 
-        # subFieldSelectorMatcher makes sure every
-        # fieldspec in he watching-selector is consistent
+        console.log 'resetWatchers', modelName, instanceId,
+            'oldValues:', JSON.stringify(oldValues),
+            'newValues', JSON.stringify(newValues)
+
+        # Makes sure every fieldSpec in he watching-selector is consistent
         # with either oldValues or newValues
         subFieldSelectorMatcher =
             selector: $type: 3 # object
@@ -148,7 +151,7 @@ J.denorm =
 
 if Meteor.isServer then Meteor.startup ->
     J.methods
-        testDenorm: (modelName, instanceId, reactiveName) ->
+        testRecalc: (modelName, instanceId, reactiveName) ->
             modelClass = J.models[modelName]
             instance = modelClass.fetchOne instanceId
             if not instance
