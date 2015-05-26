@@ -323,6 +323,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         nonIdInitFields = _.clone initFields
         delete nonIdInitFields._id
+        delete nonIdInitFields._reactives
 
         for fieldName, value of nonIdInitFields
             if fieldName not of @modelClass.fieldSpecs
@@ -502,8 +503,22 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     selector = J.Dict(selector).toObj()
                 options = J.Dict(options).toObj()
 
+                querySpec =
+                    modelName: modelName
+                    selector: selector
+                    fields: options.fields
+                    sort: options.sort
+                    skip: options.skip
+                    limit: options.limit
+
                 if Meteor.isServer
+                    qsString = EJSON.stringify querySpec
+
+                    if J.denorm._watchingQueries
+                        J.denorm._watchedQuerySpecSet[qsString] = true
+
                     instances = J.List @find(selector, options).fetch()
+
                     if not options.fields?
                         # Treat fields that are missing in the Mongo doc as
                         # having a default value of null.
@@ -513,15 +528,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                 if instance.tryGet(fieldName) is undefined
                                     setter[fieldName] = null
                             instance.set setter
-                    return instances
 
-                querySpec =
-                    modelName: modelName
-                    selector: selector
-                    fields: options.fields
-                    sort: options.sort
-                    skip: options.skip
-                    limit: options.limit
+                    return instances
 
                 J.fetching.requestQuery querySpec
 
@@ -573,3 +581,5 @@ Meteor.startup ->
         J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.members, modelDef.staticMembers
 
     modelDefinitionQueue = null
+
+    J.denorm.ensureAllReactiveWatcherIndexes()
