@@ -328,7 +328,7 @@ updateObservers = (dataSessionId) ->
             else
                 options.fields[fieldSpec] = include
 
-        console.log 'options.fields: ', JSON.stringify options.fields
+        # log 'options.fields: ', JSON.stringify options.fields
 
         cursor = modelClass.collection.find querySpec.selector, options
 

@@ -42,7 +42,7 @@ J.fetching =
         ###
 
         if querySpec.fields?
-            for sKey, sValue of querySpec.selector
+            if J.util.isPlainObject(querySpec.selector) then for sKey, sValue of querySpec.selector
                 if sKey isnt '_id' and sKey[0] isnt '$'
                     ok = false
                     for fKey, fValue of querySpec.fields

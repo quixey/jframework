@@ -133,11 +133,19 @@ class J.Model
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
-        if Tracker.active and @_fields.hasKey(fieldName) and @tryGet(fieldName) is undefined
-            console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
-            console.groupCollapsed()
-            console.trace()
-            console.groupEnd()
+        if Tracker.active
+            if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
+                console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
+                console.groupCollapsed()
+                console.trace()
+                console.groupEnd()
+
+                if @attached
+                    # Record that the current computation uses the current field
+                    projection = {}
+                    projection[fieldName] = 1
+                    @modelClass.tryFetchOne @_id,
+                        fields: projection
 
         @_fields.forceGet fieldName
 
@@ -259,7 +267,10 @@ class J.Model
 
 
     tryGet: (key, defaultValue) ->
-        @_fields.tryGet key, defaultValue
+        J.tryGet(
+            => @get key
+            defaultValue
+        )
 
 
     typeName: ->
@@ -642,7 +653,11 @@ Meteor.methods
 
         J.assert instanceId?
         modelClass = J.models[modelName]
-        console.log 'jSave', modelName, instanceId, fields, @isSimulation
+
+        _reserved = modelName in ['JDataSession']
+
+        if not _reserved
+            console.log 'jSave', modelName, instanceId, fields, @isSimulation
 
         # TODO: Validation
 
@@ -669,7 +684,8 @@ Meteor.methods
         modelClass.collection.upsert instanceId,
             $set: setter
 
-        J.denorm.resetWatchers modelName, instanceId, oldDoc ? {_id: instanceId}, newDoc
+        if not _reserved
+            J.denorm.resetWatchers modelName, instanceId, oldDoc ? {_id: instanceId}, newDoc
 
         instanceId
 
