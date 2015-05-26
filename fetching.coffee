@@ -43,7 +43,7 @@ J.fetching =
 
         if querySpec.fields?
             for sKey, sValue of querySpec.selector
-                if sKey[0] isnt '$'
+                if sKey isnt '_id' and sKey[0] isnt '$'
                     ok = false
                     for fKey, fValue of querySpec.fields
                         if fKey.split('.')[0] is sKey
@@ -57,7 +57,7 @@ J.fetching =
                             the fetch also works as expected on the client."
 
             if querySpec.sort? then for sKey, sValue of querySpec.sort
-                if sKey[0] isnt '$'
+                if sKey isnt '_id' and sKey[0] isnt '$'
                     ok = false
                     for fKey, fValue of querySpec.fields
                         if fKey.split('.')[0] is sKey

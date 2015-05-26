@@ -366,6 +366,9 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     => reactiveSpec.val.call @
 
         @_reactives = J.Dict() # denormedReactiveName: value
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            if reactiveSpec.denorm
+                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
 
         null
 
@@ -422,7 +425,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
-            @reactives[reactiveName].get()
+            if reactiveSpec.denorm
+                @_reactives.get reactiveName
+            else
+                @reactives[reactiveName].get()
 
 
 
@@ -444,15 +450,17 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     doc = _.clone fields
                     doc._id = id
 
-                    reactivesObj = modelClass._getUnescapedSubdoc fields._reactives ? {}
-                    delete fields._reactives
+                    reactivesSetter = {}
+                    for reactiveName, reactiveObj of doc._reactives ? {}
+                        reactivesSetter[reactiveName] = modelClass._getUnescapedSubdoc reactiveObj.val
+                    delete doc._reactives
 
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance.attached = true
                     instance._fields.setReadOnly true, true
 
-                    instance._reactives.set reactivesObj
+                    instance._reactives.set reactivesSetter
 
                     collection._attachedInstances[id] = instance
 
@@ -461,7 +469,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                     instance = collection._attachedInstances[id]
 
-                    reactivesSetter = modelClass._getUnescapedSubdoc fields._reactives
+                    reactivesObj = fields._reactives
                     delete fields._reactives
 
                     fieldsSetter = modelClass._getUnescapedSubdoc fields
@@ -470,10 +478,22 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                             fieldsSetter[fieldName] = J.makeValueNotReadyObject()
                     instance._fields._forceSet fieldsSetter
 
-                    for reactiveName, value of reactivesSetter
-                        if value is undefined
-                            reactivesSetter[fieldName] = J.makeValueNotReadyObject()
-                    instance._reactives._forceSet reactivesSetter
+                    if reactivesObj?
+                        reactivesSetter = {}
+
+                        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                            if reactiveSpec.denorm
+                                if reactiveName of reactivesObj
+                                    value = modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                                else
+                                    value = undefined
+
+                                if value is undefined
+                                    reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+                                else
+                                    reactivesSetter[reactiveName] = value
+
+                        instance._reactives._forceSet reactivesSetter
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
