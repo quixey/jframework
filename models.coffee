@@ -27,20 +27,32 @@
 
 
 class J.Model
-    @_getUnescapedSubDoc = (subDoc) ->
+    @_getEscapedSubdoc = (subDoc) ->
         if J.util.isPlainObject subDoc
             ret = {}
             for key, value of subDoc
-                ret[@unescapeDot key] = @_getUnescapedSubDoc value
+                ret[@escapeDot key] = @_getEscapedSubdoc value
             ret
         else if _.isArray subDoc
-            @_getUnescapedSubDoc x for x in subDoc
+            @_getEscapedSubdoc x for x in subDoc
+        else
+            subDoc
+
+
+    @_getUnescapedSubdoc = (subDoc) ->
+        if J.util.isPlainObject subDoc
+            ret = {}
+            for key, value of subDoc
+                ret[@unescapeDot key] = @_getUnescapedSubdoc value
+            ret
+        else if _.isArray subDoc
+            @_getUnescapedSubdoc x for x in subDoc
         else
             subDoc
 
 
     @escapeDot = (key) ->
-        key.replace /\./g, '*DOT*'
+        key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
 
 
     @fromJSONValue: (jsonValue) ->
@@ -60,7 +72,7 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        fields = EJSON.fromJSONValue @_getUnescapedSubDoc doc
+        fields = EJSON.fromJSONValue @_getUnescapedSubdoc doc
 
         for fieldName of @fieldSpecs
             if fieldName not of fields
@@ -97,7 +109,7 @@ class J.Model
 
 
     @unescapeDot = (key) =>
-        key.replace /\*DOT\*/g, '.'
+        key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
 
 
     clone: ->
@@ -432,7 +444,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                 changed: (id, fields) ->
                     instance = collection._attachedInstances[id]
-                    setter = modelClass._getUnescapedSubDoc fields
+                    setter = modelClass._getUnescapedSubdoc fields
                     for fieldName, value of setter
                         if value is undefined
                             setter[fieldName] = J.makeValueNotReadyObject()
@@ -582,4 +594,5 @@ Meteor.startup ->
 
     modelDefinitionQueue = null
 
-    J.denorm.ensureAllReactiveWatcherIndexes()
+    if Meteor.isServer
+        J.denorm.ensureAllReactiveWatcherIndexes()

@@ -11,7 +11,23 @@ J.denorm =
     _watchedQuerySpecSet: null
 
     ensureAllReactiveWatcherIndexes: ->
-        # TODO
+        helper = (modelClass, reactiveName) ->
+            for modelClassName, modelClass of J.models
+                indexFieldsSpec = {}
+                indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.watching.selector"] = 1
+                # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id"] = 1
+                # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.$in"] = 1
+
+                modelClass.collection._ensureIndex(
+                    indexFieldsSpec
+                    sparse: true
+                )
+
+        for modelClassName, modelClass of J.models
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.denorm
+                    helper modelClass, reactiveName
 
 
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
@@ -19,9 +35,9 @@ J.denorm =
             Returns modelName: [(instance, reactiveName)]
         ###
 
-        subFieldSelectorMatcher =
-            "selector._id": $in: [null, instanceId]
-            "selector._id.$in": $in: [null, instanceId]
+        subFieldSelectorMatcher = {}
+        subFieldSelectorMatcher["selector._id"] = $in: [null, instanceId]
+        subFieldSelectorMatcher["selector._id*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null, instanceId]
         relevantProjectionSpecKeys = []
 
         # TODO:
@@ -41,19 +57,22 @@ J.denorm =
                 subFieldNameSet[subFieldName] = true
 
             for subFieldName of subFieldNameSet
-                selectorPath = "#{selectorPrefix}.#{J.Model.escapeDot subFieldName}"
+                if selectorPrefix is 'selector'
+                    selectorPath = "selector.#{J.Model.escapeDot subFieldName}"
+                else
+                    selectorPath = "#{selectorPrefix}*DOT*#{J.Model.escapeDot subFieldName}"
 
                 oldValue = oldSubValues[subFieldName]
                 newValue = newSubValues[subFieldName]
 
                 subFieldSelectorMatcher[selectorPath] = $in: [null]
-                subFieldSelectorMatcher["#{selectorPath}.$in"] = $in: [null]
+                subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null]
                 if oldValue?
                     subFieldSelectorMatcher[selectorPath].$in.push oldValue
-                    subFieldSelectorMatcher["#{selectorPath}.$in"].$in.push oldValue
+                    subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"].$in.push oldValue
                 if newValue? and not EJSON.equals oldValue, newValue
                     subFieldSelectorMatcher[selectorPath].$in.push newValue
-                    subFieldSelectorMatcher["#{selectorPath}.$in"].$in.push newValue
+                    subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"].$in.push newValue
 
                 if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
                     addClauses(
@@ -69,19 +88,15 @@ J.denorm =
         for watcherModelName, watcherModelClass of J.models
             for reactiveName, reactiveSpec of watcherModelClass.reactiveSpecs
                 if reactiveSpec.denorm
+                    # TODO: ignore field selectors if too narrow for current mutation
                     selector = {}
                     selector["_reactives.#{reactiveName}.watching"] =
                         $elemMatch:
                             modelName: modelName
-                            $and: [
-                                $or: [
-                                    selector: $in: [null, instanceId]
-                                    subFieldSelectorMatcher
-                                ]
+                            $or: [
+                                selector: $in: [null, instanceId]
                             ,
-                                $or: [
-                                    fields: null
-                                ]
+                                subFieldSelectorMatcher
                             ]
 
                     console.log "***<#{watcherModelName}>.#{reactiveName}***"
@@ -120,8 +135,8 @@ J.denorm =
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
-            val: value
-            watching: watchedQuerySpecs
+            val: J.Model._getEscapedSubdoc value
+            watching: J.Model._getEscapedSubdoc watchedQuerySpecs
         instance.modelClass.update(
             instance._id
             $set: setter
