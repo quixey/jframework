@@ -181,7 +181,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
 
-        @collection.remove @_id, callback
+        Meteor.call '_jRemove', @modelClass.name, @_id
 
 
     save: (collection = @collection, callback) ->
@@ -696,6 +696,33 @@ Meteor.methods
             J.denorm.resetWatchers modelName, instanceId, oldDoc ? {_id: instanceId}, newDoc
 
         instanceId
+
+    _jRemove: (modelName, instanceId, oldDoc = null) ->
+        # This also runs on the client as a stub
+
+        J.assert instanceId?
+        modelClass = J.models[modelName]
+
+        _reserved = modelName in ['JDataSession']
+
+        if not _reserved
+            console.log 'jRemove', modelName, instanceId, @isSimulation
+
+        if not oldDoc?
+            oldDoc = modelClass.findOne(
+                instanceId
+            ,
+                fields:
+                    _reactives: 0
+                transform: false
+            )
+
+        ret = modelClass.collection.remove instanceId
+
+        if not _reserved
+            J.denorm.resetWatchers modelName, instanceId, oldDoc, {}
+
+        ret
 
 
 Meteor.startup ->
