@@ -38,7 +38,8 @@ J.denorm =
         # subFieldSelectorMatcher makes sure every
         # fieldspec in he watching-selector is consistent
         # with either oldValues or newValues
-        subFieldSelectorMatcher = {}
+        subFieldSelectorMatcher =
+            selector: $type: 3 # object
         subFieldSelectorMatcher["selector._id"] = $in: [null, instanceId]
         subFieldSelectorMatcher["selector._id*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null, instanceId]
 
@@ -104,11 +105,14 @@ J.denorm =
                     unsetter["_reactives.#{reactiveName}.val"] = 1
 
                     watchersByModelReactive[watcherModelName] ?= {}
-                    watcherIds = watchersByModelReactive[watcherModelName][reactiveName] = watcherModelClass.update(
+                    numWatchersReset = watchersByModelReactive[watcherModelName][reactiveName] = watcherModelClass.update(
                         selector
+                    ,
                         $unset: unsetter
+                    ,
+                        multi: true
                     )
-                    console.log "Watchers: #{watcherIds}\n"
+                    console.log "#{numWatchersReset} watchers reset\n"
 
         watchersByModelReactive
 

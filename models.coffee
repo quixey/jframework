@@ -450,9 +450,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     doc = _.clone fields
                     doc._id = id
 
-                    reactivesSetter = {}
-                    for reactiveName, reactiveObj of doc._reactives ? {}
-                        reactivesSetter[reactiveName] = modelClass._getUnescapedSubdoc reactiveObj.val
+                    reactivesObj = doc._reactives
                     delete doc._reactives
 
                     instance = modelClass.fromDoc doc
@@ -460,7 +458,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     instance.attached = true
                     instance._fields.setReadOnly true, true
 
-                    instance._reactives.set reactivesSetter
+                    if reactivesObj?
+                        reactivesSetter = {}
+
+                        for reactiveName, reactiveObj of reactivesObj
+                            reactivesSetter[reactiveName] = modelClass._getUnescapedSubdoc reactiveObj.val
+                            if reactivesSetter[reactiveName] is undefined
+                                reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+
+                        instance._reactives.set reactivesSetter
 
                     collection._attachedInstances[id] = instance
 
@@ -484,14 +490,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                             if reactiveSpec.denorm
                                 if reactiveName of reactivesObj
-                                    value = modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
-                                else
-                                    value = undefined
-
-                                if value is undefined
+                                    reactivesSetter[reactiveName] =
+                                        modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                                if reactivesSetter[reactiveName] is undefined
                                     reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
-                                else
-                                    reactivesSetter[reactiveName] = value
 
                         instance._reactives._forceSet reactivesSetter
 
