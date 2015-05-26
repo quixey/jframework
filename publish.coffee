@@ -336,6 +336,9 @@ updateObservers = (dataSessionId) ->
             added: (id, fields) =>
                 # log querySpec, "server says ADDED:", id, fields
 
+                fields = _.clone fields
+                fields._reactives ?= {}
+
                 if id of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
                     # The set of projections being watched on this doc may have grown.
                     changedFields = {}
@@ -362,6 +365,9 @@ updateObservers = (dataSessionId) ->
 
             changed: (id, fields) =>
                 # log querySpec, "server says CHANGED:", id, fields
+
+                fields = _.clone fields
+                fields._reactives ?= {}
 
                 changedFields = {}
 
