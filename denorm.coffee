@@ -69,10 +69,16 @@ J.denorm =
 
         # Makes sure every fieldSpec in he watching-selector is consistent
         # with either oldValues or newValues
-        subFieldSelectorMatcher =
+        subFieldSelectorMatcher = [
             selector: $type: 3 # object
-        subFieldSelectorMatcher["selector._id"] = $in: [null, instanceId]
-        subFieldSelectorMatcher["selector._id*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null, instanceId]
+        ]
+
+        subFieldSelectorMatcher.push
+            $or: [
+                'selector._id': $in: [null, instanceId]
+            ,
+                'selector._id.*DOLLAR*in': $in: [instanceId]
+            ]
 
         addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
             subFieldNameSet = {}
@@ -90,14 +96,18 @@ J.denorm =
                 oldValue = oldSubValues[subFieldName]
                 newValue = newSubValues[subFieldName]
 
-                subFieldSelectorMatcher[selectorPath] = $in: [null]
-                subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"] = $in: [null]
+                term = $or: [{}, {}]
+                term.$or[0][selectorPath] = $in: [null]
+                term.$or[1]["#{selectorPath}.*DOLLAR*in"] = $in: []
+
                 if oldValue?
-                    subFieldSelectorMatcher[selectorPath].$in.push oldValue
-                    subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"].$in.push oldValue
+                    term.$or[0][selectorPath].$in.push oldValue
+                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$in.push oldValue
                 if newValue? and not EJSON.equals oldValue, newValue
-                    subFieldSelectorMatcher[selectorPath].$in.push newValue
-                    subFieldSelectorMatcher["#{selectorPath}*DOT*#{J.Model.escapeDot '$in'}"].$in.push newValue
+                    term.$or[0][selectorPath].$in.push newValue
+                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$in.push newValue
+
+                subFieldSelectorMatcher.push term
 
                 if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
                     addClauses(
@@ -126,7 +136,7 @@ J.denorm =
                             $or: [
                                 selector: $in: [null, instanceId]
                             ,
-                                subFieldSelectorMatcher
+                                $and: subFieldSelectorMatcher
                             ]
 
                     console.log "***<#{watcherModelName}>.#{reactiveName}***"
