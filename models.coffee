@@ -672,7 +672,7 @@ Meteor.methods
         if @isSimulation
             modelClass.collection.upsert instanceId,
                 $set: fields
-            return instanceId
+            return
 
         oldDoc = modelClass.findOne(
             instanceId
@@ -707,6 +707,10 @@ Meteor.methods
 
         if not _reserved
             console.log 'jRemove', modelName, instanceId, @isSimulation
+
+        if @isSimulation
+            modelClass.collection.remove instanceId
+            return
 
         if not oldDoc?
             oldDoc = modelClass.findOne(
