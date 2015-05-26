@@ -426,7 +426,13 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
-            if reactiveSpec.denorm
+            # If the server is in reactive-recalculation mode and
+            # J.denorm._watchingQueries is true, then we can't use
+            # the cached value of the reactive because right now
+            # our dependency tracking only works with nodes in the
+            # Normalized Kernel.
+
+            if reactiveSpec.denorm and not (Meteor.isServer and J.denorm._watchingQueries)
                 if @attached
                     # Record that the current computation uses the current reactive
                     projection = {}
