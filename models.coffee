@@ -200,13 +200,13 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        fields = Tracker.nonreactive => @_fields.tryToObj()
+        doc = Tracker.nonreactive => @toDoc()
 
-        id = @_id ? Random.hexString(10)
+        doc._id ?= Random.hexString(10)
 
-        Meteor.call '_jSave', @modelClass.name, id, fields, callback
+        Meteor.call '_jSave', @modelClass.name, doc, callback
 
-        id
+        doc._id
 
 
     set: (fields) ->
@@ -236,7 +236,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        doc = J.Model.toSubdoc(@_fields.toObj(), denormalize)
+        doc = J.Model.toSubdoc(@_fields.tryToObj(), denormalize)
 
         if denormalize and @modelClass.idSpec is J.PropTypes.key
             key = @key()
@@ -662,26 +662,29 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
 
 Meteor.methods
-    _jSave: (modelName, instanceId, fields) ->
+    _jSave: (modelName, doc) ->
         # This also runs on the client as a stub
 
-        J.assert instanceId?
+        J.assert doc._id?
         modelClass = J.models[modelName]
+
+        fields = _.clone doc
+        delete fields._id
 
         _reserved = modelName in ['JDataSession']
 
         if not _reserved
-            console.log 'jSave', modelName, instanceId, fields, @isSimulation
+            console.log 'jSave', modelName, doc, @isSimulation
 
         # TODO: Validation
 
         if @isSimulation
-            modelClass.collection.upsert instanceId,
+            modelClass.collection.upsert doc._id,
                 $set: fields
             return
 
         oldDoc = modelClass.findOne(
-            instanceId
+            doc._id
         ,
             fields:
                 _reactives: 0
@@ -689,19 +692,19 @@ Meteor.methods
         )
 
         setter = {}
-        newDoc = EJSON.parse EJSON.stringify oldDoc ? {_id: instanceId}
+        newDoc = EJSON.parse EJSON.stringify oldDoc ? {_id: doc._id}
         for fieldName, newValue of fields
             if newValue isnt undefined
                 setter[fieldName] = newValue
                 newDoc[fieldName] = newValue
 
-        modelClass.collection.upsert instanceId,
+        modelClass.collection.upsert doc._id,
             $set: setter
 
         if not _reserved
-            J.denorm.resetWatchers modelName, instanceId, oldDoc ? {_id: instanceId}, newDoc
+            J.denorm.resetWatchers modelName, doc._id, oldDoc ? {_id: doc._id}, newDoc
 
-        instanceId
+        doc._id
 
     _jRemove: (modelName, instanceId, oldDoc = null) ->
         # This also runs on the client as a stub
