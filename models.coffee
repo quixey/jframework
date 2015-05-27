@@ -181,7 +181,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
 
-        Meteor.call '_jRemove', @modelClass.name, @_id
+        Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
 
     save: (collection = @collection, callback) ->
