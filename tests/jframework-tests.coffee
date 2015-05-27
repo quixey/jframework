@@ -131,7 +131,7 @@ Tinytest.addAsync "AfterFlush - sortKey basics", (test, onComplete) ->
                 aafCount += 1
                 Tracker.afterFlush(->
                     test.equal aafCount, 6, 'fail 6'
-                    _.defer -> onComplete()
+                    Meteor.wrapAsync(_.defer) -> onComplete()
                 , 0.7)
             , 0.7)
             Tracker.afterFlush(->
