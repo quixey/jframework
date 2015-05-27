@@ -27,20 +27,32 @@
 
 
 class J.Model
-    @_getUnescapedSubDoc = (subDoc) ->
+    @_getEscapedSubdoc = (subDoc) ->
         if J.util.isPlainObject subDoc
             ret = {}
             for key, value of subDoc
-                ret[@unescapeDot key] = @_getUnescapedSubDoc value
+                ret[@escapeDot key] = @_getEscapedSubdoc value
             ret
         else if _.isArray subDoc
-            @_getUnescapedSubDoc x for x in subDoc
+            @_getEscapedSubdoc x for x in subDoc
+        else
+            subDoc
+
+
+    @_getUnescapedSubdoc = (subDoc) ->
+        if J.util.isPlainObject subDoc
+            ret = {}
+            for key, value of subDoc
+                ret[@unescapeDot key] = @_getUnescapedSubdoc value
+            ret
+        else if _.isArray subDoc
+            @_getUnescapedSubdoc x for x in subDoc
         else
             subDoc
 
 
     @escapeDot = (key) ->
-        key.replace /\./g, '*DOT*'
+        key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
 
 
     @fromJSONValue: (jsonValue) ->
@@ -60,7 +72,7 @@ class J.Model
 
 
     @fromDoc: (doc) ->
-        fields = EJSON.fromJSONValue @_getUnescapedSubDoc doc
+        fields = EJSON.fromJSONValue @_getUnescapedSubdoc doc
 
         for fieldName of @fieldSpecs
             if fieldName not of fields
@@ -97,7 +109,7 @@ class J.Model
 
 
     @unescapeDot = (key) =>
-        key.replace /\*DOT\*/g, '.'
+        key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
 
 
     clone: ->
@@ -121,11 +133,19 @@ class J.Model
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
-        if Tracker.active and @_fields.hasKey(fieldName) and @tryGet(fieldName) is undefined
-            console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
-            console.groupCollapsed()
-            console.trace()
-            console.groupEnd()
+        if Tracker.active
+            if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
+                console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
+                console.groupCollapsed()
+                console.trace()
+                console.groupEnd()
+
+            if @attached
+                # Record that the current computation uses the current field
+                projection = {}
+                projection[fieldName] = 1
+                @modelClass.tryFetchOne @_id,
+                    fields: projection
 
         @_fields.forceGet fieldName
 
@@ -161,7 +181,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
 
-        @collection.remove @_id, callback
+        Meteor.call '_jRemove', @modelClass.name, @_id
 
 
     save: (collection = @collection, callback) ->
@@ -180,23 +200,13 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        doc = Tracker.nonreactive => @toDoc true
-        J.assert J.util.isPlainObject doc
+        doc = Tracker.nonreactive => @toDoc()
 
-        if doc._id?
-            @_id = doc._id
-            fields = _.clone doc
-            delete fields._id
-            collection.upsert @_id,
-                $set: fields,
-                callback
-        else
-            # The Mongo driver will give us an ID but we
-            # can't pass it a null ID
-            delete doc._id
-            @_id = collection.insert doc, callback
+        doc._id ?= Random.hexString(10)
 
-        @_id
+        Meteor.call '_jSave', @modelClass.name, doc, callback
+
+        doc._id
 
 
     set: (fields) ->
@@ -226,7 +236,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        doc = J.Model.toSubdoc(@_fields.toObj(), denormalize)
+        doc = J.Model.toSubdoc(@_fields.tryToObj(), denormalize)
 
         if denormalize and @modelClass.idSpec is J.PropTypes.key
             key = @key()
@@ -257,7 +267,10 @@ class J.Model
 
 
     tryGet: (key, defaultValue) ->
-        @_fields.tryGet key, defaultValue
+        J.tryGet(
+            => @get key
+            defaultValue
+        )
 
 
     typeName: ->
@@ -337,8 +350,14 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @_fields.set fieldName, J.Var.wrap value, true
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
-            key = Tracker.nonreactive => @key()
-            unless @_id is key
+            keyReady = false
+            try
+                key = Tracker.nonreactive => @key()
+                keyReady = true
+            catch e
+                throw e if e not instanceof J.VALUE_NOT_READY
+
+            if keyReady and @_id isnt key
                 console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{key}"
 
         @reactives = {} # reactiveName: autoVar
@@ -346,6 +365,11 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
                 J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
                     => reactiveSpec.val.call @
+
+        @_reactives = J.Dict() # denormedReactiveName: value
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            if reactiveSpec.denorm
+                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
 
         null
 
@@ -402,7 +426,27 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
-            @reactives[reactiveName].get()
+            # If the server is in reactive-recalculation mode and
+            # J.denorm._watchingQueries is true, then we can't use
+            # the cached value of the reactive because right now
+            # our dependency tracking only works with nodes in the
+            # Normalized Kernel.
+
+            if reactiveSpec.denorm and not (Meteor.isServer and J.denorm._watchingQueries)
+                if @attached
+                    # Record that the current computation uses the current reactive
+                    projection = {}
+                    projection[reactiveName] = 1
+                    @modelClass.tryFetchOne @_id,
+                        fields: projection
+
+                @_reactives.get reactiveName
+            else
+                if Meteor.isServer
+                    # Wrap the output
+                    J.Var(reactiveSpec.val.call @).get()
+                else
+                    @reactives[reactiveName].get()
 
 
 
@@ -423,19 +467,53 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 added: (id, fields) ->
                     doc = _.clone fields
                     doc._id = id
+
+                    reactivesObj = doc._reactives
+                    delete doc._reactives
+
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance.attached = true
                     instance._fields.setReadOnly true, true
+
+                    if reactivesObj?
+                        reactivesSetter = {}
+
+                        for reactiveName, reactiveObj of reactivesObj
+                            reactivesSetter[reactiveName] = modelClass._getUnescapedSubdoc reactiveObj.val
+                            if reactivesSetter[reactiveName] is undefined
+                                reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+
+                        instance._reactives.set reactivesSetter
+
                     collection._attachedInstances[id] = instance
 
                 changed: (id, fields) ->
+                    fields = _.clone fields
+
                     instance = collection._attachedInstances[id]
-                    setter = modelClass._getUnescapedSubDoc fields
-                    for fieldName, value of setter
+
+                    reactivesObj = fields._reactives
+                    delete fields._reactives
+
+                    fieldsSetter = modelClass._getUnescapedSubdoc fields
+                    for fieldName, value of fieldsSetter
                         if value is undefined
-                            setter[fieldName] = J.makeValueNotReadyObject()
-                    instance._fields._forceSet setter
+                            fieldsSetter[fieldName] = J.makeValueNotReadyObject()
+                    instance._fields._forceSet fieldsSetter
+
+                    if reactivesObj?
+                        reactivesSetter = {}
+
+                        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                            if reactiveSpec.denorm
+                                if reactiveName of reactivesObj
+                                    reactivesSetter[reactiveName] =
+                                        modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                                if reactivesSetter[reactiveName] is undefined
+                                    reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+
+                        instance._reactives._forceSet reactivesSetter
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
@@ -449,8 +527,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             # doesn't make use of much reactivity.
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
+                    doc = _.clone doc
+                    reactivesObj = modelClass._getUnescapedSubdoc doc._reactives ? {}
+                    delete doc._reactives
+
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
+
+                    instance._reactives.set reactivesObj
+
                     instance
 
             for indexSpec in modelClass.indexSpecs
@@ -502,8 +587,22 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     selector = J.Dict(selector).toObj()
                 options = J.Dict(options).toObj()
 
+                querySpec =
+                    modelName: modelName
+                    selector: selector
+                    fields: options.fields
+                    sort: options.sort
+                    skip: options.skip
+                    limit: options.limit
+
                 if Meteor.isServer
+                    qsString = EJSON.stringify querySpec
+
+                    if J._watchedQuerySpecSet.get()?
+                        J._watchedQuerySpecSet.get()[qsString] = true
+
                     instances = J.List @find(selector, options).fetch()
+
                     if not options.fields?
                         # Treat fields that are missing in the Mongo doc as
                         # having a default value of null.
@@ -513,15 +612,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                 if instance.tryGet(fieldName) is undefined
                                     setter[fieldName] = null
                             instance.set setter
-                    return instances
 
-                querySpec =
-                    modelName: modelName
-                    selector: selector
-                    fields: options.fields
-                    sort: options.sort
-                    skip: options.skip
-                    limit: options.limit
+                    return instances
 
                 J.fetching.requestQuery querySpec
 
@@ -568,8 +660,89 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     EJSON.addType modelName, modelClass.fromJSONValue.bind modelClass
 
 
+
+Meteor.methods
+    _jSave: (modelName, doc) ->
+        # This also runs on the client as a stub
+
+        J.assert doc._id?
+        modelClass = J.models[modelName]
+
+        fields = _.clone doc
+        delete fields._id
+
+        _reserved = modelName in ['JDataSession']
+
+        if not _reserved
+            console.log 'jSave', modelName, doc, @isSimulation
+
+        # TODO: Validation
+
+        if @isSimulation
+            modelClass.collection.upsert doc._id,
+                $set: fields
+            return
+
+        oldDoc = modelClass.findOne(
+            doc._id
+        ,
+            fields:
+                _reactives: 0
+            transform: false
+        )
+
+        setter = {}
+        newDoc = EJSON.parse EJSON.stringify oldDoc ? {_id: doc._id}
+        for fieldName, newValue of fields
+            if newValue isnt undefined
+                setter[fieldName] = newValue
+                newDoc[fieldName] = newValue
+
+        modelClass.collection.upsert doc._id,
+            $set: setter
+
+        if not _reserved
+            J.denorm.resetWatchers modelName, doc._id, oldDoc ? {_id: doc._id}, newDoc
+
+        doc._id
+
+    _jRemove: (modelName, instanceId, oldDoc = null) ->
+        # This also runs on the client as a stub
+
+        J.assert instanceId?
+        modelClass = J.models[modelName]
+
+        _reserved = modelName in ['JDataSession']
+
+        if not _reserved
+            console.log 'jRemove', modelName, instanceId, @isSimulation
+
+        if @isSimulation
+            modelClass.collection.remove instanceId
+            return
+
+        if not oldDoc?
+            oldDoc = modelClass.findOne(
+                instanceId
+            ,
+                fields:
+                    _reactives: 0
+                transform: false
+            )
+
+        ret = modelClass.collection.remove instanceId
+
+        if not _reserved
+            J.denorm.resetWatchers modelName, instanceId, oldDoc, {}
+
+        ret
+
+
 Meteor.startup ->
     for modelDef in modelDefinitionQueue
         J._defineModel modelDef.modelName, modelDef.collectionName, modelDef.members, modelDef.staticMembers
 
     modelDefinitionQueue = null
+
+    if Meteor.isServer
+        J.denorm.ensureAllReactiveWatcherIndexes()

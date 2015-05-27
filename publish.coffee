@@ -30,6 +30,34 @@ J.methods = (methods) ->
     Meteor.methods wrappedMethods
 
 
+# JSON.stringify([modelName, instanceId, reactiveName]): true
+J._recalcBuffer = {}
+_willFlush = false
+_addRecalcBufferKey = (bufferKey) ->
+    J._recalcBuffer[bufferKey] = true
+    if not _willFlush
+        _willFlush = true
+        Meteor.defer ->
+            _flushRecalcBuffer()
+            _willFlush = false
+
+_flushRecalcBuffer = ->
+    while not _.isEmpty J._recalcBuffer
+        bufferKey = _.keys(J._recalcBuffer)[0]
+        delete J._recalcBuffer[bufferKey]
+
+        console.log "RECALC: #{bufferKey}"
+
+        [modelName, instanceId, reactiveName] = JSON.parse bufferKey
+        modelClass = J.models[modelName]
+        instance = modelClass.fetchOne instanceId
+        if not instance?
+            console.log "Can't denorm #{bufferKey}: instance no longer exists"
+            return
+
+        J.denorm.recalc instance, reactiveName
+
+
 ###
     dataSessionId: J.Dict
         updateObserversFiber: <Fiber>
@@ -186,6 +214,32 @@ updateObservers = (dataSessionId) ->
 
     fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
 
+    getQuerySpecProjection = (querySpec) ->
+        modelClass = J.models[querySpec.modelName]
+
+        if _.values(querySpec.fields ? {})[0] is 1
+            projection = querySpec.fields
+
+        else
+            projection = _id: 1 # fieldOrReactiveName: 1
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                if fieldSpec.include ? true
+                    projection[fieldName] = 1
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.include ? false
+                    projection[reactiveName] = 1
+
+            for fieldSpec, include of querySpec.fields ? {}
+                J.assert include is 0, "Projection can't mix 0s and 1s"
+                fieldName = fieldSpec.split('.')[0]
+                if fieldSpec is fieldName
+                    delete projection[fieldSpec]
+                else
+                    projection[fieldSpec] = 0
+
+        projection
+
+
     getMergedSubfields = (a, b) ->
         return a if b is undefined
         return b if a is undefined
@@ -209,9 +263,50 @@ updateObservers = (dataSessionId) ->
             ###
             a
 
+
     getField = (modelName, id, fieldName) ->
         fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
         _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
+
+
+    setField = (modelName, id, fieldName, querySpec, value) ->
+        modelClass = J.models[modelName]
+        qsString = EJSON.stringify querySpec
+        fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
+
+        if fieldName is '_reactives'
+            reactivesObj = JSON.parse(JSON.stringify(value ? {}))
+            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
+
+            instance = undefined
+            projection = getQuerySpecProjection querySpec
+
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                included = false
+
+                if reactiveSpec.denorm
+                    for fieldSpec of projection
+                        if fieldSpec.split('.')[0] is reactiveName
+                            included = true
+                            break
+
+                if included and reactivesObj[reactiveName]?.val is undefined
+                    SYNC_RECALC = true
+                    if SYNC_RECALC
+                        reactivesObj[reactiveName] ?= {}
+                        instance ?= modelClass.fetchOne id
+                        reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
+
+                    else
+                        bufferKey = JSON.stringify [modelName, id, reactiveName]
+                        console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
+                            #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
+
+                        _addRecalcBufferKey bufferKey
+
+        else
+            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
+
 
     qsStringsDiff.added.forEach (qsString) =>
         querySpec = EJSON.parse qsString
@@ -221,11 +316,32 @@ updateObservers = (dataSessionId) ->
         modelClass = J.models[querySpec.modelName]
 
         options = {}
-        for optionName in ['fields', 'sort', 'skip', 'limit']
+        for optionName in ['sort', 'skip', 'limit']
             if querySpec[optionName]?
                 options[optionName] = querySpec[optionName]
 
-        # TODO: Interpret options.fields with fancy semantics
+        for fieldSpec, include of querySpec.fields ? {}
+            fieldName = fieldSpec.split('.')[0]
+            if not (
+                fieldName is '_id' or
+                fieldName of modelClass.fieldSpecs or
+                fieldName of modelClass.reactiveSpecs
+            )
+                throw new Meteor.Error "Invalid fieldSpec in
+                    #{modelClass.name} projection: #{fieldSpec}"
+
+        projection = getQuerySpecProjection querySpec
+        options.fields = {}
+        for fieldSpec, include of projection
+            fieldSpecParts = fieldSpec.split('.')
+            fieldName = fieldSpecParts[0]
+            if fieldName of modelClass.reactiveSpecs
+                reactiveFieldSpec = ["_reactives.#{fieldName}.val"].concat(fieldSpecParts[1...]).join('.')
+                options.fields[reactiveFieldSpec] = include
+            else
+                options.fields[fieldSpec] = include
+
+        # log 'options.fields: ', JSON.stringify options.fields
 
         cursor = modelClass.collection.find querySpec.selector, options
 
@@ -233,14 +349,16 @@ updateObservers = (dataSessionId) ->
             added: (id, fields) =>
                 # log querySpec, "server says ADDED:", id, fields
 
+                fields = _.clone fields
+                fields._reactives ?= {}
+
                 if id of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
                     # The set of projections being watched on this doc may have grown.
                     changedFields = {}
 
                     for fieldName, value of fields
                         oldValue = getField querySpec.modelName, id, fieldName
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                        setField querySpec.modelName, id, fieldName, querySpec, value
                         newValue = getField querySpec.modelName, id, fieldName
                         if not EJSON.equals oldValue, newValue
                             changedFields[fieldName] = newValue
@@ -256,18 +374,19 @@ updateObservers = (dataSessionId) ->
                 fieldsByModelIdQuery[querySpec.modelName] ?= {}
                 fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
                 for fieldName, value of fields
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    setField querySpec.modelName, id, fieldName, querySpec, value
 
             changed: (id, fields) =>
                 # log querySpec, "server says CHANGED:", id, fields
+
+                fields = _.clone fields
+                fields._reactives ?= {}
 
                 changedFields = {}
 
                 for fieldName, value of fields
                     oldValue = getField querySpec.modelName, id, fieldName
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    setField querySpec.modelName, id, fieldName, querySpec, value
                     newValue = getField querySpec.modelName, id, fieldName
                     if not EJSON.equals oldValue, newValue
                         changedFields[fieldName] = newValue

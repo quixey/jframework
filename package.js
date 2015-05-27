@@ -79,6 +79,7 @@ Package.onUse(function(api) {
         "components.coffee",
         "proptypes.coffee",
         "models.coffee",
+        "denorm.coffee",
         "routing.coffee",
         "dom.coffee"
     ]);
