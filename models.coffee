@@ -200,7 +200,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        doc = Tracker.nonreactive => @toDoc()
+        doc = Tracker.nonreactive => @toDoc(true)
 
         doc._id ?= Random.hexString(10)
 
@@ -239,8 +239,8 @@ class J.Model
         doc = J.Model.toSubdoc(@_fields.tryToObj(), denormalize)
 
         if denormalize and @modelClass.idSpec is J.PropTypes.key
-            key = @key()
-            J.assert not @_id? or @_id is key
+            key = @key() # Might throw a legitimate VALUE_NOT_READY
+            J.assert key? and (@_id is key or not @_id?)
             doc._id = key
         else
             doc._id = @_id
