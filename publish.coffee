@@ -275,7 +275,7 @@ updateObservers = (dataSessionId) ->
         fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
 
         if fieldName is '_reactives'
-            reactivesObj = _.clone(value) ? {}
+            reactivesObj = JSON.parse(JSON.stringify(value ? {}))
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
 
             instance = undefined

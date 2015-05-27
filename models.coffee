@@ -598,8 +598,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 if Meteor.isServer
                     qsString = EJSON.stringify querySpec
 
-                    if J.denorm._watchingQueries
-                        J.denorm._watchedQuerySpecSet[qsString] = true
+                    if J._watchedQuerySpecSet.get()?
+                        J._watchedQuerySpecSet.get()[qsString] = true
 
                     instances = J.List @find(selector, options).fetch()
 

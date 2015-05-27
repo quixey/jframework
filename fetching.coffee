@@ -71,27 +71,6 @@ J.fetching =
                             the fetch also works as expected on the client."
 
 
-    isQueryReady: (querySpec) ->
-        querySpecString = EJSON.stringify querySpec
-        simpleIds = @_getIdsForSimpleIdQs querySpec
-
-        _isQueryReady = (readyQsSet) =>
-            return querySpecString of readyQsSet if not simpleIds?
-
-            for readyQsString of readyQsSet
-                readyQs = EJSON.parse readyQsString
-                continue if readyQs.modelName isnt querySpec.modelName
-
-                readySimpleIds = @_getIdsForSimpleIdQs readyQs
-                continue if not readySimpleIds?
-
-                return true if _.all(id in readySimpleIds for id in simpleIds)
-
-            false
-
-        _isQueryReady(@_mergedQsSet) and _isQueryReady(@_nextMergedQsSet)
-
-
     getMerged: (querySpecs) ->
         # FIXME: EJSON.stringify doesn't canonically order the keys
         # so {a: 5, b: 6} and {b: 6, a: 5} may look like different
@@ -124,6 +103,27 @@ J.fetching =
                 selector: _id: $in: _.keys(requestedIdSet).sort()
 
         mergedQuerySpecs
+
+
+    isQueryReady: (querySpec) ->
+        querySpecString = EJSON.stringify querySpec
+        simpleIds = @_getIdsForSimpleIdQs querySpec
+
+        _isQueryReady = (readyQsSet) =>
+            return querySpecString of readyQsSet if not simpleIds?
+
+            for readyQsString of readyQsSet
+                readyQs = EJSON.parse readyQsString
+                continue if readyQs.modelName isnt querySpec.modelName
+
+                readySimpleIds = @_getIdsForSimpleIdQs readyQs
+                continue if not readySimpleIds?
+
+                return true if _.all(id in readySimpleIds for id in simpleIds)
+
+            false
+
+        _isQueryReady(@_mergedQsSet) and _isQueryReady(@_nextMergedQsSet)
 
 
     remergeQueries: ->
@@ -209,11 +209,6 @@ J.fetching =
         qsString = EJSON.stringify querySpec
         computation = Tracker.currentComputation
 
-        # We may not need reactivity per se, since the query should
-        # never stop once it's started. But we still want to track
-        # which computations need this querySpec.
-        # console.log computation.tag, 'requests a query', querySpec.modelName,
-        #     querySpec.selector, @isQueryReady querySpec
         @_requestersByQs[qsString] ?= {}
         if computation._id not of @_requestersByQs[qsString]
             @_requestersByQs[qsString][computation._id] = computation

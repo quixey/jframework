@@ -6,6 +6,8 @@
     LICENSE file in the root directory of this source tree.
 ###
 
+J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
+
 J.denorm =
     _watchingQueries: false
     _watchedQuerySpecSet: null
@@ -33,15 +35,15 @@ J.denorm =
     recalc: (instance, reactiveName) ->
         reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
 
-        @_watchedQuerySpecSet = watchedQuerySpecSet = {}
-        @_watchingQueries = true
+        value = null
+        watchedQuerySpecSet = null
 
-        value = reactiveSpec.val.call instance
+        J._watchedQuerySpecSet.withValue {}, =>
+            value = reactiveSpec.val.call instance
 
-        @_watchingQueries = false
-        @_watchedQuerySpecSet = null
+            watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        console.log 'watched: ', watchedQuerySpecSet
+        console.log "#{instance.modelClass.name} ##{instance._id} watched:", watchedQuerySpecSet
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (
