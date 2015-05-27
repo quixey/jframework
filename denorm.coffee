@@ -13,8 +13,15 @@ J.denorm =
     _watchedQuerySpecSet: null
 
     ensureAllReactiveWatcherIndexes: ->
-        helper = (modelClass, reactiveName) ->
-            for modelClassName, modelClass of J.models
+        helper = (reactiveModelClass, reactiveName) ->
+            ###
+                Build indexes that let NK (Normalized Kernel) nodes propagate
+                their value change to reset this reactive's value
+            ###
+
+            for nkModelClassname, nkModelClass of J.models
+                continue if nkModelClass in ['JDataSession']
+
                 indexFieldsSpec = {}
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.selector"] = 1
@@ -23,6 +30,7 @@ J.denorm =
 
                 modelClass.collection._ensureIndex(
                     indexFieldsSpec
+                    name: "_jReactiveWatcher_#{reactiveName}"
                     sparse: true
                 )
 
