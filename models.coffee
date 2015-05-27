@@ -140,12 +140,12 @@ class J.Model
                 console.trace()
                 console.groupEnd()
 
-                if @attached
-                    # Record that the current computation uses the current field
-                    projection = {}
-                    projection[fieldName] = 1
-                    @modelClass.tryFetchOne @_id,
-                        fields: projection
+            if @attached
+                # Record that the current computation uses the current field
+                projection = {}
+                projection[fieldName] = 1
+                @modelClass.tryFetchOne @_id,
+                    fields: projection
 
         @_fields.forceGet fieldName
 

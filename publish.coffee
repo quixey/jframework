@@ -40,6 +40,7 @@ _addRecalcBufferKey = (bufferKey) ->
         Meteor.defer ->
             _flushRecalcBuffer()
             _willFlush = false
+
 _flushRecalcBuffer = ->
     while not _.isEmpty J._recalcBuffer
         bufferKey = _.keys(J._recalcBuffer)[0]
@@ -272,9 +273,11 @@ updateObservers = (dataSessionId) ->
         modelClass = J.models[modelName]
         qsString = EJSON.stringify querySpec
         fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
-        fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
 
         if fieldName is '_reactives'
+            reactivesObj = _.clone(value) ? {}
+            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
+
             instance = undefined
             projection = getQuerySpecProjection querySpec
 
@@ -287,12 +290,22 @@ updateObservers = (dataSessionId) ->
                             included = true
                             break
 
-                if included and value?[reactiveName]?.val is undefined
-                    bufferKey = JSON.stringify [modelName, id, reactiveName]
-                    console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
-                        #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
+                if included and reactivesObj[reactiveName]?.val is undefined
+                    SYNC_RECALC = true
+                    if SYNC_RECALC
+                        reactivesObj[reactiveName] ?= {}
+                        instance ?= modelClass.fetchOne id
+                        reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
 
-                    _addRecalcBufferKey bufferKey
+                    else
+                        bufferKey = JSON.stringify [modelName, id, reactiveName]
+                        console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
+                            #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
+
+                        _addRecalcBufferKey bufferKey
+
+        else
+            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
 
 
     qsStringsDiff.added.forEach (qsString) =>

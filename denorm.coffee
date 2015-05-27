@@ -57,6 +57,8 @@ J.denorm =
             $set: setter
         )
 
+        value
+
 
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
         ###
