@@ -27,3 +27,18 @@ J.dm 'Foo', 'foos',
         d:
             val: ->
                 @a() + @c()
+
+
+J.dm 'Bar', 'bars',
+    _id:
+        type: $$.str
+
+    fields:
+        totallySweet:
+            type: $$.str
+
+    reactives:
+        numberOfFoosWithAEqualTo4:
+            denorm: true
+            val: ->
+                $$.Foo.fetch({ a: 4 }).count()
