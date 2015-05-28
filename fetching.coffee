@@ -25,17 +25,6 @@ J.fetching =
     _mergedQsSet: {} # mergedQuerySpecString: true
 
 
-    _getIdsForSimpleIdQs: (qs) ->
-        if _.isString(qs.selector) and not qs.fields?
-            [qs.selector]
-        else if _.size(qs.selector) is 1 and qs.selector._id? and not qs.fields?
-            if _.isString qs.selector._id
-                [qs.selector._id]
-            else if _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-            qs.selector._id.$in? and not qs.fields? and not qs.skip? and not qs.limit?
-                qs.selector._id.$in
-
-
     checkQuerySpec: (querySpec) ->
         ###
             Throws an error if the querySpec is invalid
@@ -86,8 +75,18 @@ J.fetching =
 
         mergedQuerySpecs = []
 
+        _getIdsForSimpleIdQs = (qs) =>
+            if _.isString(qs.selector) and not qs.fields?
+                [qs.selector]
+            else if _.size(qs.selector) is 1 and qs.selector._id? and not qs.fields?
+                if _.isString qs.selector._id
+                    [qs.selector._id]
+                else if _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
+                qs.selector._id.$in? and not qs.fields? and not qs.skip? and not qs.limit?
+                    qs.selector._id.$in
+
         for qs in querySpecs
-            simpleIds = @_getIdsForSimpleIdQs qs
+            simpleIds = _getIdsForSimpleIdQs qs
             if simpleIds?.length
                 # We'll add a merged version of it later
                 requestedIdsByModel[qs.modelName] ?= {}
@@ -105,25 +104,24 @@ J.fetching =
         mergedQuerySpecs
 
 
-    isQueryReady: (querySpec) ->
-        querySpecString = EJSON.stringify querySpec
-        simpleIds = @_getIdsForSimpleIdQs querySpec
+    isQueryReady: (qs) ->
+        modelClass = J.models[qs.modelName]
+        qs = J.util.deepClone qs
+        if not J.util.isPlainObject qs.selector
+            qs.selector = _id: qs.selector
 
-        _isQueryReady = (readyQsSet) =>
-            return querySpecString of readyQsSet if not simpleIds?
+        helper = =>
+            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
+                return true
 
-            for readyQsString of readyQsSet
-                readyQs = EJSON.parse readyQsString
-                continue if readyQs.modelName isnt querySpec.modelName
-
-                readySimpleIds = @_getIdsForSimpleIdQs readyQs
-                continue if not readySimpleIds?
-
-                return true if _.all(id in readySimpleIds for id in simpleIds)
+            qsString = EJSON.stringify qs
+            return true if qsString of @_mergedQsSet and qsString of @_nextMergedQsSet
 
             false
 
-        _isQueryReady(@_mergedQsSet) and _isQueryReady(@_nextMergedQsSet)
+        ret = helper()
+        if not ret then console.log 'isQueryReady', ret, qs
+        ret
 
 
     remergeQueries: ->

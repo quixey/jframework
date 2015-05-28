@@ -97,6 +97,10 @@ J.util =
         else
             x
 
+    deepClone: (x) ->
+        return x if not x?
+        EJSON.parse EJSON.stringify x
+
     equals: (a, b) ->
         # Go one level deep into arrays because some reactive expressions
         # seem to make good use of this.
