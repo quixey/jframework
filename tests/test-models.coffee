@@ -39,6 +39,7 @@ J.dm 'Bar', 'bars',
 
     reactives:
         numberOfFoosWithAEqualTo4:
+            type: $$.int
             denorm: true
             val: ->
-                $$.Foo.fetch({ a: 4 }).count()
+                $$.Foo.fetch({ a: 4 }).size()

@@ -132,7 +132,8 @@ Package.onTest(function(api) {
         "tests/autovar-tests.coffee",
         "tests/list-tests.coffee",
         "tests/dict-tests.coffee",
-        "tests/jframework-tests.coffee"
+        "tests/jframework-tests.coffee",
+        "tests/denorm-tests.coffee"
     ]);
 
     api.addFiles([
