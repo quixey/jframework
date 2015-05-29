@@ -37,10 +37,8 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
 
     bar = new $$.Bar
 
-    bar.save ->
-        attachedBar = J.AutoVar -> $$.Bar.fetchOne bar._id
-
-        beforeCount = undefined
+    bar.save (barId) ->
+        attachedBar = J.AutoVar -> $$.Bar.fetchOne barId
 
         count = J.AutoVar(
             'count'
@@ -48,14 +46,13 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
                 attachedBar.get().numberOfFoosWithAEqualTo4()
             (oldCount, newCount) ->
                 if oldCount is undefined
-                    beforeCount = newCount
                     foo.a(4)
                     foo.save()
                 else
-                    test.equal newCount, beforeCount + 1, "should have 1 more Foo instance with a == 4"
+                    test.equal newCount, oldCount + 1, "should have 1 more Foo instance with a == 4"
                     count.stop()
                     attachedBar.stop()
                     foo.remove()
                     bar.remove()
-                    Tracker.afterFlush -> _.defer onComplete
+                    _.defer onComplete
         )
