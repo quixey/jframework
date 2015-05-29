@@ -19,39 +19,43 @@ cleanUp = ->
         a.get().forEach (bar) ->
             bar.remove()
 
-Tinytest.add "Denormalization - A -> B", (test) ->
+if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (test) ->
     bar = new $$.Bar
-    if Meteor.isServer
-        foo = new $$.Foo
-        foo.insert()
 
-        beforeCount = bar.numberOfFoosWithAEqualTo4()
-        foo.a(4)
-        foo.save()
-        test.equals bar.numberOfFoosWithAEqualTo4(), beforeCount + 1, "should have 1 more Foo instance with a == 4"
-    else
-        a = new J.AutoVar -> bar.numberOfFoosWithAEqualTo4()
-        foo = new $$.Foo
-        foo.insert()
+    foo = new $$.Foo
+    foo.insert()
 
-        beforeCount =  a.get()
-        foo.a(4)
-        foo.save()
-        test.equals a.get(), beforeCount + 1, "should have 1 more Foo instance with a == 4"
-    foo.remove()
+    beforeCount = bar.numberOfFoosWithAEqualTo4()
+    foo.a(4)
+    foo.save()
+    test.equal bar.numberOfFoosWithAEqualTo4(), beforeCount + 1, "should have 1 more Foo instance with a == 4"
 
-Tinytest.add "Model - static field bindings", (test) ->
-    if Meteor.isServer
-        foo = new $$.Foo
-        a = foo.a
-        a()
-        foo.a()
-        test.equals a(), foo.a()
 
-Tinytest.add "Model - reactive field bindings", (test) ->
-    if Meteor.isServer
-        bar = new $$.Bar
-        n = bar.numberOfFoosWithAEqualTo4
-        bar.numberOfFoosWithAEqualTo4()
-        n()
-        test.equals bar.numberOfFoosWithAEqualTo4(), n()
+if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B", (test, onComplete) ->
+    foo = new $$.Foo
+    foo.insert()
+
+    bar = new $$.Bar
+
+    bar.save ->
+        attachedBar = J.AutoVar -> $$.Bar.fetchOne bar._id
+
+        beforeCount = undefined
+
+        count = J.AutoVar(
+            'count'
+            ->
+                attachedBar.get().numberOfFoosWithAEqualTo4()
+            (oldCount, newCount) ->
+                if oldCount is undefined
+                    beforeCount = newCount
+                    foo.a(4)
+                    foo.save()
+                else
+                    test.equal newCount, beforeCount + 1, "should have 1 more Foo instance with a == 4"
+                    count.stop()
+                    attachedBar.stop()
+                    foo.remove()
+                    bar.remove()
+                    Tracker.afterFlush -> _.defer onComplete
+        )

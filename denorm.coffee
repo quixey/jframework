@@ -9,9 +9,6 @@
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
 J.denorm =
-    _watchingQueries: false
-    _watchedQuerySpecSet: null
-
     ensureAllReactiveWatcherIndexes: ->
         helper = (reactiveModelClass, reactiveName) ->
             ###
@@ -41,6 +38,11 @@ J.denorm =
 
 
     recalc: (instance, reactiveName) ->
+        ###
+            Sets _reactives.#{reactiveName}.val and .watchers
+            Returns the recalculated value
+        ###
+
         reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
 
         value = null
@@ -72,7 +74,7 @@ J.denorm =
 
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
         ###
-            Returns modelName: [(instance, reactiveName)]
+            Returns modelName: reactiveName: [instanceId]
         ###
 
         console.log 'resetWatchers', modelName, instanceId,

@@ -129,25 +129,54 @@ class J.Model
         instance
 
 
-    get: (fieldName) ->
+    get: (fieldOrReactiveName) ->
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
 
-        if Tracker.active
-            if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
-                console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
-                console.groupCollapsed()
-                console.trace()
-                console.groupEnd()
+        isReactive = fieldOrReactiveName of @modelClass.reactiveSpecs
 
-            if @attached
-                # Record that the current computation uses the current field
-                projection = {}
-                projection[fieldName] = 1
-                @modelClass.tryFetchOne @_id,
-                    fields: projection
+        if isReactive
+            reactiveName = fieldOrReactiveName
+            reactiveSpec = @modelClass.reactiveSpecs[fieldOrReactiveName]
 
-        @_fields.forceGet fieldName
+            if Meteor.isServer
+                J.Var(reactiveSpec.val.call @).get()
+
+            else
+                if reactiveSpec.denorm
+                    if not @attached
+                        throw new Error "Can only get denormed reactive values on attached
+                            instances: #{@modelClass.name}.#{fieldOrReactiveName}"
+
+                    # Record that the current computation uses the current reactive
+                    projection = {}
+                    projection[reactiveName] = 1
+                    @modelClass.tryFetchOne @_id,
+                        fields: projection
+
+                    @_reactives.get reactiveName
+
+                else
+                    @reactives[reactiveName].get()
+
+        else
+            fieldName = fieldOrReactiveName
+
+            if Tracker.active
+                if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
+                    console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
+                    console.groupCollapsed()
+                    console.trace()
+                    console.groupEnd()
+
+                if @attached
+                    # Record that the current computation uses the current field
+                    projection = {}
+                    projection[fieldName] = 1
+                    @modelClass.tryFetchOne @_id,
+                        fields: projection
+
+            @_fields.forceGet fieldName
 
 
     insert: (collection = @collection, callback) ->
@@ -206,7 +235,8 @@ class J.Model
 
         Meteor.call '_jSave', @modelClass.name, doc, callback
 
-        doc._id
+        # Returns @_id
+        @_id ?= doc._id
 
 
     set: (fields) ->
@@ -366,11 +396,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
                     => reactiveSpec.val.call @
 
-        @_reactives = J.Dict() # denormedReactiveName: value
-        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
-            if reactiveSpec.denorm
-                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
-
         null
 
     # Hack to set up the read-only Function.name value
@@ -403,52 +428,37 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
     throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
-    # Set up instance methods for getting/setting fields
-    for fieldName, fieldSpec of modelClass.fieldSpecs
+    fieldAndReactiveSet = {} # fieldOrReactiveName: true
+    for fieldName of modelClass.fieldSpecs
         if fieldName is '_id'
             throw new Meteor.Error "_id is not a valid field name for #{modelName}"
 
-        modelClass.prototype[fieldName] ?= do (fieldName, fieldSpec) -> (value) ->
-            if arguments.length is 0
-                # Getter
-                @get fieldName
-            else
-                setter = {}
-                setter[fieldName] = value
-                @set setter
+        fieldAndReactiveSet[fieldName] = true
 
-    # Set up reactives
     for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-        if reactiveName of modelClass.fieldSpecs
-            throw new Meteor.Error "#{modelClass}.reactive can't have same name as field: #{reactiveName}"
-
-        unless reactiveSpec.val?
+        if reactiveName of fieldAndReactiveSet
+            throw new Error "Can't have same name for #{modelName} field and reactive:
+                #{JSON.stringify reactiveName}"
+        if not reactiveSpec.val?
             throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
-        modelClass.prototype[reactiveName] ?= do (reactiveName, reactiveSpec) -> ->
-            # If the server is in reactive-recalculation mode and
-            # J.denorm._watchingQueries is true, then we can't use
-            # the cached value of the reactive because right now
-            # our dependency tracking only works with nodes in the
-            # Normalized Kernel.
+        fieldAndReactiveSet[reactiveName] = true
 
-            if reactiveSpec.denorm and not (Meteor.isServer and J.denorm._watchingQueries)
-                if @attached
-                    # Record that the current computation uses the current reactive
-                    projection = {}
-                    projection[reactiveName] = 1
-                    @modelClass.tryFetchOne @_id,
-                        fields: projection
+    # Set up @[fieldOrReactiveName] methods for getting/setting fields and getting reactives
+    for fieldOrReactiveName of fieldAndReactiveSet
+        isReactive = fieldOrReactiveName of modelClass.reactiveSpecs
+        spec = modelClass[if isReactive then 'reactiveSpecs' else 'fieldSpecs'][fieldOrReactiveName]
 
-                @_reactives.get reactiveName
+        modelClass.prototype[fieldOrReactiveName] ?= do (fieldOrReactiveName, isReactive, spec) -> (value) ->
+            if arguments.length is 0
+                # Getter
+                @get fieldOrReactiveName
             else
-                if Meteor.isServer
-                    # Wrap the output
-                    J.Var(reactiveSpec.val.call @).get()
-                else
-                    @reactives[reactiveName].get()
-
-
+                if isReactive
+                    throw new Error "Can't pass arguments to reactive: #{modelClass}.#{fieldOrReactiveName}"
+                setter = {}
+                setter[fieldOrReactiveName] = value
+                @set setter
 
     # Set up class methods for collection operations
     if collectionName?
@@ -474,7 +484,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance.attached = true
+
                     instance._fields.setReadOnly true, true
+
+                    # The @_reactives dict stores the published values of reactives
+                    # with denorm:true (i.e. server handles all their reactivity).
+                    instance._reactives = J.Dict() # denormedReactiveName: value
+                    for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                        if reactiveSpec.denorm
+                            instance._reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
 
                     if reactivesObj?
                         reactivesSetter = {}
@@ -528,13 +546,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
                     doc = _.clone doc
-                    reactivesObj = modelClass._getUnescapedSubdoc doc._reactives ? {}
+
+                    reactivesObj = modelClass._getUnescapedSubdoc doc._reactives
+                    if reactivesObj?
+                        console.warn "No reason for the server-side ORM to ever
+                            fetch the _reactives field."
                     delete doc._reactives
 
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
-
-                    instance._reactives.set reactivesObj
 
                     instance
 
