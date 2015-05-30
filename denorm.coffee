@@ -53,7 +53,7 @@ J.denorm =
 
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        console.log "#{instance.modelClass.name} ##{instance._id} watched:", watchedQuerySpecSet
+        console.log "<#{instance.modelClass.name} ##{instance._id}>.#{reactiveName} watched:", watchedQuerySpecSet
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (

@@ -7,18 +7,6 @@
 ###
 
 
-cleanUp = ->
-    if Meteor.isServer
-        $$.Foo.fetch().forEach (foo) -> foo.remove()
-        $$.Bar.fetch().forEach (bar) -> bar.remove()
-    else
-        a = new J.AutoVar -> $$.Foo.fetch()
-        a.get().forEach (foo) ->
-            foo.remove()
-        a = new J.AutoVar -> $$.Bar.fetch()
-        a.get().forEach (bar) ->
-            bar.remove()
-
 if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (test) ->
     bar = new $$.Bar
 
@@ -56,3 +44,11 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
                     bar.remove()
                     _.defer onComplete
         )
+
+
+if Meteor.isClient then Tinytest.addAsync "_lastTest3", (test, onComplete) ->
+    setTimeout(
+        -> onComplete()
+        1000
+    )
+

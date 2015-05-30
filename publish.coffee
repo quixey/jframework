@@ -368,13 +368,17 @@ updateObservers = (dataSessionId) ->
                         @changed modelClass.collection._name, id, changedFields
 
                 else
-                    # log querySpec, "sending ADDED:", id, fields
-                    @added modelClass.collection._name, id, fields
+                    fieldsByModelIdQuery[querySpec.modelName] ?= {}
+                    fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
 
-                fieldsByModelIdQuery[querySpec.modelName] ?= {}
-                fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
-                for fieldName, value of fields
-                    setField querySpec.modelName, id, fieldName, querySpec, value
+                    changedFields = {}
+
+                    for fieldName, value of fields
+                        setField querySpec.modelName, id, fieldName, querySpec, value
+                        changedFields[fieldName] = getField querySpec.modelName, id, fieldName
+
+                    # log querySpec, "sending ADDED:", id, changedFields
+                    @added modelClass.collection._name, id, changedFields
 
             changed: (id, fields) =>
                 # log querySpec, "server says CHANGED:", id, fields

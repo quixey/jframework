@@ -573,6 +573,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     if reactivesObj?
                         console.warn "No reason for the server-side ORM to ever
                             fetch the _reactives field."
+                        console.trace()
                     delete doc._reactives
 
                     instance = modelClass.fromDoc doc
@@ -642,6 +643,9 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                     if J._watchedQuerySpecSet.get()?
                         J._watchedQuerySpecSet.get()[qsString] = true
+
+                    options = J.util.deepClone options
+                    options.fields ?= _reactives: 0
 
                     instances = J.List @find(selector, options).fetch()
 
