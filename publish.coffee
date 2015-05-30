@@ -295,7 +295,11 @@ updateObservers = (dataSessionId) ->
                     if SYNC_RECALC
                         reactivesObj[reactiveName] ?= {}
                         instance ?= modelClass.fetchOne id
-                        reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
+                        if instance?
+                            # Instance might not exist because the instance might have been
+                            # deleted while we're still catching up publishing an @added or @changed
+                            # that includes a reactive.
+                            reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
 
                     else
                         bufferKey = JSON.stringify [modelName, id, reactiveName]
