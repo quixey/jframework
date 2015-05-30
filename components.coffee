@@ -244,6 +244,9 @@ J._defineComponent = (componentName, componentSpec) ->
 
 
     reactSpec.getInitialState = ->
+        J.assert not Tracker.active, "Can't initialize a component
+            in a reactive computation: #{@toString()}"
+
         @_componentId = J._nextComponentId
         J._nextComponentId += 1
         J._componentById[@_componentId] = @
@@ -458,8 +461,9 @@ J._defineComponent = (componentName, componentSpec) ->
         # Call all the onChange handlers synchronously because they might initialize
         # the state during a cascading React render thread.
         for lazyPropName, lazyPropAutoVar of @_lazyProps
-            propVar = @_props[lazyPropName]
-            lazyPropAutoVar.onChange? undefined, propVar._value, true
+            lazyPropValue = lazyPropAutoVar.get()
+            if _.isFunction lazyPropAutoVar.onChange
+                lazyPropAutoVar.onChange undefined, lazyPropValue, true
         for reactiveName, reactiveAutoVar of @reactives
             reactiveSpec = reactiveSpecByName[reactiveName]
             if reactiveSpec.early
