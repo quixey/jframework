@@ -246,7 +246,22 @@ J.fetching =
         addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
         deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.deleted)
 
-        return unless addedQuerySpecs.length or deletedQuerySpecs.length
+        doAfterUpdatingUnmergedQsSet = =>
+            for addedUnmergedQsString in unmergedQsStringsDiff.added
+                for computationId in _.keys @_requestersByQs[addedUnmergedQsString] ? {}
+                    @_requestersByQs[addedUnmergedQsString][computationId].invalidate()
+
+            # There may be changes to @_requestersByQs that we couldn't act on
+            # until this request was done.
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+        if not (addedQuerySpecs.length or deletedQuerySpecs.length)
+            # The merged query set hasn't changed so we don't need to hit the server,
+            # but it's important to update @_unmergedQsSet as if we had.
+            @_unmergedQsSet = _.clone @_nextUnmergedQsSet
+            doAfterUpdatingUnmergedQsSet()
+            return
+
 
         debug = true
         if debug
@@ -282,13 +297,7 @@ J.fetching =
                 @_unmergedQsSet = _.clone @_nextUnmergedQsSet
                 @_mergedQsSet = _.clone @_nextMergedQsSet
 
-                for addedUnmergedQsString in unmergedQsStringsDiff.added
-                    for computationId in _.keys @_requestersByQs[addedUnmergedQsString] ? {}
-                        @_requestersByQs[addedUnmergedQsString][computationId].invalidate()
-
-                # There may be changes to @_requestersByQs that we couldn't act on
-                # until this request was done.
-                Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+                doAfterUpdatingUnmergedQsSet()
 
 
     requestQuery: (querySpec) ->
