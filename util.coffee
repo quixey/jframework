@@ -355,7 +355,7 @@ J.util =
                 else
                     throw new Error "Can't find fieldSpec to set: #{fieldSpec}"
 
-            @setField obj[fieldSpecParts[0]], fieldSpecParts[1...].join(','), value, autoDeep
+            @setField obj[fieldSpecParts[0]], fieldSpecParts[1...].join('.'), value, autoDeep
 
         null
 
