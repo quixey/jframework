@@ -25,6 +25,24 @@ J.fetching =
     _mergedQsSet: {} # mergedQuerySpecString: true
 
 
+    _deleteComputationQsRequests: (computation) ->
+        return if not computation._requestingData
+        for qsString in _.keys @_requestersByQs
+            delete @_requestersByQs[qsString][computation._id]
+            if _.isEmpty @_requestersByQs[qsString]
+                delete @_requestersByQs[qsString]
+        computation._requestingData = false
+        @_requestsChanged = true
+        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+
+    _qsToFindOptions: (qs) ->
+        options = {}
+        for optionName in ['fields', 'sort', 'skip', 'limit']
+            if qs[optionName]? then options[optionName] = J.util.deepClone qs[optionName]
+        options
+
+
     checkQuerySpec: (querySpec) ->
         ###
             Throws an error if the querySpec is invalid
@@ -105,22 +123,30 @@ J.fetching =
 
 
     isQueryReady: (qs) ->
+        qsString = EJSON.stringify qs
         modelClass = J.models[qs.modelName]
+
         qs = J.util.deepClone qs
         if not J.util.isPlainObject qs.selector
+            # Note that this makes qs inconsistent with qsString
             qs.selector = _id: qs.selector
 
         helper = =>
-            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
-                return true
+            return true if qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
 
-            qsString = EJSON.stringify qs
-            return true if qsString of @_mergedQsSet and qsString of @_nextMergedQsSet
+            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
+                # For queries with an _id filter, say it's ready as long as minimongo
+                # has an attached entry with that _id and no other parts of the selector
+                # rule out the one possible match.
+                options = @_qsToFindOptions(qs)
+                options.transform = false
+                options.reactive = false
+                return modelClass.findOne(qs.selector, options)?
 
             false
 
         ret = helper()
-        if not ret then console.log 'isQueryReady', ret, qs
+        if ret is false then console.log 'isQueryReady', ret, qsString
         ret
 
 
@@ -188,17 +214,6 @@ J.fetching =
                 Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
 
-    _deleteComputationQsRequests: (computation) ->
-        return if not computation._requestingData
-        for qsString in _.keys @_requestersByQs
-            delete @_requestersByQs[qsString][computation._id]
-            if _.isEmpty @_requestersByQs[qsString]
-                delete @_requestersByQs[qsString]
-        computation._requestingData = false
-        @_requestsChanged = true
-        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
-
-
     requestQuery: (querySpec) ->
         J.assert Tracker.active
 
@@ -217,9 +232,7 @@ J.fetching =
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
-            options = {}
-            for optionName in ['fields', 'sort', 'skip', 'limit']
-                if querySpec[optionName]? then options[optionName] = querySpec[optionName]
+            options = @_qsToFindOptions querySpec
 
             if Tracker.active
                 results = J.List Tracker.nonreactive ->
