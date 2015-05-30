@@ -187,10 +187,15 @@ J.util =
 
     getField: (obj, fieldSpec) ->
         ###
+            fieldSpec:
+                A List/array or string with dots and question marks.
+                Better to use a List/array so that the fieldSpecParts
+                can then include dots.
+
             >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a?.b.c')
             5
 
-            >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a.x?.c')
+            >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, ['a', '.', 'x', '?.', 'c'])
             undefined
 
             >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a.x.c')
@@ -200,19 +205,25 @@ J.util =
         if not _.isObject obj
             throw new Error "Invalid obj passed to getField: #{obj}"
 
-        if _.isArray(fieldSpec) or fieldSpec instanceof J.List
-            fieldSpec = fieldSpec.join('.')
+        if fieldSpec instanceof J.List
+            fieldSpecParts = fieldSpec.toArr()
+        else if _.isArray fieldSpec
+            fieldSpecParts = fieldSpec
+        else
+            # 'a?.b.c' -> ['a', '?.', 'b', '.', 'c']
+            fieldSpecParts = fieldSpec.split /(\??\.)/
 
-        if fieldSpec is ''
+        if fieldSpecParts.length is 0
             return obj
 
-        # 'a?.b.c' -> ['a', '?', 'b', '', 'c']
-        fieldSpecParts = fieldSpec.split /(\??)\./
         numFieldSpecParts = fieldSpecParts.length // 2 + 1
 
         value = obj
         for i in [0...numFieldSpecParts]
-            questionMark = i > 0 and fieldSpecParts[i * 2 - 1] is '?'
+            if i > 0 and fieldSpecParts[i * 2 - 1] not in ['.', '?.']
+                throw new Error "Invalid fieldSpec: #{J.util.stringify fieldSpec}"
+
+            questionMark = i > 0 and fieldSpecParts[i * 2 - 1] is '?.'
             nextKey = fieldSpecParts[i * 2]
 
             if questionMark and not value?
@@ -339,12 +350,19 @@ J.util =
         textInputDomNode.value = textInputDomNode.value
 
     setField: (obj, fieldSpec, value, autoDeep = false) ->
-        if fieldSpec.indexOf('?') >= 0
-            throw new Error "No question marks allowed in setter fieldSpecs"
+        if fieldSpec instanceof J.List
+            fieldSpecParts = fieldSpec.toArr()
+        else if _.isArray fieldSpec
+            fieldSpecParts = fieldSpec
+        else if _.isString fieldSpec
+            if fieldSpec.indexOf('?') >= 0
+                throw new Error "No question marks allowed in setter fieldSpecs"
+            fieldSpecParts = fieldSpec.split '.'
+        else
+            throw new Error "Invalid fieldSpec: #{fieldSpec}"
+
         if not J.util.isPlainObject obj
             throw new Error "Invalid obj argument to setField: #{obj}"
-
-        fieldSpecParts = fieldSpec.split '.'
 
         if fieldSpecParts.length is 1
             obj[fieldSpecParts[0]] = value
@@ -355,7 +373,7 @@ J.util =
                 else
                     throw new Error "Can't find fieldSpec to set: #{fieldSpec}"
 
-            @setField obj[fieldSpecParts[0]], fieldSpecParts[1...].join('.'), value, autoDeep
+            @setField obj[fieldSpecParts[0]], fieldSpecParts[1...], value, autoDeep
 
         null
 

@@ -151,8 +151,22 @@ class J.Model
                     # Record that the current computation uses the current reactive
                     projection = {}
                     projection[reactiveName] = 1
-                    @modelClass.tryFetchOne @_id,
-                        fields: projection
+                    if Tracker.active
+                        # We might be temporarily bumming this field off some other cursor owned
+                        # by some other computation, so we need to run fetchOne to update
+                        # J.fetching._requestersByQs and make sure the field data doesn't get
+                        # pulled away.
+                        # While we do want to stop watching this field when the current computation
+                        # invalidates, we might *not* need to invalidate the current computation when
+                        # the new field data arrives. The reactivity is handled by the @_reactives dict.
+                        # Therefore a child J.AutoVar is the perfect place to do the bookkeeping.
+                        J.AutoVar(
+                            "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
+                            =>
+                                @modelClass.fetchOne @_id,
+                                    fields: projection
+                            true
+                        )
 
                     @_reactives.get reactiveName
 
@@ -173,8 +187,16 @@ class J.Model
                     # Record that the current computation uses the current field
                     projection = {}
                     projection[fieldName] = 1
-                    @modelClass.tryFetchOne @_id,
-                        fields: projection
+                    if Tracker.active
+                        # See the comment for the J.AutoVar in the above if-branch. In this case,
+                        # the reactivity for the caller computation is handled by the @_fields dict.
+                        J.AutoVar(
+                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveName}"
+                            =>
+                                @modelClass.fetchOne @_id,
+                                    fields: projection
+                            true
+                        )
 
             @_fields.forceGet fieldName
 

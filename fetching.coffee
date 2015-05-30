@@ -82,42 +82,119 @@ J.fetching =
         # FIXME: EJSON.stringify doesn't canonically order the keys
         # so {a: 5, b: 6} and {b: 6, a: 5} may look like different
         # querySpecs.
-        # TODO: The client can make more inferences about which
-        # of its requested data is already available for use.
-        # For example, the client should realize that any query
-        # for an _id can be satisfied synchronously if that _id
-        # is present in the local collection, even as the result
-        # of previously watching a non-id-based query.
 
-        requestedIdsByModel = {} # modelName: {id: true}
+        ###
+            1.
+                Merge all the querySpecs that select on _id using
+                projectionByModelInstance.
+            2.
+                Attempt to pairwise merge all the querySpecs that
+                don't select on _id.
+        ###
 
+        projectionByModelInstance = {} # modelName: id: fieldSpec: 1
+        nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
-        _getIdsForSimpleIdQs = (qs) =>
-            if _.isString(qs.selector) and not qs.fields?
-                [qs.selector]
-            else if _.size(qs.selector) is 1 and qs.selector._id? and not qs.fields?
+        _getSelectorIds = (qs) =>
+            qs = J.util.deepClone qs
+            if _.isString(qs.selector)
+                qs.selector = _id: qs.selector
+
+            if qs.selector._id?
+                # Note that if the selector has keys other than "_id" that may drop
+                # the result count from 1 to 0, we'll just ignore that and send a
+                # dumber merged query to the server.
+
                 if _.isString qs.selector._id
                     [qs.selector._id]
-                else if _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-                qs.selector._id.$in? and not qs.fields? and not qs.skip? and not qs.limit?
+                else if (
+                    _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
+                    qs.selector._id.$in? and not qs.limit? and not qs.skip
+                )
                     qs.selector._id.$in
 
-        for qs in querySpecs
-            simpleIds = _getIdsForSimpleIdQs qs
-            if simpleIds?.length
-                # We'll add a merged version of it later
-                requestedIdsByModel[qs.modelName] ?= {}
-                for id in simpleIds
-                    requestedIdsByModel[qs.modelName][id] = true
-            else
-                mergedQuerySpecs.push qs
 
-        _.forEach requestedIdsByModel, (requestedIdSet, modelName) ->
-            return if _.isEmpty requestedIdSet
-            mergedQuerySpecs.push
-                modelName: modelName
-                selector: _id: $in: _.keys(requestedIdSet).sort()
+        for qs in querySpecs
+            selectorIds = _getSelectorIds qs
+            if selectorIds?.length
+                # (1) Merge this QS into projectionByModelInstance
+
+                for selectorId in selectorIds
+                    if _.size qs.fields
+                        for fieldSpec, include of qs.fields
+                            existingInclude = J.util.getField(
+                                projectionByModelInstance
+                                [qs.modelName, '?.', selectorId, '?.', fieldSpec]
+                            )
+                            J.util.setField(
+                                projectionByModelInstance
+                                [qs.modelName, selectorId, fieldSpec]
+                                if include or existingInclude then 1 else 0
+                                true
+                            )
+                    else
+                        J.util.setField(
+                            projectionByModelInstance
+                            [qs.modelName, selectorId]
+                            {}
+                            true
+                        )
+
+            else
+                # (2) Add this to the list of non-ID-selecting querySpecs
+                # to be pairwise merged.
+
+                nonIdQuerySpecsByModel[qs.modelName] ?= []
+                nonIdQuerySpecsByModel[qs.modelName].push qs
+
+
+        # (1) Dump projectionByModelInstance into mergedQuerySpecs
+        for modelName, projectionById of projectionByModelInstance
+            idsByProjectionString = {} # projectionString: [instanceIds]
+            for instanceId, projection of projectionById
+                projectionString = JSON.stringify projection
+                idsByProjectionString[projectionString] ?= []
+                idsByProjectionString[projectionString].push instanceId
+
+            for projectionString, instanceIds of idsByProjectionString
+                projection = JSON.parse projectionString
+                mergedQuerySpecs.push
+                    modelName: modelName
+                    selector: _id: $in: instanceIds
+                    fields: projection
+
+
+        # (2) Pairwise merge the nonIdQuerySpecs
+        for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
+            qsStringSet = {} # qsString: true
+            for qs in nonIdQuerySpecs
+                qsStringSet[EJSON.stringify qs] = true
+
+            # Iterate until no pair of qsStrings in qsStringSet
+            # can be pairwise merged.
+            while true
+                mergedSomething = false
+
+                qsStrings = _.keys qsStringSet
+                for qsString, i in qsStrings[qsStrings.length - 1]
+                    for qss in qsStrings[i + 1...]
+                        pairwiseMergedQsString = @tryQsPairwiseMerge qsString, qss
+                        if pairwiseMergedQsString?
+                            delete qsStringSet[qsString]
+                            delete qsStringSet[qss]
+                            qsStringSet[pairwiseMergedQsString] = true
+                            mergedSomething = true
+                            break
+
+                    break if mergedSomething
+
+                break if not mergedSomething
+
+            # Dump qsStringSet into mergedQuerySpecs
+            for qsString of qsStringSet
+                mergedQuerySpecs.push EJSON.parse qsString
+
 
         mergedQuerySpecs
 
@@ -261,3 +338,9 @@ J.fetching =
             @_requestsChanged = true
             Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
             throw J.makeValueNotReadyObject()
+
+
+    tryQsPairwiseMerge: (a, b) ->
+        return null if a.modelName isnt b.modelName
+
+        null
