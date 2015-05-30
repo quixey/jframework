@@ -214,32 +214,7 @@ updateObservers = (dataSessionId) ->
 
     fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
 
-    getQuerySpecProjection = (querySpec) ->
-        modelClass = J.models[querySpec.modelName]
-
-        if _.values(querySpec.fields ? {})[0] is 1
-            projection = querySpec.fields
-
-        else
-            projection = _id: 1 # fieldOrReactiveName: 1
-            for fieldName, fieldSpec of modelClass.fieldSpecs
-                if fieldSpec.include ? true
-                    projection[fieldName] = 1
-            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                if reactiveSpec.include ? false
-                    projection[reactiveName] = 1
-
-            for fieldSpec, include of querySpec.fields ? {}
-                J.assert include is 0, "Projection can't mix 0s and 1s"
-                fieldName = fieldSpec.split('.')[0]
-                if fieldSpec is fieldName
-                    delete projection[fieldSpec]
-                else
-                    projection[fieldSpec] = 0
-
-        projection
-
-
+    
     getMergedSubfields = (a, b) ->
         return a if b is undefined
         return b if a is undefined
@@ -279,14 +254,13 @@ updateObservers = (dataSessionId) ->
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
 
             instance = undefined
-            projection = getQuerySpecProjection querySpec
 
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 included = false
 
                 if reactiveSpec.denorm
-                    for fieldSpec of projection
-                        if fieldSpec.split('.')[0] is reactiveName
+                    for fieldOrReactiveSpec of querySpec.fields ? {}
+                        if fieldOrReactiveSpec.split('.')[0] is reactiveName
                             included = true
                             break
 
@@ -319,16 +293,16 @@ updateObservers = (dataSessionId) ->
 
         modelClass = J.models[querySpec.modelName]
 
-        options = {}
+        mongoOptions = {}
         for optionName in ['sort', 'skip', 'limit']
             if querySpec[optionName]?
-                options[optionName] = querySpec[optionName]
+                mongoOptions[optionName] = querySpec[optionName]
 
-        options.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
+        mongoOptions.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
 
-        log 'options.fields: ', JSON.stringify options.fields
+        log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
-        cursor = modelClass.collection.find querySpec.selector, options
+        cursor = modelClass.collection.find querySpec.selector, mongoOptions
 
         observer = cursor.observeChanges
             added: (id, fields) =>

@@ -140,9 +140,10 @@ _.extend J.fetching,
         inclusionSet
 
 
-    _qsToFindOptions: (qs) ->
+    _qsToMongoOptions: (qs) ->
         options = {}
-        for optionName in ['fields', 'sort', 'skip', 'limit']
+        options.fields = @projectionToMongoFieldsArg qs.fields ? {}
+        for optionName in ['sort', 'skip', 'limit']
             if qs[optionName]? then options[optionName] = J.util.deepClone qs[optionName]
         options
 
@@ -315,7 +316,7 @@ _.extend J.fetching,
                 # For queries with an _id filter, say it's ready as long as minimongo
                 # has an attached entry with that _id and no other parts of the selector
                 # rule out the one possible match.
-                options = @_qsToFindOptions(qs)
+                options = @_qsToMongoOptions(qs)
                 options.transform = false
                 options.reactive = false
                 return modelClass.findOne(qs.selector, options)?
@@ -461,7 +462,7 @@ _.extend J.fetching,
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
-            options = @_qsToFindOptions querySpec
+            options = @_qsToMongoOptions querySpec
 
             if Tracker.active
                 results = J.List Tracker.nonreactive ->

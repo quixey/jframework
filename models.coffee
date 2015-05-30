@@ -670,19 +670,33 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     if J._watchedQuerySpecSet.get()?
                         J._watchedQuerySpecSet.get()[qsString] = true
 
-                    options = J.util.deepClone options
-                    options.fields ?= _reactives: 0
+                    mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
-                    instances = J.List @find(selector, options).fetch()
+                    fieldNameSet = {}
+                    for fieldSpec in _.keys mongoFieldsArg
+                        fieldName = fieldSpec.split('.')[0]
+                        continue if fieldName is '_id'
 
-                    if not options.fields?
-                        # Treat fields that are missing in the Mongo doc as
-                        # having a default value of null.
+                        if fieldName is '_reactives'
+                            # Loading denormalized reactive values isn't currently
+                            # supported on the server
+                            delete mongoFieldsArg[fieldName]
+                        else
+                            fieldNameSet[fieldName] = true
+
+                    mongoOptions = _.clone options
+                    mongoOptions.fields = mongoFieldsArg
+
+                    instances = J.List @find(selector, mongoOptions).fetch()
+
+                    # Treat fields that are missing in the Mongo doc (even
+                    # though they were included in the query) as having a
+                    # default value of null.
+                    for fieldName of fieldNameSet
                         instances.forEach (instance) =>
                             setter = {}
-                            for fieldName of @fieldSpecs
-                                if instance.tryGet(fieldName) is undefined
-                                    setter[fieldName] = null
+                            if instance.tryGet(fieldName) is undefined
+                                setter[fieldName] = null
                             instance.set setter
 
                     return instances
