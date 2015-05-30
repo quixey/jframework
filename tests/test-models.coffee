@@ -12,14 +12,14 @@
 ###
 
 J.dm 'Foo', 'foos',
-    _id:
-        type: $$.str
+    _id: $$.str
 
     fields:
         a:
             type: $$.str
         b:
             type: $$.str
+            include: false
         c:
             type: $$.str
 
@@ -27,11 +27,14 @@ J.dm 'Foo', 'foos',
         d:
             val: ->
                 @a() + @c()
+        e:
+            include: true
+            val: ->
+                @b() + 1
 
 
 J.dm 'Bar', 'bars',
-    _id:
-        type: $$.str
+    _id: $$.str
 
     fields:
         totallySweet:

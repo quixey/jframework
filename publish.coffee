@@ -324,28 +324,9 @@ updateObservers = (dataSessionId) ->
             if querySpec[optionName]?
                 options[optionName] = querySpec[optionName]
 
-        for fieldSpec, include of querySpec.fields ? {}
-            fieldName = fieldSpec.split('.')[0]
-            if not (
-                fieldName is '_id' or
-                fieldName of modelClass.fieldSpecs or
-                fieldName of modelClass.reactiveSpecs
-            )
-                throw new Meteor.Error "Invalid fieldSpec in
-                    #{modelClass.name} projection: #{fieldSpec}"
+        options.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
 
-        projection = getQuerySpecProjection querySpec
-        options.fields = {}
-        for fieldSpec, include of projection
-            fieldSpecParts = fieldSpec.split('.')
-            fieldName = fieldSpecParts[0]
-            if fieldName of modelClass.reactiveSpecs
-                reactiveFieldSpec = ["_reactives.#{fieldName}.val"].concat(fieldSpecParts[1...]).join('.')
-                options.fields[reactiveFieldSpec] = include
-            else
-                options.fields[fieldSpec] = include
-
-        # log 'options.fields: ', JSON.stringify options.fields
+        log 'options.fields: ', JSON.stringify options.fields
 
         cursor = modelClass.collection.find querySpec.selector, options
 

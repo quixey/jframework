@@ -375,7 +375,7 @@ J.util =
 
             @setField obj[fieldSpecParts[0]], fieldSpecParts[1...], value, autoDeep
 
-        null
+        value
 
     _makeKeyFunc: (keySpec) ->
         if _.isString keySpec

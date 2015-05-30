@@ -6,6 +6,53 @@
     LICENSE file in the root directory of this source tree.
 ###
 
+###
+    Projection semantics of querySpec.fields:
+        "_" is a magic boolean key considered true by default.
+        When true, the querySpec.fields object extends the
+        model's set of field and reactive inclusion defaults.
+        When false, the querySpec.fields object represents the
+        whole set of field inclusions being requested.
+
+    E.g. a model with these definitions...
+        fields: # included by default
+            a: {}
+            b: include: false
+            c: {}
+        reactives: # not-included by default
+            d: {}
+            e: include: true
+
+    ...would have this mapping from querySpec.fields to included fields:
+        _: false
+            []
+
+        {} or _: true
+            ['a', 'c', 'e']
+
+        a: true
+            ['a', 'c', 'e']
+
+        _: false, a: true
+            ['a']
+
+        a: false
+            ['c', 'e']
+
+        b: true
+            ['a', 'b', 'c', 'e']
+
+        e: false
+            ['a', 'c']
+
+        'a.x.y': true, c: false
+            ['a', 'a.x.y', 'e']
+
+        _: false, 'a.x.y': true, c: false
+            ['a.x.y']
+###
+
+
 J.fetching = {}
 
 if Meteor.isClient then _.extend J.fetching,
@@ -60,6 +107,39 @@ _.extend J.fetching,
             x
 
 
+    _projectionToInclusionSet: (modelClass, projection) ->
+        ###
+            See the projection semantics documentation at the top of this file.
+
+            Returns {includedFieldOrReactiveName: true}
+        ###
+
+        inclusionSet = {}
+
+        if projection._ is false
+            for fieldOrReactiveName, include of projection
+                continue if fieldOrReactiveName is '_'
+                if include then inclusionSet[fieldOrReactiveName] = true
+
+        else
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                if fieldSpec.include ? true
+                    inclusionSet[fieldName] = true
+
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.include ? false
+                    inclusionSet[reactiveName] = true
+
+            for fieldOrReactiveName, include of projection
+                continue if fieldOrReactiveName is '_'
+                if include
+                    inclusionSet[fieldOrReactiveName] = true
+                else
+                    delete inclusionSet[fieldOrReactiveName]
+
+        inclusionSet
+
+
     _qsToFindOptions: (qs) ->
         options = {}
         for optionName in ['fields', 'sort', 'skip', 'limit']
@@ -72,47 +152,47 @@ _.extend J.fetching,
             Throws an error if the querySpec is invalid
         ###
 
-        if querySpec.fields?
-            if J.util.isPlainObject(querySpec.selector) then for sKey, sValue of querySpec.selector
-                if sKey isnt '_id' and sKey[0] isnt '$'
-                    ok = false
-                    for fKey, fValue of querySpec.fields
-                        if fKey.split('.')[0] is sKey
-                            ok = true
-                            break
-                    if not ok
-                        throw new Error "
-                            Missing projection for selector key #{JSON.stringify sKey}.
-                            When fetching with a projection, the projection must
-                            include/exclude every key in the selector so that
-                            the fetch also works as expected on the client."
+        modelClass = J.models[querySpec.modelName]
+        inclusionSet = @_projectionToInclusionSet modelClass, querySpec.fields ? {}
 
-            if querySpec.sort? then for sKey, sValue of querySpec.sort
-                if sKey isnt '_id' and sKey[0] isnt '$'
-                    ok = false
-                    for fKey, fValue of querySpec.fields
-                        if fKey.split('.')[0] is sKey
-                            ok = true
-                            break
-                    if not ok
-                        throw new Error "
-                            Missing projection for sort key #{JSON.stringify sKey}.
-                            When fetching with a projection, the projection must
-                            include/exclude every key in the sort so that
-                            the fetch also works as expected on the client."
+        if J.util.isPlainObject(querySpec.selector) then for sKey, sValue of querySpec.selector
+            if sKey isnt '_id' and sKey[0] isnt '$'
+                ok = false
+                for fKey, fValue of inclusionSet
+                    if fKey.split('.')[0] is sKey
+                        ok = true
+                        break
+                if not ok
+                    throw new Error "
+                        Missing projection for selector key #{JSON.stringify sKey}.
+                        The projection must include/exclude every key in the selector
+                        so that the fetch also works as expected on the client."
+
+        if querySpec.sort? then for sKey, sValue of querySpec.sort
+            if sKey isnt '_id' and sKey[0] isnt '$'
+                ok = false
+                for fKey, fValue of inclusionSet
+                    if fKey.split('.')[0] is sKey
+                        ok = true
+                        break
+                if not ok
+                    throw new Error "
+                        Missing projection for sort key #{JSON.stringify sKey}.
+                        The projection must include/exclude every key in the sort
+                        so that the fetch also works as expected on the client."
 
 
     getMerged: (querySpecs) ->
         ###
             1.
                 Merge all the querySpecs that select on _id using
-                projectionByModelInstance.
+                inclusionSetByModelInstance.
             2.
                 Attempt to pairwise merge all the querySpecs that
                 don't select on _id.
         ###
 
-        projectionByModelInstance = {} # modelName: id: fieldSpec: 1
+        inclusionSetByModelInstance = {} # modelName: id: fieldOrReactiveSpec: true
         nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
@@ -136,35 +216,27 @@ _.extend J.fetching,
 
 
         for qs in querySpecs
+            modelClass = J.models[qs.modelName]
             selectorIds = _getSelectorIds qs
             if selectorIds?.length
-                # (1) Merge this QS into projectionByModelInstance
+                # (1) Merge this QS into inclusionSetByModelInstance
 
                 for selectorId in selectorIds
-                    if _.size qs.fields
-                        for fieldSpec, include of qs.fields
-                            existingInclude = J.util.getField(
-                                projectionByModelInstance
-                                [qs.modelName, '?.', selectorId, '?.', fieldSpec]
-                            )
-                            J.util.setField(
-                                projectionByModelInstance
-                                [qs.modelName, selectorId, fieldSpec]
-                                if include or existingInclude then 1 else 0
-                                true
-                            )
-                    else
-                        existingIncludes = J.util.getField(
-                            projectionByModelInstance
-                            [qs.modelName, '?.', selectorId]
+                    existingIncludes = J.util.getField(
+                        inclusionSetByModelInstance
+                        [qs.modelName, '?.', selectorId]
+                    ) ? J.util.setField(
+                        inclusionSetByModelInstance
+                        [qs.modelName, selectorId]
+                        {}
+                        true
+                    )
+
+                    inclusionSet = @_projectionToInclusionSet modelClass, qs.fields ? {}
+                    for fieldSpec, include of inclusionSet
+                        existingIncludes[fieldSpec] = Boolean(
+                            existingIncludes[fieldSpec] or include
                         )
-                        if not existingIncludes?
-                            J.util.setField(
-                                projectionByModelInstance
-                                [qs.modelName, selectorId]
-                                {}
-                                true
-                            )
 
             else
                 # (2) Add this to the list of non-ID-selecting querySpecs
@@ -174,20 +246,23 @@ _.extend J.fetching,
                 nonIdQuerySpecsByModel[qs.modelName].push qs
 
 
-        # (1) Dump projectionByModelInstance into mergedQuerySpecs
-        for modelName, projectionById of projectionByModelInstance
-            idsByProjectionString = {} # projectionString: [instanceIds]
-            for instanceId, projection of projectionById
-                projectionString = EJSON.stringify @_getCanonical projection
-                idsByProjectionString[projectionString] ?= []
-                idsByProjectionString[projectionString].push instanceId
+        # (1) Dump inclusionSetByModelInstance into mergedQuerySpecs
+        for modelName, inclusionSetById of inclusionSetByModelInstance
+            idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
+            for instanceId, inclusionSet of inclusionSetById
+                inclusionSetString = EJSON.stringify @_getCanonical inclusionSet
+                idsByInclusionSetString[inclusionSetString] ?= []
+                idsByInclusionSetString[inclusionSetString].push instanceId
 
-            for projectionString, instanceIds of idsByProjectionString
-                projection = EJSON.parse projectionString
+            for inclusionSetString, instanceIds of idsByInclusionSetString
+                mergedProjection = _.extend(
+                    _: false
+                    EJSON.parse inclusionSetString
+                )
                 mergedQuerySpecs.push
                     modelName: modelName
                     selector: _id: $in: instanceIds
-                    fields: projection
+                    fields: mergedProjection
 
 
         # (2) Pairwise merge the nonIdQuerySpecs
@@ -254,6 +329,45 @@ _.extend J.fetching,
 
     parseQs: (qsString) ->
         EJSON.parse qsString
+
+
+    projectionToMongoFieldsArg: (modelClass, projection) ->
+        ###
+            Input:
+                The kind of projection passed to the "fields" argument when calling .fetch
+                on a Model in JFramework.
+            Output:
+                The corresponding Mongo-style fields-argument that we can pass to
+                the second argument of MongoCollection.find.
+        ###
+
+        inclusionSet = @_projectionToInclusionSet modelClass, projection
+
+        mongoFieldsArg = {}
+
+        for includeSpec of inclusionSet
+            includeSpecParts = includeSpec.split('.')
+            fieldOrReactiveName = includeSpecParts[0]
+
+            if not (
+                fieldOrReactiveName of modelClass.fieldSpecs or
+                fieldOrReactiveName of modelClass.reactiveSpecs
+            )
+                throw new Meteor.Error "Invalid fieldOrReactiveName in
+                    #{modelClass.name} inclusion set: #{includeSpec}"
+
+            if fieldOrReactiveName of modelClass.reactiveSpecs
+                # Convert someReactiveName.[etc] to _reactives.#{reactiveName}.val.[etc]
+                reactiveFieldSpec =
+                    ["_reactives.#{fieldOrReactiveName}.val"].concat(includeSpecParts[1...]).join('.')
+                mongoFieldsArg[reactiveFieldSpec] = 1
+            else
+                mongoFieldsArg[fieldOrReactiveName] = 1
+
+        if _.isEmpty mongoFieldsArg
+            mongoFieldsArg._id = 1
+
+        mongoFieldsArg
 
 
     remergeQueries: ->
