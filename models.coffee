@@ -81,7 +81,7 @@ class J.Model
         new @ fields
 
 
-    @toSubdoc: (x, denormalizeModels = true) ->
+    @toSubdoc: (x) ->
         helper = (value) =>
             if value instanceof J.Dict
                 helper value.getFields()
@@ -95,7 +95,7 @@ class J.Model
                     ret[@escapeDot k] = helper v
                 ret
             else if value instanceof J.Model
-                value.toDoc denormalizeModels
+                value.toDoc()
             else if (
                 _.isNumber(value) or _.isBoolean(value) or _.isString(value) or
                     value instanceof Date or value instanceof RegExp or
@@ -115,12 +115,11 @@ class J.Model
     clone: ->
         # Nonreactive because the clone's fields are
         # their own new piece of application state.
-        doc = Tracker.nonreactive => @toDoc false
+        doc = Tracker.nonreactive => @toDoc()
 
-        # Note that clones substitute null for undefined.
-        for fieldName, value of doc
-            if value is undefined
-                doc[fieldName] = null
+        for fieldName in _.keys doc
+            if doc[fieldName] is undefined
+                delete doc[fieldName]
 
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
@@ -143,12 +142,8 @@ class J.Model
                 J.Var(reactiveSpec.val.call @).get()
 
             else
-                if reactiveSpec.denorm
-                    if not @attached
-                        throw new Error "Can only get denormed reactive values on attached
-                            instances: #{@modelClass.name}.#{fieldOrReactiveName}"
-
-                    # Record that the current computation uses the current reactive
+                if reactiveSpec.denorm and @attached
+                    # Record that the current computation uses this denormed reactive
                     projection = {}
                     projection[reactiveName] = 1
                     if Tracker.active
@@ -171,6 +166,8 @@ class J.Model
                     @_reactives.get reactiveName
 
                 else
+                    # Denormed reactives behave like non-denormed reactives on
+                    # unattached instances.
                     @reactives[reactiveName].get()
 
         else
@@ -217,7 +214,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't insert dead #{@modelClass.name} instance"
 
-        doc = Tracker.nonreactive => @toDoc true
+        doc = Tracker.nonreactive => @toDoc()
         J.assert J.util.isPlainObject doc
         if not doc._id?
             # The Mongo driver will give us an ID but we
@@ -251,7 +248,7 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
 
-        doc = Tracker.nonreactive => @toDoc(true)
+        doc = Tracker.nonreactive => @toDoc()
 
         doc._id ?= Random.hexString(10)
 
@@ -277,7 +274,7 @@ class J.Model
         null
 
 
-    toDoc: (denormalize = false) ->
+    toDoc: ->
         # Reactive.
         # Returns an EJSON object with all the
         # user-defined types serialized into JSON, but
@@ -288,14 +285,32 @@ class J.Model
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        doc = J.Model.toSubdoc(@_fields.tryToObj(), denormalize)
+        doc = J.Model.toSubdoc @_fields.tryToObj()
 
-        if denormalize and @modelClass.idSpec is J.PropTypes.key
-            key = @key() # Might throw a legitimate VALUE_NOT_READY
-            J.assert key? and (@_id is key or not @_id?)
-            doc._id = key
+        if @modelClass.idSpec is J.PropTypes.key
+            keyReady = false
+            try
+                key = @key()
+                keyReady = true
+            catch e
+                if e not instanceof J.VALUE_NOT_READY
+                    console.error e.stack
+                    throw e
+
+            if keyReady
+                if not key?
+                    throw new Error "<#{@modelClass.name}>.key() returned #{key}"
+                if @_id? and key isnt @_id
+                    throw new Error "<#{@modelClass.name}>.key() returned #{key}
+                        but has _id #{JSON.stringify @_id}"
+
+                doc._id = key
+
+            else
+                doc._id = @_id # may be null
+
         else
-            doc._id = @_id
+            doc._id = @_id # may be null
 
         doc
 
@@ -308,7 +323,7 @@ class J.Model
             aren't returned as JSON.
         ###
 
-        @toDoc false
+        @toDoc()
 
 
     toString: ->
@@ -396,21 +411,32 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         @_fields = J.Dict()
 
-        for fieldName of @modelClass.fieldSpecs
-            @_fields.setOrAdd fieldName, null
         for fieldName, value of nonIdInitFields
-            @_fields.set fieldName, J.Var.wrap value, true
+            @_fields.setOrAdd fieldName, J.Var.wrap value, true
 
         if @_id? and @modelClass.idSpec is J.PropTypes.key
+            # The fields not specified in the constructor argument should be initialized
+            # to the class's default values, but for purposes of checking consistency
+            # with the key idSpec, they should be not-ready.
+            for fieldName of @modelClass.fieldSpecs
+                if fieldName not of nonIdInitFields
+                    @_fields.setOrAdd fieldName, J.makeValueNotReadyObject()
+
             keyReady = false
             try
                 key = Tracker.nonreactive => @key()
                 keyReady = true
             catch e
-                throw e if e not instanceof J.VALUE_NOT_READY
+                if e not instanceof J.VALUE_NOT_READY
+                    console.error e.stack
+                    throw e
 
             if keyReady and @_id isnt key
                 console.warn "#{@modelClass.name}._id is #{@_id} but key() is #{key}"
+
+        for fieldName of @modelClass.fieldSpecs
+            if fieldName not of nonIdInitFields
+                @_fields.setOrAdd fieldName, null # TODO: Support default values for fields of new model instances
 
         @reactives = {} # reactiveName: autoVar
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
