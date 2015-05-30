@@ -300,7 +300,7 @@ updateObservers = (dataSessionId) ->
 
         mongoOptions.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
 
-        log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
+        # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
         cursor = modelClass.collection.find querySpec.selector, mongoOptions
 

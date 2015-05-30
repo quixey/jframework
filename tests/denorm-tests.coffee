@@ -7,6 +7,50 @@
 ###
 
 
+if Meteor.isClient then Tinytest.addAsync "Field inclusion", (test, onComplete) ->
+    foo = new $$.Foo(
+        a: 1
+        b: 2
+        c: 3
+    )
+
+    projection = J.Dict()
+
+    foo.insert ->
+        x = 0
+        fooWatcher = J.AutoVar(
+            'fooWatcher'
+            -> J.util.withoutUndefined $$.Foo.fetchOne(foo._id, fields: projection).toDoc()
+            (__, fooDoc) ->
+                console.log 'fooDoc: ', fooDoc.toObj()
+                switch x
+                    when 0
+                        test.equal fooDoc.a(), 1
+                        test.isUndefined fooDoc.get('b')
+                        test.equal fooDoc.c(), 3
+                        foo.c 4
+                        foo.save()
+                    when 1
+                        test.equal fooDoc.a(), 1
+                        test.equal fooDoc.b(), 2 # Latency compensation
+                        test.equal fooDoc.c(), 4
+                    when 2
+                        test.equal fooDoc.a(), 1
+                        test.isUndefined fooDoc.get('b')
+                        test.equal fooDoc.c(), 4
+                        projection.setOrAdd 'b', true
+                    when 3
+                        test.equal fooDoc.a(), 1
+                        test.equal fooDoc.b(), 2
+                        test.equal fooDoc.c(), 4
+                        fooWatcher.stop()
+                        onComplete()
+
+                x += 1
+        )
+
+
+
 if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (test) ->
     bar = new $$.Bar
 

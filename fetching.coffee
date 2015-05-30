@@ -141,8 +141,9 @@ _.extend J.fetching,
 
 
     _qsToMongoOptions: (qs) ->
+        modelClass = J.models[qs.modelName]
         options = {}
-        options.fields = @projectionToMongoFieldsArg qs.fields ? {}
+        options.fields = @projectionToMongoFieldsArg modelClass, qs.fields ? {}
         for optionName in ['sort', 'skip', 'limit']
             if qs[optionName]? then options[optionName] = J.util.deepClone qs[optionName]
         options
@@ -301,6 +302,16 @@ _.extend J.fetching,
 
 
     isQueryReady: (qs) ->
+        ###
+            A query is considered ready if:
+            (1) It was bundled into the set of merged queries that the server
+                has come back and said are ready.
+            (2) It has an _id selector, and all of the first-level doc values
+                in its projection aren't undefined.
+                (Note that we can't infer anything about first-level objects
+                in the doc, because they may or may not be partial subdocs.)
+        ###
+
         qsString = J.fetching.stringifyQs qs
         modelClass = J.models[qs.modelName]
 
@@ -319,12 +330,30 @@ _.extend J.fetching,
                 options = @_qsToMongoOptions(qs)
                 options.transform = false
                 options.reactive = false
-                return modelClass.findOne(qs.selector, options)?
+                doc = modelClass.findOne(qs.selector, options)
+                if doc?
+                    for fieldSpec of options.fields
+                        fieldSpecParts = fieldSpec.split('.')
+                        if fieldSpecParts[0] is '_reactives'
+                            reactiveName = fieldSpecParts[1]?
+                            value = doc._reactives[reactiveName]?.val
+                        else
+                            fieldName = fieldSpecParts[0]
+                            value = doc[fieldName]
+
+                        return false if value is undefined
+
+                        # This value might be ready, but there's a risk that
+                        # it's actually a partial subdoc, so we can only
+                        # trust it after qsString appears in @_unmergedQsSet.
+                        return false if J.util.isPlainObject value
+
+                    true
 
             false
 
         ret = helper()
-        # if ret is false then console.log 'isQueryReady', ret, qsString
+        console.debug 'isQueryReady', ret, qsString
         ret
 
 
@@ -459,6 +488,8 @@ _.extend J.fetching,
             # Note: AutoVar handles logic to remove from @_requestersByQueue
             # because it involves complicated sequencing with React component
             # rendering.
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
@@ -488,8 +519,6 @@ _.extend J.fetching,
                 J.List modelClass.find(querySpec.selector, options).fetch()
 
         else
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
             throw J.makeValueNotReadyObject()
 
 

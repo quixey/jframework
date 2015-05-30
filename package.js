@@ -127,8 +127,8 @@ Package.onTest(function(api) {
     ]);
 
     api.addFiles([
-        "tests/util-tests.coffee",
         "tests/test-models.coffee",
+        "tests/util-tests.coffee",
         "tests/autovar-tests.coffee",
         "tests/list-tests.coffee",
         "tests/dict-tests.coffee",
