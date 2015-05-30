@@ -6,7 +6,9 @@
     LICENSE file in the root directory of this source tree.
 ###
 
-J.fetching =
+J.fetching = {}
+
+if Meteor.isClient then _.extend J.fetching,
     SESSION_ID: "#{parseInt Math.random() * 1000000}"
 
     _requestInProgress: false
@@ -24,7 +26,7 @@ J.fetching =
     _unmergedQsSet: {} # mergedQuerySpecString: true
     _mergedQsSet: {} # mergedQuerySpecString: true
 
-
+_.extend J.fetching,
     _deleteComputationQsRequests: (computation) ->
         return if not computation._requestingData
         for qsString in _.keys @_requestersByQs
@@ -34,6 +36,28 @@ J.fetching =
         computation._requestingData = false
         @_requestsChanged = true
         Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+
+    _getCanonical: (x) ->
+        ###
+            Like EJSON.stringify but reorders object keys and
+            array elements to make "the same objects" yield
+            the same strings.
+        ###
+
+        if _.isArray x
+            J.util.sortByKey(
+                @_getCanonical y for y in x
+                @_getCanonical
+            )
+        else if J.util.isPlainObject x
+            sortedKeys = J.util.sortByKey _.keys x
+            ret = {}
+            for k in sortedKeys
+                ret[k] = @_getCanonical x[k]
+            ret
+        else
+            x
 
 
     _qsToFindOptions: (qs) ->
@@ -79,10 +103,6 @@ J.fetching =
 
 
     getMerged: (querySpecs) ->
-        # FIXME: EJSON.stringify doesn't canonically order the keys
-        # so {a: 5, b: 6} and {b: 6, a: 5} may look like different
-        # querySpecs.
-
         ###
             1.
                 Merge all the querySpecs that select on _id using
@@ -134,12 +154,17 @@ J.fetching =
                                 true
                             )
                     else
-                        J.util.setField(
+                        existingIncludes = J.util.getField(
                             projectionByModelInstance
-                            [qs.modelName, selectorId]
-                            {}
-                            true
+                            [qs.modelName, '?.', selectorId]
                         )
+                        if not existingIncludes?
+                            J.util.setField(
+                                projectionByModelInstance
+                                [qs.modelName, selectorId]
+                                {}
+                                true
+                            )
 
             else
                 # (2) Add this to the list of non-ID-selecting querySpecs
@@ -153,12 +178,12 @@ J.fetching =
         for modelName, projectionById of projectionByModelInstance
             idsByProjectionString = {} # projectionString: [instanceIds]
             for instanceId, projection of projectionById
-                projectionString = JSON.stringify projection
+                projectionString = EJSON.stringify @_getCanonical projection
                 idsByProjectionString[projectionString] ?= []
                 idsByProjectionString[projectionString].push instanceId
 
             for projectionString, instanceIds of idsByProjectionString
-                projection = JSON.parse projectionString
+                projection = EJSON.parse projectionString
                 mergedQuerySpecs.push
                     modelName: modelName
                     selector: _id: $in: instanceIds
@@ -169,7 +194,7 @@ J.fetching =
         for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
             qsStringSet = {} # qsString: true
             for qs in nonIdQuerySpecs
-                qsStringSet[EJSON.stringify qs] = true
+                qsStringSet[J.fetching.stringifyQs qs] = true
 
             # Iterate until no pair of qsStrings in qsStringSet
             # can be pairwise merged.
@@ -193,14 +218,14 @@ J.fetching =
 
             # Dump qsStringSet into mergedQuerySpecs
             for qsString of qsStringSet
-                mergedQuerySpecs.push EJSON.parse qsString
+                mergedQuerySpecs.push J.fetching.parseQs qsString
 
 
         mergedQuerySpecs
 
 
     isQueryReady: (qs) ->
-        qsString = EJSON.stringify qs
+        qsString = J.fetching.stringifyQs qs
         modelClass = J.models[qs.modelName]
 
         qs = J.util.deepClone qs
@@ -223,8 +248,12 @@ J.fetching =
             false
 
         ret = helper()
-        if ret is false then console.log 'isQueryReady', ret, qsString
+        # if ret is false then console.log 'isQueryReady', ret, qsString
         ret
+
+
+    parseQs: (qsString) ->
+        EJSON.parse qsString
 
 
     remergeQueries: ->
@@ -232,19 +261,19 @@ J.fetching =
         @_requestsChanged = false
 
         newUnmergedQsStrings = _.keys @_requestersByQs
-        newUnmergedQuerySpecs = (EJSON.parse qsString for qsString in newUnmergedQsStrings)
+        newUnmergedQuerySpecs = (J.fetching.parseQs qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
         unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
         newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
-        newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
+        newMergedQsStrings = (J.fetching.stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
         mergedQsStringsDiff = J.util.diffStrings _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
-        addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
-        deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.deleted)
+        addedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.added)
+        deletedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.deleted)
 
         doAfterUpdatingUnmergedQsSet = =>
             for addedUnmergedQsString in unmergedQsStringsDiff.added
@@ -305,7 +334,7 @@ J.fetching =
 
         @checkQuerySpec querySpec
 
-        qsString = EJSON.stringify querySpec
+        qsString = J.fetching.stringifyQs querySpec
         computation = Tracker.currentComputation
 
         @_requestersByQs[qsString] ?= {}
@@ -347,6 +376,16 @@ J.fetching =
             @_requestsChanged = true
             Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
             throw J.makeValueNotReadyObject()
+
+
+    stringifyQs: (qs) ->
+        EJSON.stringify
+            modelName: qs.modelName
+            selector: @_getCanonical qs.selector
+            fields: @_getCanonical qs.fields
+            sort: @_getCanonical qs.sort
+            limit: qs.limit
+            skip: qs.skip
 
 
     tryQsPairwiseMerge: (a, b) ->

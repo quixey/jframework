@@ -119,12 +119,12 @@ Meteor.methods
         actualAdded = []
         actualDeleted = []
         for querySpec in deletedQuerySpecs
-            qsString = EJSON.stringify querySpec
+            qsString = J.fetching.stringifyQs querySpec
             if session.querySpecSet().hasKey(qsString)
                 actualDeleted.push querySpec
                 session.querySpecSet().delete qsString
         for querySpec in addedQuerySpecs
-            qsString = EJSON.stringify querySpec
+            qsString = J.fetching.stringifyQs querySpec
             unless session.querySpecSet().hasKey(qsString)
                 actualAdded.push qsString
                 session.querySpecSet().setOrAdd qsString, true
@@ -167,7 +167,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
     existingSessionInstance = $$.JDataSession.fetchOne dataSessionId
     if existingSessionInstance?
         existingQuerySpecs = existingSessionInstance.querySpecStrings().map(
-            (querySpecString) => EJSON.parse querySpecString
+            (querySpecString) => J.fetching.parseQs querySpecString
         ).toArr()
         Meteor.call '_updateDataQueries', dataSessionId, existingQuerySpecs, []
 
@@ -191,7 +191,7 @@ getMergedQuerySpecs = (querySpecSet) =>
     mergedQuerySpecs = J.List()
     querySpecSet.forEach (rawQsString) ->
         # TODO: Fancier merge stuff
-        rawQuerySpec = EJSON.parse rawQsString
+        rawQuerySpec = J.fetching.parseQs rawQsString
         mergedQuerySpecs.push rawQuerySpec
     mergedQuerySpecs
 
@@ -206,7 +206,7 @@ updateObservers = (dataSessionId) ->
 
     oldQsStrings = session.observerByQsString().getKeys()
     newQsStrings = session.mergedQuerySpecs().map(
-        (qs) => EJSON.stringify qs.toObj()
+        (qs) => J.fetching.stringifyQs qs.toObj()
     ).toArr()
     qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
 
@@ -271,7 +271,7 @@ updateObservers = (dataSessionId) ->
 
     setField = (modelName, id, fieldName, querySpec, value) ->
         modelClass = J.models[modelName]
-        qsString = EJSON.stringify querySpec
+        qsString = J.fetching.stringifyQs querySpec
         fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
 
         if fieldName is '_reactives'
@@ -313,7 +313,7 @@ updateObservers = (dataSessionId) ->
 
 
     qsStringsDiff.added.forEach (qsString) =>
-        querySpec = EJSON.parse qsString
+        querySpec = J.fetching.parseQs qsString
 
         # log "Add observer for: ", querySpec
 
@@ -428,7 +428,7 @@ updateObservers = (dataSessionId) ->
         session.observerByQsString().setOrAdd qsString, observer
 
     qsStringsDiff.deleted.forEach (qsString) =>
-        querySpec = EJSON.parse qsString
+        querySpec = J.fetching.parseQs qsString
 
         observer = session.observerByQsString().get qsString
         observer.stop()

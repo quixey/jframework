@@ -57,7 +57,7 @@ J.denorm =
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (
-            EJSON.parse qsString for qsString in watchedQsStrings
+            J.fetching.parseQs qsString for qsString in watchedQsStrings
         )
 
         setter = {}

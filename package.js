@@ -79,6 +79,7 @@ Package.onUse(function(api) {
         "components.coffee",
         "proptypes.coffee",
         "models.coffee",
+        "fetching.coffee",
         "denorm.coffee",
         "routing.coffee",
         "dom.coffee"
@@ -105,7 +106,6 @@ Package.onUse(function(api) {
     ], "server");
 
     api.addFiles([
-        "fetching.coffee"
     ], "client");
 
     api.export("Tracker");

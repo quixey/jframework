@@ -639,7 +639,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     limit: options.limit
 
                 if Meteor.isServer
-                    qsString = EJSON.stringify querySpec
+                    qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
                         J._watchedQuerySpecSet.get()[qsString] = true
@@ -738,7 +738,7 @@ Meteor.methods
         )
 
         setter = {}
-        newDoc = EJSON.parse EJSON.stringify oldDoc ? {_id: doc._id}
+        newDoc = J.util.deepClone oldDoc ? {_id: doc._id}
         for fieldName, newValue of fields
             if newValue isnt undefined
                 setter[fieldName] = newValue
