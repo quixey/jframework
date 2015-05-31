@@ -328,13 +328,16 @@ _.extend J.fetching,
                 # has an attached entry with that _id and no other parts of the selector
                 # rule out the one possible match.
                 options = @_qsToMongoOptions(qs)
+                console.log 'options', options
                 options.transform = false
                 options.reactive = false
                 doc = modelClass.findOne(qs.selector, options)
                 if doc?
                     for fieldSpec of options.fields
                         fieldSpecParts = fieldSpec.split('.')
-                        if fieldSpecParts[0] is '_reactives'
+                        if fieldSpecParts[0] is '_id'
+                            continue
+                        else if fieldSpecParts[0] is '_reactives'
                             reactiveName = fieldSpecParts[1]?
                             value = doc._reactives[reactiveName]?.val
                         else
@@ -346,9 +349,13 @@ _.extend J.fetching,
                         # This value might be ready, but there's a risk that
                         # it's actually a partial subdoc, so we can only
                         # trust it after qsString appears in @_unmergedQsSet.
+                        # FIXME:
+                        # It's possible to do smarter bookkeeping to return true
+                        # when the full (sub)object being requested is already
+                        # on the client.
                         return false if J.util.isPlainObject value
 
-                    true
+                    return true
 
             false
 

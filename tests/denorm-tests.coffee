@@ -49,6 +49,105 @@ if Meteor.isClient then Tinytest.addAsync "Field inclusion", (test, onComplete) 
                 x += 1
         )
 
+if Meteor.isClient then Tinytest.addAsync "isQueryReady", (test, onComplete) ->
+    foo = new $$.Foo(
+        a: x: 'y'
+        c: 10
+    )
+
+    projection = J.Dict
+        _: false
+        c: true
+
+    foo.insert ->
+        x = 0
+        fooWatcher = J.AutoVar(
+            'fooWatcher'
+            ->
+                attachedFoo = $$.Foo.fetchOne foo._id, fields: projection
+
+                isReady = (projection) ->
+                    J.fetching.isQueryReady
+                        modelName: 'Foo'
+                        selector: foo._id
+                        fields: projection
+                        sort: undefined
+                        limit: 1
+                        skip: undefined
+
+                switch x
+                    when 0
+                        test.isTrue isReady
+                            _: false
+                            c: true
+                        projection.setOrAdd 'c', false
+                        projection.setOrAdd 'a', true
+                        test.isTrue isReady
+                            _: false
+                            c: true
+                        test.isFalse isReady
+                            _: false
+                            a: true
+
+                    when 1
+                        test.isFalse isReady
+                            _: false
+                            c: true
+                        projection.setOrAdd 'b', true
+                    when 2
+                        test.isTrue isReady
+                            a: false
+                            b: true
+                            c: false
+                            e: false
+                        test.isTrue isReady
+                            _: false
+                            b: true
+                        fooWatcher.stop()
+                        onComplete()
+
+                x += 1
+            true
+        )
+
+if Meteor.isClient then Tinytest.addAsync "isQueryReady 2", (test, onComplete) ->
+    foo = new $$.Foo(
+        a: [5, 6]
+        c: x: 7
+    )
+
+    projection = J.Dict
+        _: false
+        a: true
+        c: true
+
+    foo.insert ->
+        x = 0
+        fooWatcher = J.AutoVar(
+            'fooWatcher'
+            ->
+                attachedFoo = $$.Foo.fetchOne foo._id, fields: projection
+
+                isReady = (projection) ->
+                    J.fetching.isQueryReady
+                        modelName: 'Foo'
+                        selector: foo._id
+                        fields: projection
+                        sort: undefined
+                        limit: 1
+                        skip: undefined
+
+                switch x
+                    when 0
+                        test.isTrue isReady
+                            c: false
+                            e: false
+                        fooWatcher.stop()
+                        onComplete()
+
+                x += 1
+            true
+        )
 
 
 if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (test) ->
