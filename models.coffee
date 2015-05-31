@@ -144,8 +144,8 @@ class J.Model
             else
                 if reactiveSpec.denorm and @attached
                     # Record that the current computation uses this denormed reactive
-                    projection = {}
-                    projection[reactiveName] = 1
+                    projection = _: false
+                    projection[reactiveName] = true
                     if Tracker.active
                         # We might be temporarily bumming this field off some other cursor owned
                         # by some other computation, so we need to run fetchOne to update
@@ -182,8 +182,8 @@ class J.Model
 
                 if @attached
                     # Record that the current computation uses the current field
-                    projection = {}
-                    projection[fieldName] = 1
+                    projection = _: false
+                    projection[fieldName] = true
                     if Tracker.active
                         # See the comment for the J.AutoVar in the above if-branch. In this case,
                         # the reactivity for the caller computation is handled by the @_fields dict.
