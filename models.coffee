@@ -680,7 +680,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         if fieldName is '_reactives'
                             # Loading denormalized reactive values isn't currently
                             # supported on the server
-                            delete mongoFieldsArg[fieldName]
+                            delete mongoFieldsArg[fieldSpec]
                         else
                             fieldNameSet[fieldName] = true
 
