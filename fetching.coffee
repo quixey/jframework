@@ -161,7 +161,7 @@ _.extend J.fetching,
             if sKey isnt '_id' and sKey[0] isnt '$'
                 ok = false
                 for fKey, fValue of inclusionSet
-                    if fKey.split('.')[0] is sKey
+                    if fKey.split('.')[0] is sKey.split('.')[0]
                         ok = true
                         break
                 if not ok
@@ -174,7 +174,7 @@ _.extend J.fetching,
             if sKey isnt '_id' and sKey[0] isnt '$'
                 ok = false
                 for fKey, fValue of inclusionSet
-                    if fKey.split('.')[0] is sKey
+                    if fKey.split('.')[0] is sKey.split('.')[0]
                         ok = true
                         break
                 if not ok
@@ -328,7 +328,6 @@ _.extend J.fetching,
                 # has an attached entry with that _id and no other parts of the selector
                 # rule out the one possible match.
                 options = @_qsToMongoOptions(qs)
-                console.log 'options', options
                 options.transform = false
                 options.reactive = false
                 doc = modelClass.findOne(qs.selector, options)
@@ -360,7 +359,7 @@ _.extend J.fetching,
             false
 
         ret = helper()
-        console.debug 'isQueryReady', ret, qsString
+        # console.debug 'isQueryReady', ret, qsString
         ret
 
 
