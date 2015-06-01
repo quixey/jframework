@@ -619,7 +619,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         _.extend modelClass,
             collection: collection,
-            fetchDict: (docIdsOrQuery) ->
+            fetchDict: (docIdsOrQuery, options = {}) ->
                 if docIdsOrQuery instanceof J.List or _.isArray docIdsOrQuery
                     if J.List.unwrap(docIdsOrQuery).length is 0
                         return J.Dict()
@@ -629,19 +629,19 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         _id: $in: docIdsOrQuery
                     else
                         docIdsOrQuery
-                instances = @fetch query
+                instances = @fetch query, options
                 instanceById = J.Dict()
                 instances.forEach (instance) ->
                     instanceById.setOrAdd instance._id, instance
                 instanceById
 
-            fetchIds: (docIds, includeHoles = false) ->
-                instanceDict = @fetchDict docIds
+            fetchIds: (docIds, options = {}) ->
+                instanceDict = @fetchDict docIds, options
                 instanceList = J.List()
                 for docId in J.List.unwrap docIds
                     if instanceDict.get(docId)?
                         instanceList.push instanceDict.get(docId)
-                    else if includeHoles
+                    else if options.includeHoles
                         instanceList.push null
                 instanceList
 
