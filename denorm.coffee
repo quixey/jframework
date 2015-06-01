@@ -111,15 +111,17 @@ J.denorm =
                 newValue = newSubValues[subFieldName]
 
                 term = $or: [{}, {}]
-                term.$or[0][selectorPath] = $in: [null]
-                term.$or[1]["#{selectorPath}.*DOLLAR*in"] = $in: []
+                term.$or[0][selectorPath] =
+                    $in: [null]
+                term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
+                    $elemMatch: $in: [null]
 
                 if oldValue?
                     term.$or[0][selectorPath].$in.push oldValue
-                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$in.push oldValue
+                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push oldValue
                 if newValue? and not EJSON.equals oldValue, newValue
                     term.$or[0][selectorPath].$in.push newValue
-                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$in.push newValue
+                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push newValue
 
                 subFieldSelectorMatcher.push term
 
