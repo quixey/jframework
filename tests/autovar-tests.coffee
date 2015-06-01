@@ -1,19 +1,15 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 Tinytest.addAsync "AutoVar - Control its value's invalidation", (test, onComplete) ->
-    ###
-        If an AutoVar's value is running its own computation,
-        then the AutoVar's computation is the only one
-        whose invalidation can invalidate that child's
-        computation.
-    ###
+    # If an AutoVar's value is running its own computation,
+    # then the AutoVar's computation is the only one
+    # whose invalidation can invalidate that child's
+    # computation.
     al = null
     av = J.AutoVar "av",
         ->

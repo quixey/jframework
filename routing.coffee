@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 J.defineRouter = (routeGenerator) ->
@@ -19,24 +17,20 @@ if Meteor.isServer
 if Meteor.isClient and ReactRouter?
     # Hack J.Routable mixin as a combo of ReactRouter.State + ReactRouter.Navigation
 
-    ###
-        NOTE:
-        JFramework components.coffee has some inline code that conditions
-        on whether a control has J.Routable in its mixins, because we
-        wanted to use features (like a Reactive) outside the React Mixin framework.
-    ###
+    # NOTE:
+    # JFramework components.coffee has some inline code that conditions
+    # on whether a control has J.Routable in its mixins, because we
+    # wanted to use features (like a Reactive) outside the React Mixin framework.
 
     J.Routable = _.extend _.clone(ReactRouter.State), ReactRouter.Navigation
     J.Routable.contextTypes = _.extend _.clone(ReactRouter.State.contextTypes),
         ReactRouter.Navigation.contextTypes
     _.extend J.Routable,
         _cleanQueryFromRaw: ->
-            ###
-                Treat x as nonexistent in all these cases:
-                    x=&y=5
-                    x&y=5
-                    y=5
-            ###
+            # Treat x as nonexistent in all these cases:
+            #     x=&y=5
+            #     x&y=5
+            #     y=5
             query = {}
             for fieldName, value of @getQuery()
                 if value then query[fieldName] = URI.decodeQuery(value.replace(/\*hashtag\*/, '#'))

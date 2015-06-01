@@ -1,20 +1,16 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
 J.denorm =
     ensureAllReactiveWatcherIndexes: ->
         helper = (reactiveModelClass, reactiveName) ->
-            ###
-                Build indexes that let NK (Normalized Kernel) nodes propagate
-                their value change to reset this reactive's value
-            ###
+            # Build indexes that let NK (Normalized Kernel) nodes propagate
+            # their value change to reset this reactive's value
 
             for nkModelClassname, nkModelClass of J.models
                 continue if nkModelClass in ['JDataSession']
@@ -38,10 +34,8 @@ J.denorm =
 
 
     recalc: (instance, reactiveName) ->
-        ###
-            Sets _reactives.#{reactiveName}.val and .watchers
-            Returns the recalculated value
-        ###
+        # Sets _reactives.#{reactiveName}.val and .watchers
+        # Returns the recalculated value
 
         reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
 
@@ -73,9 +67,7 @@ J.denorm =
 
 
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
-        ###
-            Returns modelName: reactiveName: [instanceId]
-        ###
+        # Returns modelName: reactiveName: [instanceId]
 
         console.log 'resetWatchers', modelName, instanceId,
             'oldValues:', JSON.stringify(oldValues),

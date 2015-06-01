@@ -1,8 +1,6 @@
-###
-    TextBox wraps text inputs. Features:
-    * Don't mess up the cursor position when editing a Controlled Component
-      (i.e. setting prop.value)
-###
+# TextBox wraps text inputs. Features:
+# * Don't mess up the cursor position when editing a Controlled Component
+#   (i.e. setting prop.value)
 
 
 J.dc 'TextBox',

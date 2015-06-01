@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 class J.VALUE_NOT_READY extends Error
@@ -32,27 +30,23 @@ J.tryGet = (func, defaultValue) ->
 
 
 class J.Var
-    ###
-        TODO: Fancy granular deps
-            general:
-                equals
-            numbers:
-                lessThan, greaterThan, lessThanOrEq, greaterThanOrEq
-            arrays:
-                contains (can keep an object-set for this)
-    ###
+    # TODO: Fancy granular deps
+    #     general:
+    #         equals
+    #     numbers:
+    #         lessThan, greaterThan, lessThanOrEq, greaterThanOrEq
+    #     arrays:
+    #         contains (can keep an object-set for this)
 
     constructor: (value, options) ->
-        ###
-            Options:
-                tag: A toString-able object for debugging
-                onChange: function(oldValue, newValue) or null
-                creator: The computation that "created" this var,
-                    which makes this var not active when it
-                    invalidates.
-                wrap: If true, wrap the argument to @set in a List
-                    or Dict if it's an array or plain object.
-        ###
+        # Options:
+        #     tag: A toString-able object for debugging
+        #     onChange: function(oldValue, newValue) or null
+        #     creator: The computation that "created" this var,
+        #         which makes this var not active when it
+        #         invalidates.
+        #     wrap: If true, wrap the argument to @set in a List
+        #         or Dict if it's an array or plain object.
 
         if arguments.length is 0
             value = J.makeValueNotReadyObject()
@@ -84,11 +78,9 @@ class J.Var
 
         @_getters = [] # computations
 
-        ###
-            @_value is never undefined. It can be J.VALUE_NOT_READY
-            which causes get() to either throw VALUE_NOT_READY or return
-            undefined when there is no active computation.
-        ###
+        # @_value is never undefined. It can be J.VALUE_NOT_READY
+        # which causes get() to either throw VALUE_NOT_READY or return
+        # undefined when there is no active computation.
         @_previousReadyValue = undefined
         initValue = @_value = @maybeWrap value
 

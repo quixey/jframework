@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 # NOTE:
 # Using "_id: type: J.PropTypes.key" in a model definition is a useful feature
@@ -41,11 +39,9 @@ J.PropTypes =
             # Instance of an arbitrary JS class
 
     list: (params) ->
-        ###
-            Params:
-                of:
-                    A typeSpec to apply recursively to the elements of the list
-        ###
+        # Params:
+        #     of:
+        #         A typeSpec to apply recursively to the elements of the list
         # TODO
 
     # J.PropTypes.key is a pseudo-propType that the
@@ -65,9 +61,7 @@ J.PropTypes =
     var: {name: "J.PropTypes.var"}
 
 
-###
-    Alias all PropTypes into $$
-    E.g. $$.key, $$.func, $$.num
-###
+# Alias all PropTypes into $$
+# E.g. $$.key, $$.func, $$.num
 for propTypeName, propTypeFunc of J.PropTypes
     $$[propTypeName] = propTypeFunc

@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 _.extend J,
@@ -33,12 +31,10 @@ J.util =
         obj
 
     compare: (a, b) ->
-        ###
-            All this function does is:
-            1. undefined < null < anything else
-            2. compare arrays using lexicographic ordering
-            3. reject weird cases like comparing plain objects
-        ###
+        # All this function does is:
+        # 1. undefined < null < anything else
+        # 2. compare arrays using lexicographic ordering
+        # 3. reject weird cases like comparing plain objects
 
         if a instanceof J.List
             a = a.getValues()
@@ -186,21 +182,19 @@ J.util =
             throw new Error "Invalid fraction: #{fraction}"
 
     getField: (obj, fieldSpec) ->
-        ###
-            fieldSpec:
-                A List/array or string with dots and question marks.
-                Better to use a List/array so that the fieldSpecParts
-                can then include dots.
+        # fieldSpec:
+        #     A List/array or string with dots and question marks.
+        #     Better to use a List/array so that the fieldSpecParts
+        #     can then include dots.
 
-            >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a?.b.c')
-            5
+        # >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a?.b.c')
+        # 5
 
-            >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, ['a', '.', 'x', '?.', 'c'])
-            undefined
+        # >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, ['a', '.', 'x', '?.', 'c'])
+        # undefined
 
-            >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a.x.c')
-            <error>
-        ###
+        # >>> getFieldSpec({a: {b: {c: 5}, d: 6}}, 'a.x.c')
+        # <error>
 
         if not _.isObject obj
             throw new Error "Invalid obj passed to getField: #{obj}"
@@ -244,13 +238,11 @@ J.util =
         value
 
     getUrlWithExtraParams: (url, extraParams) ->
-        ###
-            >>> getUrlWithExtraParams("http://test.com/abc/def", {key1: "value1", key2: 5});
-            "http://test.com/abc/def?key1=value1&key2=5"
+        # >>> getUrlWithExtraParams("http://test.com/abc/def", {key1: "value1", key2: 5});
+        # "http://test.com/abc/def?key1=value1&key2=5"
 
-            >>> getUrlWithExtraParams("http://test.com/ghi?x=7&y=2&", {key1: "value1", x: 3});
-            "http://test.com/ghi?x=3&y=2&key1=value1"
-        ###
+        # >>> getUrlWithExtraParams("http://test.com/ghi?x=7&y=2&", {key1: "value1", x: 3});
+        # "http://test.com/ghi?x=3&y=2&key1=value1"
 
         unless _.isString url
             throw new Meteor.Error "URL must be a string: #{url}"
@@ -280,7 +272,7 @@ J.util =
         null
 
     isPlainObject: (obj) ->
-        ### Based on $.isPlainObject ###
+        # Based on $.isPlainObject
         return false unless obj?
         return false if typeof obj isnt 'object'
         return false if obj is obj.window

@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 J.defineModel 'JDataSession', 'jframework_datasessions',
     _id: $$.str
@@ -58,38 +56,32 @@ _flushRecalcBuffer = ->
         J.denorm.recalc instance, reactiveName
 
 
-###
-    dataSessionId: J.Dict
-        updateObserversFiber: <Fiber>
-        querySpecSet: {qsString: true}
-        mergedQuerySpecs: [
-            {
-                modelName:
-                selector:
-                fields:
-                sort:
-                skip:
-                limit:
-            }
-        ]
-###
+# dataSessionId: J.Dict
+#     updateObserversFiber: <Fiber>
+#     querySpecSet: {qsString: true}
+#     mergedQuerySpecs: [
+#         {
+#             modelName:
+#             selector:
+#             fields:
+#             sort:
+#             skip:
+#             limit:
+#         }
+#     ]
 dataSessions = {}
 
-###
-    Stores Meteor's publisher functions
-    sessionId:
-        userId
-        added
-        changed
-        removed
-        ...etc
-###
+# Stores Meteor's publisher functions
+# sessionId:
+#     userId
+#     added
+#     changed
+#     removed
+#     ...etc
 dataSessionPublisherContexts = {}
 
-###
-    The set of active cursors and exactly what each has sent to the client
-    dataSessionId: modelName: docId: fieldName: querySpecString: value
-###
+# The set of active cursors and exactly what each has sent to the client
+# dataSessionId: modelName: docId: fieldName: querySpecString: value
 dataSessionFieldsByModelIdQuery = {}
 
 
@@ -228,14 +220,12 @@ updateObservers = (dataSessionId) ->
                 ret[key] = getMergedSubfields a[key], b[key]
             ret
         else
-            ###
-                It's possible that a != b (by value) right now because
-                one cursor is triggering an observer for an updated value
-                right before all the other cursors are going to trigger
-                observers for the same updated value. It's fine to just
-                arbitrarily pick (a) and let the merge become eventually
-                consistent.
-            ###
+            # It's possible that a != b (by value) right now because
+            # one cursor is triggering an observer for an updated value
+            # right before all the other cursors are going to trigger
+            # observers for the same updated value. It's fine to just
+            # arbitrarily pick (a) and let the merge become eventually
+            # consistent.
             a
 
 

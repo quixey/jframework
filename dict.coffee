@@ -1,24 +1,20 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 class J.Dict
     constructor: (fieldsOrKeys, options) ->
-        ###
-            Options:
-                creator: The computation which "created"
-                    this Dict, which makes it inactive
-                    when it invalidates.
-                tag: A toString-able object for debugging
-                onChange: function(key, oldValue, newValue) or null
-                withFieldFuncs=true: Make @[fieldName]() getter/setter
-                fineGrained=true: Fine-grained reactivity. Takes more
-                    memory but doesn't invalidate unnecessarily.
-        ###
+        # Options:
+        #     creator: The computation which "created"
+        #         this Dict, which makes it inactive
+        #         when it invalidates.
+        #     tag: A toString-able object for debugging
+        #     onChange: function(key, oldValue, newValue) or null
+        #     withFieldFuncs=true: Make @[fieldName]() getter/setter
+        #     fineGrained=true: Fine-grained reactivity. Takes more
+        #         memory but doesn't invalidate unnecessarily.
 
         unless @ instanceof J.Dict and not @_id?
             return new J.Dict fieldsOrKeys, options
@@ -259,11 +255,9 @@ class J.Dict
 
 
     deepEquals: (other) ->
-        ###
-            Like J.util.deepEquals except returns false if
-            @ or other have any dead parts (unless the dead parts
-            are equal by reference)
-        ###
+        # Like J.util.deepEquals except returns false if
+        # @ or other have any dead parts (unless the dead parts
+        # are equal by reference)
         return true if @ is other
 
         deadNodesToIds = (node) ->

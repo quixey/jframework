@@ -1,28 +1,24 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 class J.AutoVar extends Tracker.Computation
     constructor: (tag, valueFunc, onChange, options) ->
-        ###
-            AutoVars default to being "lazy", i.e. not calculated
-            until .get().
+        # AutoVars default to being "lazy", i.e. not calculated
+        # until .get().
 
-            onChange:
-                A function to call with (oldValue, newValue) when
-                the value changes.
-                May also pass onChange=true or null.
-                If onChange is either a function or true, the
-                AutoVar becomes non-lazy.
+        # onChange:
+        #     A function to call with (oldValue, newValue) when
+        #     the value changes.
+        #     May also pass onChange=true or null.
+        #     If onChange is either a function or true, the
+        #     AutoVar becomes non-lazy.
 
-            options:
-                creator: Set a different creator computation.
-                wrap: Same as Var.wrap
-        ###
+        # options:
+        #     creator: Set a different creator computation.
+        #     wrap: Same as Var.wrap
 
         unless @ instanceof J.AutoVar and not @_id?
             return new J.AutoVar tag, valueFunc, onChange, options

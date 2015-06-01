@@ -1,28 +1,22 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
-###
-    TODO: Add a @observe() and @observeChanges() just like
-    Meteor's collection API. Good for List and AutoList.
-###
+# TODO: Add a @observe() and @observeChanges() just like
+# Meteor's collection API. Good for List and AutoList.
 
 class J.List
     constructor: (values, options) ->
-        ###
-            Options:
-                creator: The computation which "created"
-                    this List, which makes it inactive
-                    when it invalidates.
-                tag: A toString-able object for debugging
-                onChange: function(key, oldValue, newValue) or null
-                fineGrained:
-        ###
+        # Options:
+        #     creator: The computation which "created"
+        #         this List, which makes it inactive
+        #         when it invalidates.
+        #     tag: A toString-able object for debugging
+        #     onChange: function(key, oldValue, newValue) or null
+        #     fineGrained:
 
         unless @ instanceof J.List and not @_id?
             return new J.List values, options
@@ -204,15 +198,13 @@ class J.List
 
 
     _setCompact: (compact) ->
-        ###
-            Compact mode:
-                @_valuesVar is just one array of values; it doesn't
-                try to wrap them in individual Vars or monitor
-                individual gets at index-granularity.
-            Expanded mode:
-                @_arr is an array of naked values that get
-                promoted to Vars as needed.
-        ###
+        # Compact mode:
+        #     @_valuesVar is just one array of values; it doesn't
+        #     try to wrap them in individual Vars or monitor
+        #     individual gets at index-granularity.
+        # Expanded mode:
+        #     @_arr is an array of naked values that get
+        #     promoted to Vars as needed.
 
         if compact
             throw new Error "not implemented yet"
@@ -285,11 +277,9 @@ class J.List
 
 
     deepEquals: (other) ->
-        ###
-            Like J.util.deepEquals except returns false if
-            @ or other have any dead parts (unless the dead parts
-            are equal by reference)
-        ###
+        # Like J.util.deepEquals except returns false if
+        # @ or other have any dead parts (unless the dead parts
+        # are equal by reference)
         return true if @ is other
 
         deadNodesToIds = (node) ->
@@ -342,19 +332,17 @@ class J.List
 
 
     forEach: (f) ->
-        ###
-            Use when f has side effects.
-            Like @map except:
-            - Lets f return undefined
-            - Returns an array, not a List
-            - If any of the iterations throws VALUE_NOT_READY,
-              the forEach call will throw VALUE_NOT_READY
-            - Invalidates when @getValues() changes,
-              not when the returned array changes.
-                Note: This is currently true of maps
-                just because making them coarse-grained
-                is saving memory.
-        ###
+        # Use when f has side effects.
+        # Like @map except:
+        # - Lets f return undefined
+        # - Returns an array, not a List
+        # - If any of the iterations throws VALUE_NOT_READY,
+        #   the forEach call will throw VALUE_NOT_READY
+        # - Invalidates when @getValues() changes,
+        #   not when the returned array changes.
+        #     Note: This is currently true of maps
+        #     just because making them coarse-grained
+        #     is saving memory.
         f = J.util._makeKeyFunc f
         ready = true
         firstNotReadyError = null
