@@ -50,6 +50,10 @@ J.denorm =
 
         J._watchedQuerySpecSet.withValue {}, =>
             value = reactiveSpec.val.call instance
+            if value instanceof J.List
+                value = value.toArr()
+            else if value instanceof J.Dict
+                value = value.toObj()
 
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
