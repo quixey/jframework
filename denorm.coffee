@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
@@ -28,10 +26,8 @@ J.denorm =
 
 
     recalc: (instance, reactiveName, timestamp = new Date()) ->
-        ###
-            Sets _reactives.#{reactiveName}.val and .watchers
-            Returns the recalculated value
-        ###
+        # Sets _reactives.#{reactiveName}.val and .watchers
+        # Returns the recalculated value
 
         reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
 

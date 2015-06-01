@@ -1,29 +1,24 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
-###
-    FIXME:
-    1. If modelInstance has some fetched fields but modelInstance.a isn't one of them,
-       then calling modelInstance.a() should register a dependency on a query for that
-       field. Right now it just throws VALUE_NOT_READY and never does anything about it.
-
-    TODO:
-    1. Let fieldSpecs have default values for fields, applicable when using "new"
-    2. A special method like modelInstance.isValid() to prevent inserting/updating an
-       invalid model
-    3. Type system with support for nested data structure schemas
-    4. Server-side read/write security specs
-    5. The field selector in a query should let you select names of reactives too,
-       and make the server compute their value
-    6. The field selector in a query should be more like GraphQL, so you can make the
-       server follow foreign keys for you without making an extra round trip.
-###
+# FIXME:
+# 1. If modelInstance has some fetched fields but modelInstance.a isn't one of them,
+#    then calling modelInstance.a() should register a dependency on a query for that
+#    field. Right now it just throws VALUE_NOT_READY and never does anything about it.
+#
+# TODO:
+# 1. Let fieldSpecs have default values for fields, applicable when using "new"
+# 2. A special method like modelInstance.isValid() to prevent inserting/updating an
+#    invalid model
+# 3. Type system with support for nested data structure schemas
+# 4. Server-side read/write security specs
+# 5. The field selector in a query should let you select names of reactives too,
+#    and make the server compute their value
+# 6. The field selector in a query should be more like GraphQL, so you can make the
+#    server follow foreign keys for you without making an extra round trip.
 
 
 class J.Model
@@ -56,10 +51,8 @@ class J.Model
 
 
     @fromJSONValue: (jsonValue) ->
-        ###
-            jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
-            It's just the someValue part.
-        ###
+        # jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
+        # It's just the someValue part.
 
         unless J.util.isPlainObject jsonValue
             throw new Meteor.Error 'Must override J.Model.fromJSONValue to decode non-object values'
@@ -363,12 +356,10 @@ class J.Model
 
 
     toJSONValue: ->
-        ###
-            Used by Meteor EJSON, e.g. EJSON.stringify.
-            Note that the name is misleading because
-            EJSON's special primitives (Date and Binary)
-            aren't returned as JSON.
-        ###
+        # Used by Meteor EJSON, e.g. EJSON.stringify.
+        # Note that the name is misleading because
+        # EJSON's special primitives (Date and Binary)
+        # aren't returned as JSON.
 
         @toDoc()
 
@@ -388,7 +379,7 @@ class J.Model
 
 
     typeName: ->
-        ### Used by Meteor EJSON ###
+        # Used by Meteor EJSON
         @modelClass.name
 
 

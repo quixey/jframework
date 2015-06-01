@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 J.components = {}
 
@@ -150,11 +148,9 @@ J._defineComponent = (componentName, componentSpec) ->
     # we wrap it in withoutUndefined.
     reactiveSpecByName = _.clone componentSpec.reactives ? {}
     if J.Routable in (componentSpec.mixins ? [])
-        ###
-            Set up reactives._urlWatcher whose onChange triggers stateFromRoute. This
-            onChange handler should run *before* the first onChange handler of
-            reactives.route.
-        ###
+        # Set up reactives._urlWatcher whose onChange triggers stateFromRoute. This
+        # onChange handler should run *before* the first onChange handler of
+        # reactives.route.
         if componentSpec.stateFromRoute?
             reactiveSpecByName._urlWatcher =
                 val: ->
@@ -170,9 +166,7 @@ J._defineComponent = (componentName, componentSpec) ->
                     @set stateFromRoute
 
 
-        ###
-            Set up reactives.route.
-        ###
+        # Set up reactives.route.
         origRouteValFunc = reactiveSpecByName.route?.val ? ->
             params: {}
             query: {}
@@ -285,12 +279,10 @@ J._defineComponent = (componentName, componentSpec) ->
                             a.deepEquals(b)
                         )
 
-                ###
-                    @_lazyProps[propName] is a relatively heavy reactive computation that
-                    we only need if there's ever a time when prop laziness is used.
-                    We also need it if there's a propSpec.onChange, because the semantics
-                    of onChange get tricky if and when they mix with laziness semantics.
-                ###
+                # @_lazyProps[propName] is a relatively heavy reactive computation that
+                # we only need if there's ever a time when prop laziness is used.
+                # We also need it if there's a propSpec.onChange, because the semantics
+                # of onChange get tricky if and when they mix with laziness semantics.
                 setupLazyProp = =>
                     @_lazyProps[propName] = J.AutoVar(
                         (

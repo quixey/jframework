@@ -1,56 +1,52 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
-
-###
-    Projection semantics of querySpec.fields:
-        "_" is a magic boolean key considered true by default.
-        When true, the querySpec.fields object extends the
-        model's set of field and reactive inclusion defaults.
-        When false, the querySpec.fields object represents the
-        whole set of field inclusions being requested.
-
-    E.g. a model with these definitions...
-        fields: # included by default
-            a: {}
-            b: include: false
-            c: {}
-        reactives: # not-included by default
-            d: {}
-            e: include: true
-
-    ...would have this mapping from querySpec.fields to included fields:
-        _: false
-            []
-
-        {} or _: true
-            ['a', 'c', 'e']
-
-        a: true
-            ['a', 'c', 'e']
-
-        _: false, a: true
-            ['a']
-
-        a: false
-            ['c', 'e']
-
-        b: true
-            ['a', 'b', 'c', 'e']
-
-        e: false
-            ['a', 'c']
-
-        'a.x.y': true, c: false
-            ['a', 'a.x.y', 'e']
-
-        _: false, 'a.x.y': true, c: false
-            ['a.x.y']
-###
+# Projection semantics of querySpec.fields:
+#     "_" is a magic boolean key considered true by default.
+#     When true, the querySpec.fields object extends the
+#     model's set of field and reactive inclusion defaults.
+#     When false, the querySpec.fields object represents the
+#     whole set of field inclusions being requested.
+#
+# E.g. a model with these definitions...
+#     fields: # included by default
+#         a: {}
+#         b: include: false
+#         c: {}
+#     reactives: # not-included by default
+#         d: {}
+#         e: include: true
+#
+# ...would have this mapping from querySpec.fields to included fields:
+#     _: false
+#         []
+#
+#     {} or _: true
+#         ['a', 'c', 'e']
+#
+#     a: true
+#         ['a', 'c', 'e']
+#
+#     _: false, a: true
+#         ['a']
+#
+#     a: false
+#         ['c', 'e']
+#
+#     b: true
+#         ['a', 'b', 'c', 'e']
+#
+#     e: false
+#         ['a', 'c']
+#
+#     'a.x.y': true, c: false
+#         ['a', 'a.x.y', 'e']
+#
+#     _: false, 'a.x.y': true, c: false
+#         ['a.x.y']
 
 
 J.fetching = {}
@@ -86,11 +82,9 @@ _.extend J.fetching,
 
 
     _getCanonical: (x) ->
-        ###
-            Like EJSON.stringify but reorders object keys and
-            array elements to make "the same objects" yield
-            the same strings.
-        ###
+        # Like EJSON.stringify but reorders object keys and
+        # array elements to make "the same objects" yield
+        # the same strings.
 
         if _.isArray x
             J.util.sortByKey(
@@ -108,11 +102,9 @@ _.extend J.fetching,
 
 
     _projectionToInclusionSet: (modelClass, projection) ->
-        ###
-            See the projection semantics documentation at the top of this file.
+        # See the projection semantics documentation at the top of this file.
 
-            Returns {includedFieldOrReactiveName: true}
-        ###
+        # Returns {includedFieldOrReactiveName: true}
 
         inclusionSet = {}
 
@@ -150,9 +142,7 @@ _.extend J.fetching,
 
 
     checkQuerySpec: (querySpec) ->
-        ###
-            Throws an error if the querySpec is invalid
-        ###
+        # Throws an error if the querySpec is invalid
 
         modelClass = J.models[querySpec.modelName]
         inclusionSet = @_projectionToInclusionSet modelClass, querySpec.fields ? {}
@@ -185,14 +175,12 @@ _.extend J.fetching,
 
 
     getMerged: (querySpecs) ->
-        ###
-            1.
-                Merge all the querySpecs that select on _id using
-                inclusionSetByModelInstance.
-            2.
-                Attempt to pairwise merge all the querySpecs that
-                don't select on _id.
-        ###
+        # 1.
+        #     Merge all the querySpecs that select on _id using
+        #     inclusionSetByModelInstance.
+        # 2.
+        #     Attempt to pairwise merge all the querySpecs that
+        #     don't select on _id.
 
         inclusionSetByModelInstance = {} # modelName: id: fieldOrReactiveSpec: true
         nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
@@ -302,15 +290,13 @@ _.extend J.fetching,
 
 
     isQueryReady: (qs) ->
-        ###
-            A query is considered ready if:
-            (1) It was bundled into the set of merged queries that the server
-                has come back and said are ready.
-            (2) It has an _id selector, and all of the first-level doc values
-                in its projection aren't undefined.
-                (Note that we can't infer anything about first-level objects
-                in the doc, because they may or may not be partial subdocs.)
-        ###
+        # A query is considered ready if:
+        # (1) It was bundled into the set of merged queries that the server
+        #     has come back and said are ready.
+        # (2) It has an _id selector, and all of the first-level doc values
+        #     in its projection aren't undefined.
+        #     (Note that we can't infer anything about first-level objects
+        #     in the doc, because they may or may not be partial subdocs.)
 
         qsString = J.fetching.stringifyQs qs
         modelClass = J.models[qs.modelName]
@@ -368,14 +354,12 @@ _.extend J.fetching,
 
 
     projectionToMongoFieldsArg: (modelClass, projection) ->
-        ###
-            Input:
-                The kind of projection passed to the "fields" argument when calling .fetch
-                on a Model in JFramework.
-            Output:
-                The corresponding Mongo-style fields-argument that we can pass to
-                the second argument of MongoCollection.find.
-        ###
+        # Input:
+        #     The kind of projection passed to the "fields" argument when calling .fetch
+        #     on a Model in JFramework.
+        # Output:
+        #     The corresponding Mongo-style fields-argument that we can pass to
+        #     the second argument of MongoCollection.find.
 
         inclusionSet = @_projectionToInclusionSet modelClass, projection
 
