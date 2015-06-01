@@ -14,7 +14,8 @@
 
 
 J.PropTypes =
-    dict: {name: "J.PropTypes.dict"}
+    dict: (params) ->
+        # TODO
 
     elem: (componentSpec = null) ->
         # TODO
