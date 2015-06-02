@@ -57,14 +57,14 @@ class J.Model
     @escapeDot: (key) ->
         key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
 
+
     # ## @fromJSONValue
     # - - -
-    # TODO: write documentation
-    #
+    # Return a new model instance with the fields set to a given JSON.
+    # The input is *not* of the form `{$type: ThisModelName, $value: someValue}`.
+    # It's just the `someValue` part.
     # - - -
     @fromJSONValue: (jsonValue) ->
-        # jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
-        # It's just the someValue part.
 
         unless J.util.isPlainObject jsonValue
             throw new Meteor.Error 'Must override J.Model.fromJSONValue to decode non-object values'
@@ -75,10 +75,11 @@ class J.Model
 
         @fromDoc jsonValue
 
+
     # ## @fromDoc
     # - - -
-    # TODO: write documentation
-    #
+    # Return a new model instance with the fields set
+    # to the corresponding fields of a given document.
     # - - -
     @fromDoc: (doc) ->
         fields = EJSON.fromJSONValue @_getUnescapedSubdoc doc
@@ -123,8 +124,12 @@ class J.Model
 
     # ## @unescapeDot
     # - - -
-    # TODO: write documentation
+    # Reverse the behavior of **@escapeDot**.
+    # Specifically unescape `*DOT*` and `*DOLLAR*` in a string by
+    # replacing them with `.` and `$` respectively.
     #
+    #     J.Model.unescapeDot('func://www*DOT*example*DOT*.com/func')
+    #     # "func://www.example.com/func"
     # - - -
     @unescapeDot: (key) =>
         key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
@@ -185,30 +190,30 @@ class J.Model
 
     # ## clone
     # - - -
-    # TODO: write documentation
+    # Clone a model instance. The clone is
+    # nonreactive because its fields are
+    # a new piece of application state.
+    # Note that clones are always detached, alive, and not read-only.
     #
-    #
+    #     foo = $$.Foo.fetchOne()
+    #     foo.bar(42)
+    #     foo.save() # Error: Cannot save attached instance.
+    #     fooClone = foo.clone()
+    #     fooClone.save()
     # - - -
     clone: ->
-        # Nonreactive because the clone's fields are
-        # their own new piece of application state.
         doc = Tracker.nonreactive => @toDoc()
-
         for fieldName in _.keys doc
             if doc[fieldName] is undefined
                 delete doc[fieldName]
-
         instance = @modelClass.fromDoc doc
         instance.collection = @collection
-
-        # Note that clones are always detached, alive, and not read-only
         instance
+
 
     # ## get
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Get the value of a field or reactive of a model instance.
     # - - -
     get: (fieldOrReactiveName) ->
         if not @alive
@@ -326,7 +331,8 @@ class J.Model
     # Insert a model document into a collection.
     #
     #     model.insert(collection, callback)
-    #     model.insert(callback)
+    #     model.insert(callback) # uses @collection
+    # - - -
     insert: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
             callback = options
@@ -337,9 +343,7 @@ class J.Model
 
     # ## remove
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Remove a model document from its collection.
     # - - -
     remove: (callback) ->
         unless @alive
@@ -350,14 +354,14 @@ class J.Model
 
     # ## save
     # - - -
-    # TODO: write documentation
+    # Save a model instance into a collection.  
+    # Returns `@_id`.
     #
-    #
+    #     foo.save(collection, callback)
+    #     foo.save(callback) # uses @collection
     # - - -
     save: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
-            # Can call save(callback) to use @collection
-            # as the collection.
             callback = options
             options = {}
 
@@ -376,9 +380,13 @@ class J.Model
 
     # ## set
     # - - -
-    # TODO: write documentation
+    # Set the fields of a model instance.
+    # This method takes an dictionary of
+    # field names and values.
     #
-    #
+    #     foo.set
+    #       bar: 1
+    #       baz: 2
     # - - -
     set: (fields) ->
         unless J.util.isPlainObject fields
@@ -399,17 +407,14 @@ class J.Model
 
     # ## toDoc
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Reactive.
+    # Returns an EJSON object with all the
+    # user-defined types serialized into JSON, but
+    # not the EJSON primitives (Date and Binary).
+    # (A "compound EJSON object" can contain user-defined
+    # types in the form of J.Model instances.)
     # - - -
     toDoc: ->
-        # Reactive.
-        # Returns an EJSON object with all the
-        # user-defined types serialized into JSON, but
-        # not the EJSON primitives (Date and Binary).
-        # (A "compound EJSON object" can contain user-defined
-        # types in the form of J.Model instances.)
 
         unless @alive
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
@@ -421,24 +426,18 @@ class J.Model
 
     # ## toJSONValue
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Alias for **@toDoc**.  
+    # This is used by Meteor EJSON, e.g. EJSON.stringify.  
+    # Note that the name is misleading because
+    # EJSON's special primitives (Date and Binary)
+    # aren't returned as JSON.
     # - - -
-    toJSONValue: ->
-        # Used by Meteor EJSON, e.g. EJSON.stringify.
-        # Note that the name is misleading because
-        # EJSON's special primitives (Date and Binary)
-        # aren't returned as JSON.
-
-        @toDoc()
+    toJSONValue: -> @toDoc()
 
 
     # ## toString
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Returns the string representation of a model instance.
     # - - -
     toString: ->
         if @alive
@@ -449,9 +448,8 @@ class J.Model
 
     # ## tryGet
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Try to get a field or reactive value.  
+    # If the value is not ready, return `defaultValue`.  
     # - - -
     tryGet: (key, defaultValue) ->
         J.tryGet(
@@ -462,29 +460,26 @@ class J.Model
 
     # ## typeName
     # - - -
-    # TODO: write documentation
-    #
-    #
+    # Used by Meteor EJSON.
     # - - -
     typeName: ->
-        # Used by Meteor EJSON
         @modelClass.name
 
 
     # ## update
     # - - -
-    # TODO: write documentation
+    # Update the corresponding model document in `@collection`
+    # using MongoDB operators.
     #
-    #
+    # Calling something like `foo.update(bar: baz)` would replace the entire
+    # Mongo doc, which is basically always a mistake. We almost always
+    # want to call something like `foo.update($set: bar: baz)` instead.
     # - - -
     update: (args...) ->
         unless @alive
             throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
 
         unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
-            # Calling something like .update(foo: bar) would replace the entire
-            # Mongo doc, which is basically always a mistake. We almost always
-            # want to call something like .update($set: foo: bar) instead.
             throw new Meteor.Error "Must use a $ operation for #{@modelClass.name}.update"
 
         @collection.update.bind(@collection, @_id).apply null, args
@@ -499,6 +494,57 @@ J.m = J.models = {}
 # must be defined before all components.
 modelDefinitionQueue = []
 
+
+# ## J.defineModel (J.dm)
+# - - -
+# Define a model. The definition may include
+# an `_id`, field declarations under `fields`,
+# and reactive definitions under `reactives`.
+#
+# * `@collection` is the collection that was queried
+# to obtain this instance, or the original attached
+# clone-ancestor of this instance, or just the
+# default place we're going to be inserting/saving to.
+#
+# * When a model instance is attached, it reactively receives
+# changes from its collection and is immutable
+# to the application layer.  
+# Note that an attached instance always has an `_id.`
+#
+# * Attached instances die when the collection
+# they came from no longer contains their ID.
+# They never come back to life, but a new
+# attached instance with the same ID may
+# eventually replace them in the collection.
+# Detached instances dies when their creator
+# computation dies, if there is one.
+# 
+#
+#     J.dm 'Foo', 'foos',
+#         _id: $$.str
+#        
+#         fields:
+#             a:
+#                 type: $$.str
+#             b:
+#                 type: $$.str
+#                 include: false
+#             c:
+#                 type: $$.str
+#        
+#         reactives:
+#             d:
+#                 val: ->
+#                     @a() + @c()
+#             e:
+#                 include: true
+#                 val: ->
+#                     @b() + 1
+#             f:
+#                 denorm: true
+#                 val: ->
+#                     $$.Bar.fetch({ baz: 1 }).count()
+# - - -
 J.dm = J.defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelDefinitionQueue.push
         modelName: modelName
@@ -510,25 +556,7 @@ J.dm = J.defineModel = (modelName, collectionName, members = {}, staticMembers =
 J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelConstructor = (initFields = {}, @collection = @modelClass.collection) ->
         @_id = initFields._id ? null
-
-        # @collection is the collection that was queried
-        # to obtain this instance, or the original attached
-        # clone-ancestor of this instance, or just the
-        # default place we're going to be inserting/saving to.
-
-        # If true, this instance reactively receives
-        # changes from its collection and is immutable
-        # to the application layer.
-        # Note that an attached instance always has an _id.
         @attached = false
-
-        # Attached instances die when the collection
-        # they came from no longer contains their ID.
-        # They never come back to life, but a new
-        # attached instance with the same ID may
-        # eventually replace them in the collection.
-        # Detached instances dies when their creator
-        # computation dies, if there is one.
         @alive = true
         if Tracker.active then Tracker.onInvalidate =>
             @alive = false
