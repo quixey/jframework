@@ -31,6 +31,7 @@ J.methods = (methods) ->
     Meteor.methods wrappedMethods
 
 
+
 # JSON.stringify([modelName, instanceId, reactiveName]): true
 J._recalcBuffer = {}
 _willFlush = false
@@ -274,37 +275,12 @@ updateObservers = (dataSessionId) ->
                 if included and reactivesObj[reactiveName]?.val is undefined
                     reactivesObj[reactiveName] ?= {}
 
+
+
                     reactiveKey = "#{modelName}.#{reactiveName}"
                     future = J._reactiveCalcsInProgress[reactiveKey]
                     if future?
-                        # console.log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
                     else
-                        # console.log "#{J.util.stringify querySpec} Fresh recalc of #{reactiveKey}."
-                        future = J._reactiveCalcsInProgress[reactiveKey] = Future.task ->
-                            if instanceDoc is undefined
-                                # Do a raw Mongo findOne which this includes the _reactives field.
-                                instanceDoc = modelClass.findOne id,
-                                    transform: false
-
-                            # instanceDoc might not exist because the instance might have been
-                            # deleted while we're still catching up publishing an @added or @changed
-                            # that includes a reactive.
-                            ret = if instanceDoc?
-                                if instanceDoc?._reactives?.reactiveName?.val is undefined
-                                    sanitizedInstanceDoc = _.clone instanceDoc
-                                    delete sanitizedInstanceDoc._reactives
-                                    instance = modelClass.fromDoc sanitizedInstanceDoc
-                                    J.denorm.recalc instance, reactiveName
-                                else
-                                    instanceDoc._reactives.reactiveName.val
-
-                            delete J._reactiveCalcsInProgress[reactiveKey]
-
-                            ret
-
-                    reactivesObj[reactiveName].val = future.wait()
-                    # console.log "#{J.util.stringify querySpec} returning value of #{reactiveKey}:
-                    #   {reactivesObj[reactiveName].val}"
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
@@ -330,7 +306,6 @@ updateObservers = (dataSessionId) ->
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                # log querySpec, "server says ADDED:", id, fields
 
                 fields = _.clone fields
                 fields._reactives ?= {}
@@ -364,7 +339,6 @@ updateObservers = (dataSessionId) ->
                     @added modelClass.collection._name, id, changedFields
 
             changed: (id, fields) =>
-                # log querySpec, "server says CHANGED:", id, fields
 
                 fields = _.clone fields
                 fields._reactives ?= {}
@@ -379,11 +353,9 @@ updateObservers = (dataSessionId) ->
                         changedFields[fieldName] = newValue
 
                 if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id, changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                # log querySpec, "server says REMOVED:", id
 
                 changedFields = {}
 
@@ -398,10 +370,8 @@ updateObservers = (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    # log querySpec, "sending REMOVED:", id
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id
                     @changed modelClass.collection._name, id, changedFields
 
         session.observerByQsString().setOrAdd qsString, observer
