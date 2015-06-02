@@ -450,6 +450,13 @@ J.m = J.models = {}
 # must be defined before all components.
 modelDefinitionQueue = []
 
+
+# ## J.defineModel (J.dm)
+# - - -
+# TODO: write documentation
+#
+#
+# - - -
 J.dm = J.defineModel = (modelName, collectionName, members = {}, staticMembers = {}) ->
     modelDefinitionQueue.push
         modelName: modelName
