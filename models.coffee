@@ -46,10 +46,22 @@ class J.Model
             subDoc
 
 
+    # ## @escapeDot
+    # - - -
+    # Specifically escape `.` and `$` in a string by
+    # replacing them with `*DOT*` and `*DOLLAR*` respectively.
+    #
+    #     J.Model.escapeDot('func://www.example.com/func')
+    #     # "func://www*DOT*example*DOT*.com/func"
+    # - - -
     @escapeDot: (key) ->
         key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
 
-
+    # ## @fromJSONValue
+    # - - -
+    # TODO: write documentation
+    #
+    # - - -
     @fromJSONValue: (jsonValue) ->
         # jsonValue is *not* of the form {$type: ThisModelName, $value: someValue}.
         # It's just the someValue part.
@@ -63,7 +75,11 @@ class J.Model
 
         @fromDoc jsonValue
 
-
+    # ## @fromDoc
+    # - - -
+    # TODO: write documentation
+    #
+    # - - -
     @fromDoc: (doc) ->
         fields = EJSON.fromJSONValue @_getUnescapedSubdoc doc
 
@@ -73,7 +89,11 @@ class J.Model
 
         new @ fields
 
-
+    # ## @toSubdoc
+    # - - -
+    # TODO: write documentation
+    #
+    # - - -
     @toSubdoc: (x) ->
         helper = (value) =>
             if value instanceof J.Dict
@@ -101,6 +121,11 @@ class J.Model
         helper x
 
 
+    # ## @unescapeDot
+    # - - -
+    # TODO: write documentation
+    #
+    # - - -
     @unescapeDot: (key) =>
         key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
 
@@ -158,6 +183,12 @@ class J.Model
         @_reactives._forceSet reactivesSetter
 
 
+    # ## clone
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     clone: ->
         # Nonreactive because the clone's fields are
         # their own new piece of application state.
@@ -173,7 +204,12 @@ class J.Model
         # Note that clones are always detached, alive, and not read-only
         instance
 
-
+    # ## get
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     get: (fieldOrReactiveName) ->
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
@@ -285,16 +321,26 @@ class J.Model
             @_fields.forceGet fieldName
 
 
+    # ## insert
+    # - - -
+    # Insert a model document into a collection.
+    #
+    #     model.insert(collection, callback)
+    #     model.insert(callback)
     insert: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
-            # Can call save(callback) to use @collection
-            # as the collection.
             callback = options
             options = {}
 
         @_save false, options, callback
 
 
+    # ## remove
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     remove: (callback) ->
         unless @alive
             throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
@@ -302,6 +348,12 @@ class J.Model
         Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
 
+    # ## save
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     save: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
             # Can call save(callback) to use @collection
@@ -322,6 +374,12 @@ class J.Model
         Meteor.wrapAsync(helper, @)()
 
 
+    # ## set
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     set: (fields) ->
         unless J.util.isPlainObject fields
             throw new Meteor.Error "Invalid fields setter: #{fields}"
@@ -339,6 +397,12 @@ class J.Model
         null
 
 
+    # ## toDoc
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     toDoc: ->
         # Reactive.
         # Returns an EJSON object with all the
@@ -355,6 +419,12 @@ class J.Model
         doc
 
 
+    # ## toJSONValue
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     toJSONValue: ->
         # Used by Meteor EJSON, e.g. EJSON.stringify.
         # Note that the name is misleading because
@@ -364,6 +434,12 @@ class J.Model
         @toDoc()
 
 
+    # ## toString
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     toString: ->
         if @alive
             Tracker.nonreactive => EJSON.stringify @
@@ -371,6 +447,12 @@ class J.Model
             "<#{@modelClass.name} ##{@_id} DEAD>"
 
 
+    # ## tryGet
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     tryGet: (key, defaultValue) ->
         J.tryGet(
             => @get key
@@ -378,11 +460,23 @@ class J.Model
         )
 
 
+    # ## typeName
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     typeName: ->
         # Used by Meteor EJSON
         @modelClass.name
 
 
+    # ## update
+    # - - -
+    # TODO: write documentation
+    #
+    #
+    # - - -
     update: (args...) ->
         unless @alive
             throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
