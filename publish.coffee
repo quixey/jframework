@@ -15,6 +15,7 @@ J.defineModel 'JDataSession', 'jframework_datasessions',
 
 
 Fiber = Npm.require 'fibers'
+Future = Npm.require 'fibers/future'
 
 J._inMethod = new Meteor.EnvironmentVariable
 
@@ -56,6 +57,11 @@ _flushRecalcBuffer = ->
             return
 
         J.denorm.recalc instance, reactiveName
+
+
+
+# "#{modelName}.#{reactiveName}": future
+J._reactiveCalcsInProgress = {}
 
 
 ###
@@ -250,6 +256,7 @@ updateObservers = (dataSessionId) ->
         fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
 
         if fieldName is '_reactives'
+            inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
             reactivesObj = JSON.parse(JSON.stringify(value ? {}))
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
 
@@ -259,40 +266,45 @@ updateObservers = (dataSessionId) ->
                 included = false
 
                 if reactiveSpec.denorm
-                    for fieldOrReactiveSpec of querySpec.fields ? {}
+                    for fieldOrReactiveSpec of inclusionSet
                         if fieldOrReactiveSpec.split('.')[0] is reactiveName
                             included = true
                             break
 
                 if included and reactivesObj[reactiveName]?.val is undefined
-                    SYNC_RECALC = true
-                    if SYNC_RECALC
-                        reactivesObj[reactiveName] ?= {}
+                    reactivesObj[reactiveName] ?= {}
 
-                        if instanceDoc is undefined
-                            # Do a raw Mongo findOne which this includes the _reactives field.
-                            instanceDoc = modelClass.findOne id,
-                                transform: false
-
-                        # instanceDoc might not exist because the instance might have been
-                        # deleted while we're still catching up publishing an @added or @changed
-                        # that includes a reactive.
-                        if instanceDoc?
-                            if instanceDoc?._reactives?.reactiveName?.val is undefined
-                                sanitizedInstanceDoc = _.clone instanceDoc
-                                delete sanitizedInstanceDoc._reactives
-                                instance = modelClass.fromDoc sanitizedInstanceDoc
-
-                                reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
-                            else
-                                reactivesObj[reactiveName].val = instanceDoc._reactives.reactiveName.val
-
+                    reactiveKey = "#{modelName}.#{reactiveName}"
+                    future = J._reactiveCalcsInProgress[reactiveKey]
+                    if future?
+                        # console.log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
                     else
-                        bufferKey = JSON.stringify [modelName, id, reactiveName]
-                        console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
-                            #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
+                        # console.log "#{J.util.stringify querySpec} Fresh recalc of #{reactiveKey}."
+                        future = J._reactiveCalcsInProgress[reactiveKey] = Future.task ->
+                            if instanceDoc is undefined
+                                # Do a raw Mongo findOne which this includes the _reactives field.
+                                instanceDoc = modelClass.findOne id,
+                                    transform: false
 
-                        _addRecalcBufferKey bufferKey
+                            # instanceDoc might not exist because the instance might have been
+                            # deleted while we're still catching up publishing an @added or @changed
+                            # that includes a reactive.
+                            ret = if instanceDoc?
+                                if instanceDoc?._reactives?.reactiveName?.val is undefined
+                                    sanitizedInstanceDoc = _.clone instanceDoc
+                                    delete sanitizedInstanceDoc._reactives
+                                    instance = modelClass.fromDoc sanitizedInstanceDoc
+                                    J.denorm.recalc instance, reactiveName
+                                else
+                                    instanceDoc._reactives.reactiveName.val
+
+                            delete J._reactiveCalcsInProgress[reactiveKey]
+
+                            ret
+
+                    reactivesObj[reactiveName].val = future.wait()
+                    # console.log "#{J.util.stringify querySpec} returning value of #{reactiveKey}:
+                    #   {reactivesObj[reactiveName].val}"
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value

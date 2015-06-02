@@ -28,6 +28,7 @@ J.dm 'Foo', 'foos',
             val: ->
                 @a() + @c()
         e:
+            denorm: true
             include: true
             val: ->
                 @b() + 1

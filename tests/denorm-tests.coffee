@@ -7,6 +7,51 @@
 ###
 
 
+
+if Meteor.isClient then Tinytest.addAsync "Denorm with overlapping cursors", (test, onComplete) ->
+    fooDocs = [
+        a: 10
+        b: 20
+        c: 30
+    ,
+        a: 100
+        b: 200
+        c: 300
+    ,
+        a: 1000
+        b: 2000
+        c: 3000
+    ]
+    fooInstances = (new $$.Foo doc for doc in fooDocs)
+    fooInstance.save() for fooInstance in fooInstances
+
+    avs =
+        for i in [0...3]
+            do (i) ->
+                J.AutoVar(
+                    ->
+                        foos = $$.Foo.fetch(
+                            _id:
+                                $ne: 'x' # Just to throw off smart ID merging
+                                $in: (fooInstance._id for fooInstance in fooInstances)
+                            a: $gt: i
+                        )
+                    (oldFoos, newFoos) ->
+                        return unless i is 0
+
+                        if newFoos.size() is 3
+                            console.log 'mutating b to 24'
+                            fooInstances[0].b 24
+                            fooInstances[0].save ->
+                                newFoos.forEach (foo) ->
+                                    if foo._id is fooInstances[0]._id
+                                        test.equal foo.e(), 25
+                                for j in [0...3]
+                                    avs[j].stop()
+                                onComplete()
+                )
+
+
 if Meteor.isClient then Tinytest.addAsync "Field inclusion", (test, onComplete) ->
     foo = new $$.Foo(
         a: 1
