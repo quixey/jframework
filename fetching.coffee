@@ -338,7 +338,7 @@ _.extend J.fetching,
                             continue
                         else if fieldSpecParts[0] is '_reactives'
                             reactiveName = fieldSpecParts[1]?
-                            value = doc._reactives[reactiveName]?.val
+                            value = doc._reactives?[reactiveName]?.val
                         else
                             fieldName = fieldSpecParts[0]
                             value = doc[fieldName]
@@ -502,14 +502,15 @@ _.extend J.fetching,
             options = @_qsToMongoOptions querySpec
 
             if Tracker.active
-                results = J.List Tracker.nonreactive ->
-                    modelClass.find(querySpec.selector, options).fetch()
+                options.reactive = false
+                results = J.List modelClass.find(querySpec.selector, options).fetch()
 
                 # The individual model instances' getters have their own reactivity, so
                 # this query should only invalidate if a result gets added/removed/moved.
                 idQueryOptions = _.clone options
                 idQueryOptions.fields = _id: 1
-                idQueryOptions.transform = null
+                idQueryOptions.reactive = true
+                idQueryOptions.transform = false
 
                 initializing = true
                 invalidator = -> computation.invalidate() if not initializing

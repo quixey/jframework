@@ -48,6 +48,8 @@ J.denorm =
         value = null
         watchedQuerySpecSet = null
 
+        console.log "Gonna (re)calculate <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}..."
+
         J._watchedQuerySpecSet.withValue {}, =>
             value = reactiveSpec.val.call instance
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
@@ -81,7 +83,7 @@ J.denorm =
             Returns modelName: reactiveName: [instanceId]
         ###
 
-        console.log 'resetWatchers', modelName, instanceId
+        console.log 'resetWatchers', modelName, JSON.stringify(instanceId)
 
         # Makes sure every fieldSpec in he watching-selector is consistent
         # with either oldValues or newValues

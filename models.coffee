@@ -232,8 +232,13 @@ class J.Model
             throw new Meteor.Error "Can't insert dead #{@modelClass.name} instance"
 
         doc = Tracker.nonreactive => @toDoc()
-        J.assert J.util.isPlainObject doc
-        if not doc._id?
+
+        if @modelClass.idSpec is J.PropTypes.key and not doc._id?
+            key = @key()
+            if not key?
+                throw new Error "<#{@modelClass.name}>.key() returned #{key}"
+            doc._id = key
+        else if not @_id?
             # The Mongo driver will give us an ID but we
             # can't pass it a null ID.
             delete doc._id
@@ -267,7 +272,13 @@ class J.Model
 
         doc = Tracker.nonreactive => @toDoc()
 
-        doc._id ?= Random.hexString(10)
+        if @modelClass.idSpec is J.PropTypes.key and not doc._id?
+            key = @key()
+            if not key?
+                throw new Error "<#{@modelClass.name}>.key() returned #{key}"
+            doc._id = key
+        else
+            doc._id = @_id ? Random.hexString(10)
 
         Meteor.call '_jSave', @modelClass.name, doc, callback
 
@@ -303,32 +314,7 @@ class J.Model
             throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
         doc = J.Model.toSubdoc @_fields.tryToObj()
-
-        if @modelClass.idSpec is J.PropTypes.key
-            keyReady = false
-            try
-                key = @key()
-                keyReady = true
-            catch e
-                if e not instanceof J.VALUE_NOT_READY
-                    console.error e.stack
-                    throw e
-
-            if keyReady
-                if not key?
-                    throw new Error "<#{@modelClass.name}>.key() returned #{key}"
-                if @_id? and key isnt @_id
-                    throw new Error "<#{@modelClass.name}>.key() returned #{key}
-                        but has _id #{JSON.stringify @_id}"
-
-                doc._id = key
-
-            else
-                doc._id = @_id # may be null
-
-        else
-            doc._id = @_id # may be null
-
+        doc._id = @_id
         doc
 
 
@@ -822,7 +808,7 @@ Meteor.methods
         _reserved = modelName in ['JDataSession']
 
         if not _reserved
-            console.log 'jRemove', modelName, instanceId, @isSimulation
+            console.log 'jRemove', modelName, JSON.stringify(instanceId), @isSimulation
 
         if @isSimulation
             modelClass.collection.remove instanceId

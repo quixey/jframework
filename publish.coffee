@@ -253,7 +253,7 @@ updateObservers = (dataSessionId) ->
             reactivesObj = JSON.parse(JSON.stringify(value ? {}))
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
 
-            instance = undefined
+            instanceDoc = undefined
 
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 included = false
@@ -268,12 +268,24 @@ updateObservers = (dataSessionId) ->
                     SYNC_RECALC = true
                     if SYNC_RECALC
                         reactivesObj[reactiveName] ?= {}
-                        instance ?= modelClass.fetchOne id
-                        if instance?
-                            # Instance might not exist because the instance might have been
-                            # deleted while we're still catching up publishing an @added or @changed
-                            # that includes a reactive.
-                            reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
+
+                        if instanceDoc is undefined
+                            # Do a raw Mongo findOne which this includes the _reactives field.
+                            instanceDoc = modelClass.findOne id,
+                                transform: false
+
+                        # instanceDoc might not exist because the instance might have been
+                        # deleted while we're still catching up publishing an @added or @changed
+                        # that includes a reactive.
+                        if instanceDoc?
+                            if instanceDoc?._reactives?.reactiveName?.val is undefined
+                                sanitizedInstanceDoc = _.clone instanceDoc
+                                delete sanitizedInstanceDoc._reactives
+                                instance = modelClass.fromDoc sanitizedInstanceDoc
+
+                                reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
+                            else
+                                reactivesObj[reactiveName].val = instanceDoc._reactives.reactiveName.val
 
                     else
                         bufferKey = JSON.stringify [modelName, id, reactiveName]
