@@ -381,28 +381,15 @@ replacing them with <code>*DOT*</code> and <code>*DOLLAR*</code> respectively.</
               </div>
               <h2 id="-fromjsonvalue">@fromJSONValue</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Return a new model instance with the fields set to a given JSON.
+The input is <em>not</em> of the form <code>{$type: ThisModelName, $value: someValue}</code>.
+It’s just the <code>someValue</code> part.</p>
 <hr>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-property">@fromJSONValue</span>: <span class="hljs-function"><span class="hljs-params">(jsonValue)</span> -&gt;</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-5">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-5">&#182;</a>
-              </div>
-              <p>jsonValue is <em>not</em> of the form {$type: ThisModelName, $value: someValue}.
-It’s just the someValue part.</p>
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-property">@fromJSONValue</span>: <span class="hljs-function"><span class="hljs-params">(jsonValue)</span> -&gt;</span>
 
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>
         <span class="hljs-keyword">unless</span> J.util.isPlainObject jsonValue
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> Meteor.Error <span class="hljs-string">'Must override J.Model.fromJSONValue to decode non-object values'</span>
 
@@ -415,15 +402,16 @@ It’s just the someValue part.</p>
         </li>
         
         
-        <li id="section-6">
+        <li id="section-5">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-6">&#182;</a>
+                <a class="pilcrow" href="#section-5">&#182;</a>
               </div>
               <h2 id="-fromdoc">@fromDoc</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Return a new model instance with the fields set
+to the corresponding fields of a given document.</p>
 <hr>
 
             </div>
@@ -440,11 +428,11 @@ It’s just the someValue part.</p>
         </li>
         
         
-        <li id="section-7">
+        <li id="section-6">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-7">&#182;</a>
+                <a class="pilcrow" href="#section-6">&#182;</a>
               </div>
               <h2 id="-tosubdoc">@toSubdoc</h2>
 <hr>
@@ -482,21 +470,58 @@ It’s just the someValue part.</p>
         </li>
         
         
+        <li id="section-7">
+            <div class="annotation">
+              
+              <div class="pilwrap ">
+                <a class="pilcrow" href="#section-7">&#182;</a>
+              </div>
+              <h2 id="-unescapedot">@unescapeDot</h2>
+<hr>
+<p>Reverse the behavior of <strong>@escapeDot</strong>.
+Specifically unescape <code>*DOT*</code> and <code>*DOLLAR*</code> in a string by
+replacing them with <code>.</code> and <code>$</code> respectively.</p>
+<pre><code>J.Model.unescapeDot(<span class="hljs-string">'func://www*DOT*example*DOT*.com/func'</span>)
+<span class="hljs-comment"># "func://www.example.com/func"</span>
+</code></pre><hr>
+
+            </div>
+            
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-property">@unescapeDot</span> = <span class="hljs-function"><span class="hljs-params">(key)</span> =&gt;</span>
+        key.replace(<span class="hljs-regexp">/\*DOT\*/g</span>, <span class="hljs-string">'.'</span>).replace(<span class="hljs-regexp">/\*DOLLAR\*/g</span>, <span class="hljs-string">'$'</span>)</pre></div></div>
+            
+        </li>
+        
+        
         <li id="section-8">
             <div class="annotation">
               
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-8">&#182;</a>
               </div>
-              <h2 id="-unescapedot">@unescapeDot</h2>
+              <h2 id="clone">clone</h2>
 <hr>
-<p>TODO: write documentation</p>
-<hr>
+<p>Clone a model instance. The clone is
+nonreactive because its fields are
+a new piece of application state.
+Note that clones are always detached, alive, and not read-only.</p>
+<pre><code>foo = $$.Foo.fetchOne()
+foo.bar(<span class="hljs-number">42</span>)
+foo.save() <span class="hljs-comment"># Error: Cannot save attached instance.</span>
+fooClone = foo.clone()
+fooClone.save()
+</code></pre><hr>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-property">@unescapeDot</span> = <span class="hljs-function"><span class="hljs-params">(key)</span> =&gt;</span>
-        key.replace(<span class="hljs-regexp">/\*DOT\*/g</span>, <span class="hljs-string">'.'</span>).replace(<span class="hljs-regexp">/\*DOLLAR\*/g</span>, <span class="hljs-string">'$'</span>)</pre></div></div>
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">clone</span>: <span class="hljs-function">-&gt;</span>
+        doc = Tracker.nonreactive =&gt; <span class="hljs-property">@toDoc</span>()
+        <span class="hljs-keyword">for</span> fieldName <span class="hljs-keyword">in</span> _.keys doc
+            <span class="hljs-keyword">if</span> doc[fieldName] <span class="hljs-keyword">is</span> <span class="hljs-literal">undefined</span>
+                <span class="hljs-keyword">delete</span> doc[fieldName]
+        instance = <span class="hljs-property">@modelClass</span>.fromDoc doc
+        instance.collection = <span class="hljs-property">@collection</span>
+        instance</pre></div></div>
             
         </li>
         
@@ -507,65 +532,9 @@ It’s just the someValue part.</p>
               <div class="pilwrap ">
                 <a class="pilcrow" href="#section-9">&#182;</a>
               </div>
-              <h2 id="clone">clone</h2>
-<hr>
-<p>TODO: write documentation</p>
-<hr>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">clone</span>: <span class="hljs-function">-&gt;</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-10">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-10">&#182;</a>
-              </div>
-              <p>Nonreactive because the clone’s fields are
-their own new piece of application state.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        doc = Tracker.nonreactive =&gt; <span class="hljs-property">@toDoc</span>()
-
-        <span class="hljs-keyword">for</span> fieldName <span class="hljs-keyword">in</span> _.keys doc
-            <span class="hljs-keyword">if</span> doc[fieldName] <span class="hljs-keyword">is</span> <span class="hljs-literal">undefined</span>
-                <span class="hljs-keyword">delete</span> doc[fieldName]
-
-        instance = <span class="hljs-property">@modelClass</span>.fromDoc doc
-        instance.collection = <span class="hljs-property">@collection</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-11">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-11">&#182;</a>
-              </div>
-              <p>Note that clones are always detached, alive, and not read-only</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        instance</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-12">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-12">&#182;</a>
-              </div>
               <h2 id="get">get</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Get the value of a field or reactive of a model instance.</p>
 <hr>
 
             </div>
@@ -589,11 +558,11 @@ their own new piece of application state.</p>
         </li>
         
         
-        <li id="section-13">
+        <li id="section-10">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-13">&#182;</a>
+                <a class="pilcrow" href="#section-10">&#182;</a>
               </div>
               <p>Record that the current computation uses this denormed reactive</p>
 
@@ -606,11 +575,11 @@ their own new piece of application state.</p>
         </li>
         
         
-        <li id="section-14">
+        <li id="section-11">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-14">&#182;</a>
+                <a class="pilcrow" href="#section-11">&#182;</a>
               </div>
               <p>We might be temporarily bumming this field off some other cursor owned
 by some other computation, so we need to run fetchOne to update
@@ -638,11 +607,11 @@ Therefore a child J.AutoVar is the perfect place to do the bookkeeping.</p>
         </li>
         
         
-        <li id="section-15">
+        <li id="section-12">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-15">&#182;</a>
+                <a class="pilcrow" href="#section-12">&#182;</a>
               </div>
               <p>Denormed reactives behave like non-denormed reactives on
 unattached instances.</p>
@@ -666,11 +635,11 @@ unattached instances.</p>
         </li>
         
         
-        <li id="section-16">
+        <li id="section-13">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-16">&#182;</a>
+                <a class="pilcrow" href="#section-13">&#182;</a>
               </div>
               <p>Record that the current computation uses the current field</p>
 
@@ -683,11 +652,11 @@ unattached instances.</p>
         </li>
         
         
-        <li id="section-17">
+        <li id="section-14">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-17">&#182;</a>
+                <a class="pilcrow" href="#section-14">&#182;</a>
               </div>
               <p>See the comment for the J.AutoVar in the above if-branch. In this case,
 the reactivity for the caller computation is handled by the @_fields dict.</p>
@@ -707,18 +676,19 @@ the reactivity for the caller computation is handled by the @_fields dict.</p>
         </li>
         
         
-        <li id="section-18">
+        <li id="section-15">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-18">&#182;</a>
+                <a class="pilcrow" href="#section-15">&#182;</a>
               </div>
               <h2 id="insert">insert</h2>
 <hr>
 <p>Insert a model document into a collection.</p>
 <pre><code>model.insert(collection, callback)
-model.insert(callback)
-</code></pre>
+model.insert(callback) <span class="hljs-comment"># uses @collection</span>
+</code></pre><hr>
+
             </div>
             
             <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">insert</span>: <span class="hljs-function"><span class="hljs-params">(collection = <span class="hljs-property">@collection</span>, callback)</span> -&gt;</span>
@@ -742,11 +712,11 @@ model.insert(callback)
         </li>
         
         
-        <li id="section-19">
+        <li id="section-16">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-19">&#182;</a>
+                <a class="pilcrow" href="#section-16">&#182;</a>
               </div>
               <p>The Mongo driver will give us an ID but we
 can’t pass it a null ID.</p>
@@ -758,11 +728,11 @@ can’t pass it a null ID.</p>
         </li>
         
         
-        <li id="section-20">
+        <li id="section-17">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-20">&#182;</a>
+                <a class="pilcrow" href="#section-17">&#182;</a>
               </div>
               <p>Returns @_id</p>
 
@@ -773,15 +743,15 @@ can’t pass it a null ID.</p>
         </li>
         
         
-        <li id="section-21">
+        <li id="section-18">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-21">&#182;</a>
+                <a class="pilcrow" href="#section-18">&#182;</a>
               </div>
               <h2 id="remove">remove</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Remove a model document from its collection.</p>
 <hr>
 
             </div>
@@ -795,37 +765,24 @@ can’t pass it a null ID.</p>
         </li>
         
         
-        <li id="section-22">
+        <li id="section-19">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-22">&#182;</a>
+                <a class="pilcrow" href="#section-19">&#182;</a>
               </div>
               <h2 id="save">save</h2>
 <hr>
-<p>TODO: write documentation</p>
-<hr>
+<p>Save a model instance into a collection.<br>Returns <code>@_id</code>.</p>
+<pre><code>foo.save(collection, callback)
+foo.save(callback) <span class="hljs-comment"># uses @collection</span>
+</code></pre><hr>
 
             </div>
             
             <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">save</span>: <span class="hljs-function"><span class="hljs-params">(collection = <span class="hljs-property">@collection</span>, callback)</span> -&gt;</span>
-        <span class="hljs-keyword">if</span> _.isFunction(collection) <span class="hljs-keyword">and</span> arguments.length <span class="hljs-keyword">is</span> <span class="hljs-number">1</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-23">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-23">&#182;</a>
-              </div>
-              <p>Can call save(callback) to use @collection
-as the collection.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>            callback = collection
+        <span class="hljs-keyword">if</span> _.isFunction(collection) <span class="hljs-keyword">and</span> arguments.length <span class="hljs-keyword">is</span> <span class="hljs-number">1</span>
+            callback = collection
             collection = <span class="hljs-property">@collection</span>
 
         <span class="hljs-keyword">unless</span> collection <span class="hljs-keyword">instanceof</span> Mongo.Collection
@@ -841,36 +798,28 @@ as the collection.</p>
 
         doc._id ?= Random.hexString(<span class="hljs-number">10</span>)
 
-        Meteor.call <span class="hljs-string">'_jSave'</span>, <span class="hljs-property">@modelClass</span>.name, doc, callback</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-24">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-24">&#182;</a>
-              </div>
-              <p>Returns @_id</p>
+        Meteor.call <span class="hljs-string">'_jSave'</span>, <span class="hljs-property">@modelClass</span>.name, doc, callback
 
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        <span class="hljs-property">@_id</span> ?= doc._id</pre></div></div>
+        <span class="hljs-property">@_id</span> ?= doc._id</pre></div></div>
             
         </li>
         
         
-        <li id="section-25">
+        <li id="section-20">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-25">&#182;</a>
+                <a class="pilcrow" href="#section-20">&#182;</a>
               </div>
               <h2 id="set">set</h2>
 <hr>
-<p>TODO: write documentation</p>
-<hr>
+<p>Set the fields of a model instance.
+This method takes an dictionary of
+field names and values.</p>
+<pre><code>foo.set
+  <span class="hljs-attribute">bar</span>: <span class="hljs-number">1</span>
+  <span class="hljs-attribute">baz</span>: <span class="hljs-number">2</span>
+</code></pre><hr>
 
             </div>
             
@@ -892,40 +841,26 @@ as the collection.</p>
         </li>
         
         
-        <li id="section-26">
+        <li id="section-21">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-26">&#182;</a>
+                <a class="pilcrow" href="#section-21">&#182;</a>
               </div>
               <h2 id="todoc">toDoc</h2>
 <hr>
-<p>TODO: write documentation</p>
-<hr>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">toDoc</span>: <span class="hljs-function">-&gt;</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-27">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-27">&#182;</a>
-              </div>
-              <p>Reactive.
+<p>Reactive.
 Returns an EJSON object with all the
 user-defined types serialized into JSON, but
 not the EJSON primitives (Date and Binary).
 (A “compound EJSON object” can contain user-defined
 types in the form of J.Model instances.)</p>
+<hr>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">toDoc</span>: <span class="hljs-function">-&gt;</span>
+
         <span class="hljs-keyword">unless</span> <span class="hljs-property">@alive</span>
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> Meteor.Error <span class="hljs-string">"Can't call toDoc on dead <span class="hljs-subst">#{<span class="hljs-property">@modelClass</span>.name}</span> instance"</span>
 
@@ -961,52 +896,35 @@ types in the form of J.Model instances.)</p>
         </li>
         
         
-        <li id="section-28">
+        <li id="section-22">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-28">&#182;</a>
+                <a class="pilcrow" href="#section-22">&#182;</a>
               </div>
               <h2 id="tojsonvalue">toJSONValue</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Alias for <strong>@toDoc</strong>.<br>This is used by Meteor EJSON, e.g. EJSON.stringify.<br>Note that the name is misleading because
+EJSON’s special primitives (Date and Binary)
+aren’t returned as JSON.</p>
 <hr>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">toJSONValue</span>: <span class="hljs-function">-&gt;</span></pre></div></div>
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">toJSONValue</span>: <span class="hljs-function">-&gt;</span> <span class="hljs-property">@toDoc</span>()</pre></div></div>
             
         </li>
         
         
-        <li id="section-29">
+        <li id="section-23">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-29">&#182;</a>
-              </div>
-              <p>Used by Meteor EJSON, e.g. EJSON.stringify.
-Note that the name is misleading because
-EJSON’s special primitives (Date and Binary)
-aren’t returned as JSON.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>
-        <span class="hljs-property">@toDoc</span>()</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-30">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-30">&#182;</a>
+                <a class="pilcrow" href="#section-23">&#182;</a>
               </div>
               <h2 id="tostring">toString</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Returns the string representation of a model instance.</p>
 <hr>
 
             </div>
@@ -1020,15 +938,15 @@ aren’t returned as JSON.</p>
         </li>
         
         
-        <li id="section-31">
+        <li id="section-24">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-31">&#182;</a>
+                <a class="pilcrow" href="#section-24">&#182;</a>
               </div>
               <h2 id="tryget">tryGet</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Try to get a field or reactive value.<br>If the value is not ready, return <code>defaultValue</code>.  </p>
 <hr>
 
             </div>
@@ -1042,48 +960,38 @@ aren’t returned as JSON.</p>
         </li>
         
         
-        <li id="section-32">
+        <li id="section-25">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-32">&#182;</a>
+                <a class="pilcrow" href="#section-25">&#182;</a>
               </div>
               <h2 id="typename">typeName</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Used by Meteor EJSON.</p>
 <hr>
 
             </div>
             
-            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">typeName</span>: <span class="hljs-function">-&gt;</span></pre></div></div>
+            <div class="content"><div class='highlight'><pre>    <span class="hljs-attribute">typeName</span>: <span class="hljs-function">-&gt;</span>
+        <span class="hljs-property">@modelClass</span>.name</pre></div></div>
             
         </li>
         
         
-        <li id="section-33">
+        <li id="section-26">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-33">&#182;</a>
-              </div>
-              <p>Used by Meteor EJSON</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        <span class="hljs-property">@modelClass</span>.name</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-34">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-34">&#182;</a>
+                <a class="pilcrow" href="#section-26">&#182;</a>
               </div>
               <h2 id="update">update</h2>
 <hr>
-<p>TODO: write documentation</p>
+<p>Update the corresponding model document in <code>@collection</code>
+using MongoDB operators.</p>
+<p>Calling something like <code>foo.update(bar: baz)</code> would replace the entire
+Mongo doc, which is basically always a mistake. We almost always
+want to call something like <code>foo.update($set: bar: baz)</code> instead.</p>
 <hr>
 
             </div>
@@ -1092,24 +1000,8 @@ aren’t returned as JSON.</p>
         <span class="hljs-keyword">unless</span> <span class="hljs-property">@alive</span>
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> Meteor.Error <span class="hljs-string">"Can't call update on dead <span class="hljs-subst">#{<span class="hljs-property">@modelClass</span>.name}</span> instance"</span>
 
-        <span class="hljs-keyword">unless</span> J.util.isPlainObject(args[<span class="hljs-number">0</span>]) <span class="hljs-keyword">and</span> _.all(key[<span class="hljs-number">0</span>] <span class="hljs-keyword">is</span> <span class="hljs-string">'$'</span> <span class="hljs-keyword">for</span> key <span class="hljs-keyword">of</span> args[<span class="hljs-number">0</span>])</pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-35">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-35">&#182;</a>
-              </div>
-              <p>Calling something like .update(foo: bar) would replace the entire
-Mongo doc, which is basically always a mistake. We almost always
-want to call something like .update($set: foo: bar) instead.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> Meteor.Error <span class="hljs-string">"Must use a $ operation for <span class="hljs-subst">#{<span class="hljs-property">@modelClass</span>.name}</span>.update"</span>
+        <span class="hljs-keyword">unless</span> J.util.isPlainObject(args[<span class="hljs-number">0</span>]) <span class="hljs-keyword">and</span> _.all(key[<span class="hljs-number">0</span>] <span class="hljs-keyword">is</span> <span class="hljs-string">'$'</span> <span class="hljs-keyword">for</span> key <span class="hljs-keyword">of</span> args[<span class="hljs-number">0</span>])
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> Meteor.Error <span class="hljs-string">"Must use a $ operation for <span class="hljs-subst">#{<span class="hljs-property">@modelClass</span>.name}</span>.update"</span>
 
         <span class="hljs-property">@collection</span>.update.bind(<span class="hljs-property">@collection</span>, <span class="hljs-property">@_id</span>).apply <span class="hljs-literal">null</span>, args
 
@@ -1120,11 +1012,11 @@ J.m = J.models = {}</pre></div></div>
         </li>
         
         
-        <li id="section-36">
+        <li id="section-27">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-36">&#182;</a>
+                <a class="pilcrow" href="#section-27">&#182;</a>
               </div>
               <p>Queue up all model definitions to help the J
 framework startup sequence. E.g. all models
@@ -1137,16 +1029,61 @@ must be defined before all components.</p>
         </li>
         
         
-        <li id="section-37">
+        <li id="section-28">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-37">&#182;</a>
+                <a class="pilcrow" href="#section-28">&#182;</a>
               </div>
               <h2 id="j-definemodel-j-dm-">J.defineModel (J.dm)</h2>
 <hr>
-<p>TODO: write documentation</p>
-<hr>
+<p>Define a model. The definition may include
+an <code>_id</code>, field declarations under <code>fields</code>,
+and reactive definitions under <code>reactives</code>.</p>
+<ul>
+<li><p><code>@collection</code> is the collection that was queried
+to obtain this instance, or the original attached
+clone-ancestor of this instance, or just the
+default place we’re going to be inserting/saving to.</p>
+</li>
+<li><p>When a model instance is attached, it reactively receives
+changes from its collection and is immutable
+to the application layer.<br>Note that an attached instance always has an <code>_id.</code></p>
+</li>
+<li><p>Attached instances die when the collection
+they came from no longer contains their ID.
+They never come back to life, but a new
+attached instance with the same ID may
+eventually replace them in the collection.
+Detached instances dies when their creator
+computation dies, if there is one.</p>
+</li>
+</ul>
+<pre><code>J.dm <span class="hljs-string">'Foo'</span>, <span class="hljs-string">'foos'</span>,
+    <span class="hljs-attribute">_id</span>: $$.str
+
+    <span class="hljs-attribute">fields</span>:
+        <span class="hljs-attribute">a</span>:
+            <span class="hljs-attribute">type</span>: $$.str
+        <span class="hljs-attribute">b</span>:
+            <span class="hljs-attribute">type</span>: $$.str
+            <span class="hljs-attribute">include</span>: <span class="hljs-literal">false</span>
+        <span class="hljs-attribute">c</span>:
+            <span class="hljs-attribute">type</span>: $$.str
+
+    <span class="hljs-attribute">reactives</span>:
+        <span class="hljs-attribute">d</span>:
+            <span class="hljs-attribute">val</span>: <span class="hljs-function">-&gt;</span>
+                <span class="hljs-property">@a</span>() + <span class="hljs-property">@c</span>()
+        <span class="hljs-attribute">e</span>:
+            <span class="hljs-attribute">include</span>: <span class="hljs-literal">true</span>
+            <span class="hljs-attribute">val</span>: <span class="hljs-function">-&gt;</span>
+                <span class="hljs-property">@b</span>() + <span class="hljs-number">1</span>
+        <span class="hljs-attribute">f</span>:
+            <span class="hljs-attribute">denorm</span>: <span class="hljs-literal">true</span>
+            <span class="hljs-attribute">val</span>: <span class="hljs-function">-&gt;</span>
+                $$.Bar.fetch({ <span class="hljs-attribute">baz</span>: <span class="hljs-number">1</span> }).count()
+</code></pre><hr>
 
             </div>
             
@@ -1160,62 +1097,9 @@ must be defined before all components.</p>
 
 J._defineModel = <span class="hljs-function"><span class="hljs-params">(modelName, collectionName, members = {}, staticMembers = {})</span> -&gt;</span>
 <span class="hljs-function">    <span class="hljs-title">modelConstructor</span> = <span class="hljs-params">(initFields = {}, <span class="hljs-property">@collection</span> = <span class="hljs-property">@modelClass</span>.collection)</span> -&gt;</span>
-        <span class="hljs-property">@_id</span> = initFields._id ? <span class="hljs-literal">null</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-38">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-38">&#182;</a>
-              </div>
-              <p>@collection is the collection that was queried
-to obtain this instance, or the original attached
-clone-ancestor of this instance, or just the
-default place we’re going to be inserting/saving to.</p>
-
-            </div>
-            
-        </li>
-        
-        
-        <li id="section-39">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-39">&#182;</a>
-              </div>
-              <p>If true, this instance reactively receives
-changes from its collection and is immutable
-to the application layer.
-Note that an attached instance always has an _id.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        <span class="hljs-property">@attached</span> = <span class="hljs-literal">false</span></pre></div></div>
-            
-        </li>
-        
-        
-        <li id="section-40">
-            <div class="annotation">
-              
-              <div class="pilwrap ">
-                <a class="pilcrow" href="#section-40">&#182;</a>
-              </div>
-              <p>Attached instances die when the collection
-they came from no longer contains their ID.
-They never come back to life, but a new
-attached instance with the same ID may
-eventually replace them in the collection.
-Detached instances dies when their creator
-computation dies, if there is one.</p>
-
-            </div>
-            
-            <div class="content"><div class='highlight'><pre>        <span class="hljs-property">@alive</span> = <span class="hljs-literal">true</span>
+        <span class="hljs-property">@_id</span> = initFields._id ? <span class="hljs-literal">null</span>
+        <span class="hljs-property">@attached</span> = <span class="hljs-literal">false</span>
+        <span class="hljs-property">@alive</span> = <span class="hljs-literal">true</span>
         <span class="hljs-keyword">if</span> Tracker.active <span class="hljs-keyword">then</span> Tracker.onInvalidate =&gt;
             <span class="hljs-property">@alive</span> = <span class="hljs-literal">false</span>
 
@@ -1237,11 +1121,11 @@ computation dies, if there is one.</p>
         </li>
         
         
-        <li id="section-41">
+        <li id="section-29">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-41">&#182;</a>
+                <a class="pilcrow" href="#section-29">&#182;</a>
               </div>
               <p>The fields not specified in the constructor argument should be initialized
 to the class’s default values, but for purposes of checking consistency
@@ -1280,11 +1164,11 @@ with the key idSpec, they should be not-ready.</p>
         </li>
         
         
-        <li id="section-42">
+        <li id="section-30">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-42">&#182;</a>
+                <a class="pilcrow" href="#section-30">&#182;</a>
               </div>
               <p>Hack to set up the read-only Function.name value
 for the class. Having the right Function.name is useful
@@ -1338,11 +1222,11 @@ for console debugging.</p>
         </li>
         
         
-        <li id="section-43">
+        <li id="section-31">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-43">&#182;</a>
+                <a class="pilcrow" href="#section-31">&#182;</a>
               </div>
               <p>Set up @[fieldOrReactiveName] methods for getting/setting fields and getting reactives</p>
 
@@ -1358,11 +1242,11 @@ for console debugging.</p>
         </li>
         
         
-        <li id="section-44">
+        <li id="section-32">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-44">&#182;</a>
+                <a class="pilcrow" href="#section-32">&#182;</a>
               </div>
               <p>Getter</p>
 
@@ -1379,11 +1263,11 @@ for console debugging.</p>
         </li>
         
         
-        <li id="section-45">
+        <li id="section-33">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-45">&#182;</a>
+                <a class="pilcrow" href="#section-33">&#182;</a>
               </div>
               <p>Set up class methods for collection operations</p>
 
@@ -1395,11 +1279,11 @@ for console debugging.</p>
         </li>
         
         
-        <li id="section-46">
+        <li id="section-34">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-46">&#182;</a>
+                <a class="pilcrow" href="#section-34">&#182;</a>
               </div>
               <p>The client has attached instances which power
 a lot of fancy granular reactivity.</p>
@@ -1431,11 +1315,11 @@ a lot of fancy granular reactivity.</p>
         </li>
         
         
-        <li id="section-47">
+        <li id="section-35">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-47">&#182;</a>
+                <a class="pilcrow" href="#section-35">&#182;</a>
               </div>
               <p>The @_reactives dict stores the published values of reactives
 with denorm:true (i.e. server handles all their reactivity).</p>
@@ -1498,11 +1382,11 @@ with denorm:true (i.e. server handles all their reactivity).</p>
         </li>
         
         
-        <li id="section-48">
+        <li id="section-36">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-48">&#182;</a>
+                <a class="pilcrow" href="#section-36">&#182;</a>
               </div>
               <p>The server uses exclusively detached instances and
 doesn’t make use of much reactivity.</p>
@@ -1600,11 +1484,11 @@ doesn’t make use of much reactivity.</p>
         </li>
         
         
-        <li id="section-49">
+        <li id="section-37">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-49">&#182;</a>
+                <a class="pilcrow" href="#section-37">&#182;</a>
               </div>
               <p>Loading denormalized reactive values isn’t currently
 supported on the server</p>
@@ -1623,11 +1507,11 @@ supported on the server</p>
         </li>
         
         
-        <li id="section-50">
+        <li id="section-38">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-50">&#182;</a>
+                <a class="pilcrow" href="#section-38">&#182;</a>
               </div>
               <p>Treat fields that are missing in the Mongo doc (even
 though they were included in the query) as having a
@@ -1663,11 +1547,11 @@ default value of null.</p>
         </li>
         
         
-        <li id="section-51">
+        <li id="section-39">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-51">&#182;</a>
+                <a class="pilcrow" href="#section-39">&#182;</a>
               </div>
               <p>Note that a normal Mongo cursor would
 return undefined, but for us null means
@@ -1709,11 +1593,11 @@ Meteor.methods
         </li>
         
         
-        <li id="section-52">
+        <li id="section-40">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-52">&#182;</a>
+                <a class="pilcrow" href="#section-40">&#182;</a>
               </div>
               <p>This also runs on the client as a stub</p>
 
@@ -1734,11 +1618,11 @@ Meteor.methods
         </li>
         
         
-        <li id="section-53">
+        <li id="section-41">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-53">&#182;</a>
+                <a class="pilcrow" href="#section-41">&#182;</a>
               </div>
               <p>TODO: Validation</p>
 
@@ -1778,11 +1662,11 @@ Meteor.methods
         </li>
         
         
-        <li id="section-54">
+        <li id="section-42">
             <div class="annotation">
               
               <div class="pilwrap ">
-                <a class="pilcrow" href="#section-54">&#182;</a>
+                <a class="pilcrow" href="#section-42">&#182;</a>
               </div>
               <p>This also runs on the client as a stub</p>
 
