@@ -173,6 +173,23 @@ class J.Model
         else
             fieldName = fieldOrReactiveName
 
+            if Meteor.isServer and J._watchedQuerySpecSet.get()?
+                J.assert @_id?
+
+                # Treat an own-field access the same as any query
+                projection = _: false
+                projection[fieldName] = true
+                dummyQuerySpec =
+                    modelName: @modelClass.name
+                    selector: @_id
+                    fields: projection
+                    limit: 1
+                dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                J._watchedQuerySpecSet.get()[dummyQsString] = true
+
+                # console.log("O HI")
+                # console.trace()
+
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
                     console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
@@ -695,8 +712,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     for fieldName of fieldNameSet
                         instances.forEach (instance) =>
                             setter = {}
-                            if instance.tryGet(fieldName) is undefined
+
+                            # Using instance._fields.tryGet instead of instance.tryGet
+                            # because that could update J._watchedQuerySpecSet.
+                            if instance._fields.tryGet(fieldName) is undefined
                                 setter[fieldName] = null
+
                             instance.set setter
 
                     return instances

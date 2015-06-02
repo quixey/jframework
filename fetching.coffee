@@ -398,7 +398,7 @@ _.extend J.fetching,
                     ["_reactives.#{fieldOrReactiveName}.val"].concat(includeSpecParts[1...]).join('.')
                 mongoFieldsArg[reactiveFieldSpec] = 1
             else
-                mongoFieldsArg[fieldOrReactiveName] = 1
+                mongoFieldsArg[includeSpec] = 1
 
         if _.isEmpty mongoFieldsArg
             mongoFieldsArg._id = 1
@@ -529,6 +529,11 @@ _.extend J.fetching,
 
 
     stringifyQs: (qs) ->
+        qs = _.clone qs
+        for x in ['fields', 'sort', 'limit', 'skip']
+            if qs[x] is undefined
+                delete qs[x]
+
         EJSON.stringify
             modelName: qs.modelName
             selector: @_getCanonical qs.selector

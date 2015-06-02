@@ -50,14 +50,14 @@ J.denorm =
 
         J._watchedQuerySpecSet.withValue {}, =>
             value = reactiveSpec.val.call instance
-            if value instanceof J.List
-                value = value.toArr()
-            else if value instanceof J.Dict
-                value = value.toObj()
-
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        console.log "<#{instance.modelClass.name} ##{instance._id}>.#{reactiveName} watched:", watchedQuerySpecSet
+        if value instanceof J.List
+            value = value.toArr()
+        else if value instanceof J.Dict
+            value = value.toObj()
+
+        console.log "(Re)calculated <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (
@@ -81,9 +81,7 @@ J.denorm =
             Returns modelName: reactiveName: [instanceId]
         ###
 
-        console.log 'resetWatchers', modelName, instanceId,
-            'oldValues:', JSON.stringify(oldValues),
-            'newValues', JSON.stringify(newValues)
+        console.log 'resetWatchers', modelName, instanceId
 
         # Makes sure every fieldSpec in he watching-selector is consistent
         # with either oldValues or newValues
@@ -159,9 +157,6 @@ J.denorm =
                                 $and: subFieldSelectorMatcher
                             ]
 
-                    console.log "***<#{watcherModelName}>.#{reactiveName}***"
-                    # console.log "selector: #{JSON.stringify selector, null, 4}"
-
                     unsetter = {}
                     unsetter["_reactives.#{reactiveName}.val"] = 1
                     unsetter["_reactives.#{reactiveName}.watching"] = 1
@@ -174,7 +169,10 @@ J.denorm =
                     ,
                         multi: true
                     )
-                    console.log "#{numWatchersReset} watchers reset\n"
+                    if numWatchersReset
+                        console.log "    <#{watcherModelName}>.#{reactiveName}:
+                            #{numWatchersReset} watchers reset"
+                        # console.log "selector: #{JSON.stringify selector, null, 4}"
 
         watchersByModelReactive
 
