@@ -263,10 +263,11 @@ updateObservers = (dataSessionId) ->
         qsString = J.fetching.stringifyQs querySpec
 
         if fieldName is '_reactives'
-            log "#{J.util.stringify querySpec} sees #{JSON.stringify id}._reactives: #{JSON.stringify value}"
+            # log "#{J.util.stringify querySpec} sees #{JSON.stringify id}._reactives: #{JSON.stringify value}"
 
             fieldsByModelIdQuery[modelName][id]._reactives ?= {}
-            reactivesObj = fieldsByModelIdQuery[modelName][id]._reactives[qsString] ?= {}
+            reactivesObj = _.clone fieldsByModelIdQuery[modelName][id]._reactives[qsString] ? {}
+            fieldsByModelIdQuery[modelName][id]._reactives[qsString] = reactivesObj
 
             inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
 
@@ -319,7 +320,7 @@ updateObservers = (dataSessionId) ->
                         if future?
                             # log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
                         else
-                            log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
+                            # log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
                             future = J._reactiveCalcsInProgress[reactiveKey] = do (reactiveName, reactiveKey) ->
                                 Future.task ->
                                     if instanceDoc is undefined

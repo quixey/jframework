@@ -216,35 +216,7 @@ class J.Model
 
 
     insert: (collection = @collection, callback) ->
-        if _.isFunction(collection) and arguments.length is 1
-            # Can call insert(callback) to use @collection
-            # as the collection.
-            callback = collection
-            collection = @collection
-
-        unless collection instanceof Mongo.Collection
-            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
-
-        if @attached and @collection is collection
-            throw new Meteor.Error "Can't insert #{@modelClass.name} instance into its own attached collection"
-
-        unless @alive
-            throw new Meteor.Error "Can't insert dead #{@modelClass.name} instance"
-
-        doc = Tracker.nonreactive => @toDoc()
-
-        if @modelClass.idSpec is J.PropTypes.key and not doc._id?
-            key = @key()
-            if not key?
-                throw new Error "<#{@modelClass.name}>.key() returned #{key}"
-            doc._id = key
-        else if not @_id?
-            # The Mongo driver will give us an ID but we
-            # can't pass it a null ID.
-            delete doc._id
-
-        # Returns @_id
-        @_id = collection.insert doc, callback
+        @_save false, collection, callback
 
 
     remove: (callback) ->
@@ -255,6 +227,10 @@ class J.Model
 
 
     save: (collection = @collection, callback) ->
+        @_save true, collection, callback
+
+
+    _save: (upsert, collection, callback) ->
         if _.isFunction(collection) and arguments.length is 1
             # Can call save(callback) to use @collection
             # as the collection.
@@ -280,7 +256,7 @@ class J.Model
         else
             doc._id = @_id ? Random.hexString(10)
 
-        Meteor.call '_jSave', @modelClass.name, doc, callback
+        Meteor.call '_jSave', @modelClass.name, doc, upsert, callback
 
         # Returns @_id
         @_id ?= doc._id
@@ -755,7 +731,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
 
 Meteor.methods
-    _jSave: (modelName, doc) ->
+    _jSave: (modelName, doc, upsert) ->
         # This also runs on the client as a stub
 
         J.assert doc._id?
@@ -776,28 +752,38 @@ Meteor.methods
                 $set: fields
             return
 
-        oldDoc = modelClass.findOne(
-            doc._id
-        ,
-            fields:
-                _reactives: 0
-            transform: false
-        )
+        if upsert
+            oldDoc = modelClass.findOne(
+                doc._id
+            ,
+                fields:
+                    _reactives: 0
+                transform: false
+            ) ? {_id: doc._id}
 
-        setter = {}
-        newDoc = J.util.deepClone oldDoc ? {_id: doc._id}
+            setter = {}
+            for fieldName, newValue of fields
+                if newValue isnt undefined
+                    setter[fieldName] = newValue
+
+            modelClass.collection.upsert doc._id,
+                $set: setter
+
+        else
+            oldDoc = {_id: doc._id}
+
+            modelClass.collection.insert doc
+
+        newDoc = J.util.deepClone oldDoc
         for fieldName, newValue of fields
             if newValue isnt undefined
-                setter[fieldName] = newValue
                 newDoc[fieldName] = newValue
 
-        modelClass.collection.upsert doc._id,
-            $set: setter
-
         if not _reserved
-            J.denorm.resetWatchers modelName, doc._id, oldDoc ? {_id: doc._id}, newDoc
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc
 
         doc._id
+
 
     _jRemove: (modelName, instanceId, oldDoc = null) ->
         # This also runs on the client as a stub
