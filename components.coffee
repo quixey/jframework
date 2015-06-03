@@ -673,8 +673,17 @@ J._defineComponent = (componentName, componentSpec) ->
 
     J.components[componentName] = React.createClass reactSpec
 
-
+componentDebugTaggingFlag = true
 $$ = (elemType, props, children...) ->
+    if componentDebug and elemType of J.components
+        if componentDebugTaggingFlag
+            componentDebugTaggingFlag = false
+            return $$ ('div'),
+                'data-component': elemType,
+                $$(elemType, props, children...)
+        else
+            componentDebugTaggingFlag = true
+
     args = Array.prototype.slice.call arguments
 
     if typeof elemType[0] is 'string' and elemType[0].toUpperCase() is elemType[0]
