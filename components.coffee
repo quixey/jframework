@@ -675,11 +675,27 @@ J._defineComponent = (componentName, componentSpec) ->
 
 componentDebugTaggingFlag = true
 $$ = (elemType, props, children...) ->
-    if componentDebug and elemType of J.components
+    if componentDebug and elemType[0] != '_' and elemType of J.components and (not props or 'data-component-tag' not of props)
         if componentDebugTaggingFlag
             componentDebugTaggingFlag = false
             return $$ ('div'),
+                style:
+                    position: 'relative'
                 'data-component': elemType,
+                $$ ('div'),
+                    style:
+                        position: 'absolute'
+                        backgroundColor: 'black'
+                        border: '1px solid black'
+                        borderRadius: '3px'
+                        padding: '2px'
+                        pointerEvents: 'none'
+                        cursor: 'default'
+                        color: 'lime'
+                        fontFamily: 'monospace'
+                        opacity: 0.7
+                    'data-component-tag': 1,
+                    (elemType)
                 $$(elemType, props, children...)
         else
             componentDebugTaggingFlag = true
