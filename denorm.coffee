@@ -84,6 +84,7 @@ J.denorm =
             Returns modelName: reactiveName: [instanceId]
         ###
 
+        modelClass = J.models[modelName]
         console.log 'resetWatchers', modelName, JSON.stringify(instanceId)
 
         # Makes sure every fieldSpec in he watching-selector is consistent
@@ -143,7 +144,16 @@ J.denorm =
                         if J.util.isPlainObject(newValue) then newValue else {}
                     )
 
-        addClauses 'selector', oldValues, newValues
+        mutableOldValues = {}
+        mutableNewValues = {}
+        for fieldName, fieldSpec of modelClass.fieldSpecs
+            continue if fieldSpec.immutable
+            if fieldName of oldValues
+                mutableOldValues[fieldName] = oldValues[fieldName]
+            if fieldName of newValues
+                mutableNewValues[fieldName] = newValues[fieldName]
+
+        addClauses 'selector', mutableOldValues, mutableNewValues
 
         # projectionSpecKeys makes sure one of the fieldspecs
         # that have a diffed value is present in the

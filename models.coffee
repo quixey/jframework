@@ -274,7 +274,12 @@ class J.Model
                 to collection #{J.util.stringify @collection._name}"
 
         for fieldName, value of fields
+            fieldSpec = @modelClass.fieldSpecs[fieldName]
+            if fieldSpec.immutable
+                throw new Error "Can't set immutable field #{@modelClass.name}.#{fieldName}"
+
             @_fields.set fieldName, J.Var.wrap value, true
+
         null
 
 
@@ -763,7 +768,14 @@ Meteor.methods
 
             setter = {}
             for fieldName, newValue of fields
+                fieldSpec = modelClass.fieldSpecs[fieldName]
+
                 if newValue isnt undefined
+                    oldValue = oldDoc[fieldName]
+                    if fieldSpec.immutable and oldValue isnt undefined and newValue isnt oldValue
+                        throw new Meteor.Error "Can't save <#{modelName} #{JSON.stringify doc._id}>:
+                            Field #{fieldName} is immutable"
+
                     setter[fieldName] = newValue
 
             modelClass.collection.upsert doc._id,
