@@ -394,9 +394,11 @@ _.extend J.fetching,
 
             if fieldOrReactiveName of modelClass.reactiveSpecs
                 # Convert someReactiveName.[etc] to _reactives.#{reactiveName}.val.[etc]
-                reactiveFieldSpec =
+                reactiveValSpec =
                     ["_reactives.#{fieldOrReactiveName}.val"].concat(includeSpecParts[1...]).join('.')
-                mongoFieldsArg[reactiveFieldSpec] = 1
+                mongoFieldsArg[reactiveValSpec] = 1
+                reactiveTsSpec = "_reactives.#{fieldOrReactiveName}.ts"
+                mongoFieldsArg[reactiveTsSpec] = 1
             else
                 mongoFieldsArg[includeSpec] = 1
 

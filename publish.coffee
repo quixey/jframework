@@ -61,7 +61,7 @@ _flushRecalcBuffer = ->
 
 
 
-# "#{modelName}.#{reactiveName}": future
+# "#{modelName}.#{JSON.stringify id}.#{reactiveName}": future
 J._reactiveCalcsInProgress = {}
 
 
@@ -95,12 +95,7 @@ dataSessionPublisherContexts = {}
 
 ###
     The set of active cursors and exactly what each has sent to the client
-    dataSessionId: modelName: docId: fieldOrReactiveName: querySpecString: value
-
-    Note that fieldOrReactiveName is an awkward mix:
-        A fieldName: Standard behavior
-        "_reactives": Standard behavior
-        A reactiveName: Same behavior as for a fieldName, except doesn't get sent to client
+    dataSessionId: modelName: docId: fieldName: querySpecString: value
 ###
 dataSessionFieldsByModelIdQuery = {}
 
@@ -268,12 +263,17 @@ updateObservers = (dataSessionId) ->
         qsString = J.fetching.stringifyQs querySpec
 
         if fieldName is '_reactives'
+            log "#{J.util.stringify querySpec} sees #{JSON.stringify id}._reactives: #{JSON.stringify value}"
+
+            fieldsByModelIdQuery[modelName][id]._reactives ?= {}
+            reactivesObj = fieldsByModelIdQuery[modelName][id]._reactives[qsString] ?= {}
+
             inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
 
             instanceDoc = undefined
 
-            reactivesObj = {} # includedReactiveName: 'val': reactiveValue
             futureByReactiveName = {}
+            ts = new Date()
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 included = false
 
@@ -284,52 +284,56 @@ updateObservers = (dataSessionId) ->
                             break
 
                 if included
-                    fieldsByModelIdQuery[modelName][id][reactiveName] ?= {}
-
                     reactiveValue = value[reactiveName]?.val
-                    fieldsByModelIdQuery[modelName][id][reactiveName][qsString] = reactiveValue
+                    reactiveTs = value[reactiveName]?.ts
 
                     needsRecalc = false
                     if reactiveValue is undefined
                         needsRecalc = true
-                        for qss, rv of fieldsByModelIdQuery[modelName][id][reactiveName]
-                            continue if qss is qsString
-                            if rv isnt undefined
-                                # A different querySpec still thinks it knows what the reactive
+                        for qss, qssReactivesObj of fieldsByModelIdQuery[modelName][id]._reactives
+                            continue if reactiveName not of qssReactivesObj
+                            qssVal = qssReactivesObj[reactiveName].val
+                            qssTs = qssReactivesObj[reactiveName].ts
+
+                            if qssVal isnt undefined and (not reactiveTs? or qssTs > reactiveTs)
+                                # A querySpec still thinks it knows what the reactive
                                 # value is, so we might not need to recompute it. Either qsString's
                                 # cursor will soon observe qss's same value, or else qss and all
                                 # the other cursors will observe undefined and the last one will
                                 # recalculate the value of reactiveName.
                                 needsRecalc = false
+
+                                # Note that qss might be the same as qsString. This is useful
+                                # when we've recalculated multiple reactives in the publisher
+                                # but the db's _reactives field is still catching up from multiple
+                                # update operations (one per reactive)
+                                if qss is qsString
+                                    reactiveValue = qssVal
+                                    reactiveTs = qssTs
+
                                 break
 
                     if needsRecalc
-                        reactiveKey = "#{modelName}.#{reactiveName}"
+                        reactiveKey = "#{modelName}.#{JSON.stringify id}.#{reactiveName}"
                         future = J._reactiveCalcsInProgress[reactiveKey]
                         if future?
-                            console.log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
+                            # log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
                         else
-                            console.log "#{J.util.stringify querySpec} Fresh recalc of #{reactiveKey}."
+                            log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
                             future = J._reactiveCalcsInProgress[reactiveKey] = do (reactiveName, reactiveKey) ->
                                 Future.task ->
                                     if instanceDoc is undefined
                                         # Do a raw Mongo findOne which this includes the _reactives field.
                                         instanceDoc = modelClass.findOne id,
+                                            fields: _reactives: 0
                                             transform: false
 
                                     # instanceDoc might not exist because the instance might have been
                                     # deleted while we're still catching up publishing an @added or @changed
                                     # that includes a reactive.
                                     if instanceDoc?
-                                        if instanceDoc?._reactives?.reactiveName?.val is undefined
-                                            sanitizedInstanceDoc = _.clone instanceDoc
-                                            delete sanitizedInstanceDoc._reactives
-                                            instance = modelClass.fromDoc sanitizedInstanceDoc
-                                            ret = J.denorm.recalc instance, reactiveName
-                                        else
-                                            ret = instanceDoc._reactives.reactiveName.val
-                                            console.log "#{J.util.stringify querySpec} found a newly recalculated
-                                                #{reactiveKey} in the db: #{ret}"
+                                        instance = modelClass.fromDoc instanceDoc
+                                        ret = J.denorm.recalc instance, reactiveName, ts
 
                                     delete J._reactiveCalcsInProgress[reactiveKey]
 
@@ -338,21 +342,29 @@ updateObservers = (dataSessionId) ->
                         futureByReactiveName[reactiveName] = future
 
                     else
-                        reactivesObj[reactiveName] = val: reactiveValue
+                        reactivesObj[reactiveName] =
+                            val: reactiveValue
+                            ts: reactiveTs
 
             if not _.isEmpty futureByReactiveName
-                console.log "#{J.util.stringify querySpec} waiting on futures for: #{_.keys futureByReactiveName}"
+                # log "#{J.util.stringify querySpec} waiting on futures for: #{_.keys futureByReactiveName}"
                 Future.wait _.values futureByReactiveName
 
             for reactiveName, future of futureByReactiveName
-                reactiveValue = future.get()
-                reactivesObj[reactiveName] = val: reactiveValue
-                fieldsByModelIdQuery[modelName][id][reactiveName][qsString] = reactiveValue
-                console.log "#{J.util.stringify querySpec} returning value of #{reactiveName}:
-                   #{reactiveValue}"
+                try
+                    reactiveValue = future.get()
+                catch e
+                    console.error "Exception while getting future for #{reactiveName}
+                        in <#{modelName}.#{JSON.stringify id}>"
+                    console.error e
+                    throw e
+                reactivesObj[reactiveName] =
+                    val: reactiveValue
+                    ts: ts
+                # log "#{J.util.stringify querySpec} returning value of #{JSON.stringify id}.#{reactiveName}"
+                #    #{reactiveValue}"
 
-            fieldsByModelIdQuery[modelName][id]['_reactives'] ?= {}
-            fieldsByModelIdQuery[modelName][id]['_reactives'][qsString] = reactivesObj
+            # console.log '...returning with _reactives =', JSON.stringify fieldsByModelIdQuery[modelName][id]._reactives[qsString]
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}

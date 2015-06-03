@@ -37,7 +37,7 @@ J.denorm =
                     helper modelClass, reactiveName
 
 
-    recalc: (instance, reactiveName) ->
+    recalc: (instance, reactiveName, timestamp = new Date()) ->
         ###
             Sets _reactives.#{reactiveName}.val and .watchers
             Returns the recalculated value
@@ -70,6 +70,7 @@ J.denorm =
         setter["_reactives.#{reactiveName}"] =
             val: J.Model._getEscapedSubdoc value
             watching: J.Model._getEscapedSubdoc watchedQuerySpecs
+            ts: timestamp
         instance.modelClass.update(
             instance._id
             $set: setter
@@ -165,6 +166,8 @@ J.denorm =
                                 $and: subFieldSelectorMatcher
                             ]
 
+                    setter = {}
+                    setter["_reactives.#{reactiveName}.ts"] = new Date()
                     unsetter = {}
                     unsetter["_reactives.#{reactiveName}.val"] = 1
                     unsetter["_reactives.#{reactiveName}.watching"] = 1
@@ -173,6 +176,7 @@ J.denorm =
                     numWatchersReset = watchersByModelReactive[watcherModelName][reactiveName] = watcherModelClass.update(
                         selector
                     ,
+                        $set: setter
                         $unset: unsetter
                     ,
                         multi: true
