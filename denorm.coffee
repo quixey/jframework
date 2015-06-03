@@ -48,7 +48,7 @@ J.denorm =
         value = null
         watchedQuerySpecSet = null
 
-        console.log "Gonna (re)calculate <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}..."
+        # console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         J._watchedQuerySpecSet.withValue {}, =>
             value = reactiveSpec.val.call instance
@@ -59,7 +59,7 @@ J.denorm =
         else if value instanceof J.Dict
             value = value.toObj()
 
-        console.log "(Re)calculated <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
+        # console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (
@@ -123,9 +123,15 @@ J.denorm =
                 if oldValue?
                     term.$or[0][selectorPath].$in.push oldValue
                     term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push oldValue
+                    if _.isArray oldValue then for elem in oldValue
+                        term.$or[0][selectorPath].$in.push elem
+                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
                 if newValue? and not EJSON.equals oldValue, newValue
                     term.$or[0][selectorPath].$in.push newValue
                     term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push newValue
+                    if _.isArray newValue then for elem in newValue
+                        term.$or[0][selectorPath].$in.push elem
+                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
 
                 subFieldSelectorMatcher.push term
 
