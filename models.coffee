@@ -127,7 +127,7 @@ class J.Model
     # Specifically unescape `*DOT*` and `*DOLLAR*` in a string by
     # replacing them with `.` and `$` respectively.
     #
-    #     J.Model.unescapeDot('func://www*DOT*example*DOT*.com/func')
+    #     J.Model.unescapeDot('func://www*DOT*example*DOT*com/func')
     #     # "func://www.example.com/func"
     # - - -
     @unescapeDot = (key) =>
