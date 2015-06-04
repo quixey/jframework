@@ -27,7 +27,7 @@
 
 
 class J.Model
-    @_getEscapedSubdoc = (subDoc) ->
+    @_getEscapedSubdoc: (subDoc) ->
         if J.util.isPlainObject subDoc
             ret = {}
             for key, value of subDoc
@@ -39,7 +39,7 @@ class J.Model
             subDoc
 
 
-    @_getUnescapedSubdoc = (subDoc) ->
+    @_getUnescapedSubdoc: (subDoc) ->
         if J.util.isPlainObject subDoc
             ret = {}
             for key, value of subDoc
@@ -51,7 +51,7 @@ class J.Model
             subDoc
 
 
-    @escapeDot = (key) ->
+    @escapeDot: (key) ->
         key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
 
 
@@ -108,8 +108,55 @@ class J.Model
         helper x
 
 
-    @unescapeDot = (key) =>
+    @unescapeDot: (key) =>
         key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
+
+
+    _save: (upsert, collection, callback) ->
+        unless collection instanceof Mongo.Collection
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
+
+        if @attached and @collection is collection
+            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
+
+        unless @alive
+            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
+
+        doc = Tracker.nonreactive => @toDoc()
+
+        if @modelClass.idSpec is J.PropTypes.key and not doc._id?
+            key = @key()
+            if not key?
+                throw new Error "<#{@modelClass.name}>.key() returned #{key}"
+            doc._id = key
+        else
+            doc._id = @_id ? Random.hexString(10)
+
+        Meteor.call '_jSave', @modelClass.name, doc, upsert, callback
+
+        # Returns @_id
+        @_id ?= doc._id
+
+
+    _setReactives: (reactivesObj) ->
+        ###
+            reactivesObj:
+                The _reactives field from the raw Mongo doc,
+                filtered down to only the denormed reactives
+                we cared to fetch.
+        ###
+
+        reactivesSetter = {}
+
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            if reactiveSpec.denorm
+                if reactiveName of reactivesObj
+                    reactivesSetter[reactiveName] =
+                        @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                if reactivesSetter[reactiveName] is undefined
+                    reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+
+        @_reactives._forceSet reactivesSetter
 
 
     clone: ->
@@ -238,32 +285,6 @@ class J.Model
             collection = @collection
 
         @_save true, collection, callback
-
-
-    _save: (upsert, collection, callback) ->
-        unless collection instanceof Mongo.Collection
-            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
-
-        if @attached and @collection is collection
-            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
-
-        unless @alive
-            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
-
-        doc = Tracker.nonreactive => @toDoc()
-
-        if @modelClass.idSpec is J.PropTypes.key and not doc._id?
-            key = @key()
-            if not key?
-                throw new Error "<#{@modelClass.name}>.key() returned #{key}"
-            doc._id = key
-        else
-            doc._id = @_id ? Random.hexString(10)
-
-        Meteor.call '_jSave', @modelClass.name, doc, upsert, callback
-
-        # Returns @_id
-        @_id ?= doc._id
 
 
     set: (fields) ->
@@ -428,6 +449,13 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
                     => reactiveSpec.val.call @
 
+        # The @_reactives dict stores the published values of reactives
+        # with denorm:true (i.e. server handles all their reactivity).
+        @_reactives = J.Dict() # denormedReactiveName: value
+        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
+            if reactiveSpec.denorm
+                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+
         null
 
     # Hack to set up the read-only Function.name value
@@ -518,25 +546,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
                     instance.attached = true
-
                     instance._fields.setReadOnly true, true
-
-                    # The @_reactives dict stores the published values of reactives
-                    # with denorm:true (i.e. server handles all their reactivity).
-                    instance._reactives = J.Dict() # denormedReactiveName: value
-                    for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                        if reactiveSpec.denorm
-                            instance._reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
-
-                    if reactivesObj?
-                        reactivesSetter = {}
-
-                        for reactiveName, reactiveObj of reactivesObj
-                            reactivesSetter[reactiveName] = modelClass._getUnescapedSubdoc reactiveObj.val
-                            if reactivesSetter[reactiveName] is undefined
-                                reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
-
-                        instance._reactives.set reactivesSetter
+                    instance._setReactives reactivesObj ? {}
 
                     collection._attachedInstances[id] = instance
 
@@ -554,18 +565,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                             fieldsSetter[fieldName] = J.makeValueNotReadyObject()
                     instance._fields._forceSet fieldsSetter
 
-                    if reactivesObj?
-                        reactivesSetter = {}
-
-                        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                            if reactiveSpec.denorm
-                                if reactiveName of reactivesObj
-                                    reactivesSetter[reactiveName] =
-                                        modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
-                                if reactivesSetter[reactiveName] is undefined
-                                    reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
-
-                        instance._reactives._forceSet reactivesSetter
+                    instance._setReactives reactivesObj ? {}
 
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
@@ -575,22 +575,14 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     delete collection._attachedInstances[id]
 
         if Meteor.isServer
-            # The server uses exclusively detached instances and
-            # doesn't make use of much reactivity.
+            # The server uses exclusively detached instances
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
-                    doc = _.clone doc
-
-                    reactivesObj = modelClass._getUnescapedSubdoc doc._reactives
-                    if reactivesObj?
-                        console.warn "No reason for the server-side ORM to ever
-                            fetch the _reactives field."
-                        console.trace()
+                    reactivesObj = doc._reactives
                     delete doc._reactives
-
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
-
+                    instance._setReactives reactivesObj ? {}
                     instance
 
             for indexSpec in modelClass.indexSpecs
@@ -650,7 +642,10 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     skip: options.skip
                     limit: options.limit
 
-                if Meteor.isServer
+                if Meteor.isClient
+                    J.fetching.requestQuery querySpec
+
+                else
                     qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
@@ -664,12 +659,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         fieldName = fieldSpec.split('.')[0]
                         continue if fieldName is '_id'
 
-                        if fieldName is '_reactives'
-                            # Loading denormalized reactive values isn't currently
-                            # supported on the server
-                            delete mongoFieldsArg[fieldSpec]
-                        else
-                            fieldNameSet[fieldName] = true
+                        fieldNameSet[fieldName] = true
 
                     mongoOptions = _.clone options
                     mongoOptions.fields = mongoFieldsArg
@@ -680,6 +670,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     # though they were included in the query) as having a
                     # default value of null.
                     for fieldName of fieldNameSet
+                        continue if fieldName is '_reactives'
+
                         instances.forEach (instance) =>
                             setter = {}
 
@@ -691,8 +683,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                             instance.set setter
 
                     return instances
-
-                J.fetching.requestQuery querySpec
 
             fetchOne: (selector = {}, options = {}) ->
                 if selector instanceof J.Dict
