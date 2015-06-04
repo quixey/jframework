@@ -38,7 +38,7 @@ J.denorm =
         value = null
         watchedQuerySpecSet = null
 
-        # console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
+        console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         J._watchedQuerySpecSet.withValue {}, =>
             value = reactiveSpec.val.call instance

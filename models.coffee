@@ -186,11 +186,37 @@ class J.Model
             reactiveSpec = @modelClass.reactiveSpecs[fieldOrReactiveName]
 
             if Meteor.isServer
-                J.Var(reactiveSpec.val.call @).get()
+                if reactiveSpec.denorm
+                    J.assert @_id?
+
+                    if J._watchedQuerySpecSet.get()?
+                        projection = _: false
+                        projection[reactiveName] = true
+                        dummyQuerySpec =
+                            modelName: @modelClass.name
+                            selector: @_id
+                            fields: projection
+                            limit: 1
+                        dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                        J._watchedQuerySpecSet.get()[dummyQsString] = true
+
+                    reactiveValue = @_reactives.tryGet reactiveName
+
+                    # NOTE: Will recompute either if the reactive value doesn't exist,
+                    # or if the fetch query that brought up this instance happened to
+                    # exclude reactiveName.
+                    if reactiveValue is undefined
+                        reactiveValue = J.denorm.recalc @, reactiveName
+
+                    reactiveValue
+
+                else
+                    J.Var(reactiveSpec.val.call @).get()
 
             else
                 if reactiveSpec.denorm and @attached
                     # Record that the current computation uses this denormed reactive
+
                     projection = _: false
                     projection[reactiveName] = true
                     if Tracker.active
