@@ -177,18 +177,16 @@ class J.Model
                 J.assert @_id?
 
                 # Treat an own-field access the same as any query
-                projection = _: false
-                projection[fieldName] = true
-                dummyQuerySpec =
-                    modelName: @modelClass.name
-                    selector: @_id
-                    fields: projection
-                    limit: 1
-                dummyQsString = J.fetching.stringifyQs dummyQuerySpec
-                J._watchedQuerySpecSet.get()[dummyQsString] = true
-
-                # console.log("O HI")
-                # console.trace()
+                if not @modelClass.immutable
+                    projection = _: false
+                    projection[fieldName] = true
+                    dummyQuerySpec =
+                        modelName: @modelClass.name
+                        selector: @_id
+                        fields: projection
+                        limit: 1
+                    dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                    J._watchedQuerySpecSet.get()[dummyQsString] = true
 
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
@@ -274,10 +272,6 @@ class J.Model
                 to collection #{J.util.stringify @collection._name}"
 
         for fieldName, value of fields
-            fieldSpec = @modelClass.fieldSpecs[fieldName]
-            if fieldSpec.immutable
-                throw new Error "Can't set immutable field #{@modelClass.name}.#{fieldName}"
-
             @_fields.set fieldName, J.Var.wrap value, true
 
         null
@@ -447,6 +441,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     memberSpecs = _.clone members
     modelClass.idSpec = memberSpecs._id
     delete memberSpecs._id
+    modelClass.immutable = memberSpecs.immutable ? false
+    delete memberSpecs.immutable
     modelClass.fieldSpecs = memberSpecs.fields ? {}
     delete memberSpecs.fields
     modelClass.reactiveSpecs = memberSpecs.reactives ? {}
@@ -652,7 +648,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
-                        J._watchedQuerySpecSet.get()[qsString] = true
+                        if not modelClass.immutable
+                            J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
@@ -772,9 +769,10 @@ Meteor.methods
 
                 if newValue isnt undefined
                     oldValue = oldDoc[fieldName]
-                    if fieldSpec.immutable and oldValue isnt undefined and newValue isnt oldValue
-                        throw new Meteor.Error "Can't save <#{modelName} #{JSON.stringify doc._id}>:
-                            Field #{fieldName} is immutable"
+                    if oldValue isnt undefined and newValue isnt oldValue
+                        if modelClass.immutable or fieldSpec.immutable
+                            throw new Meteor.Error "Can't save <#{modelName} #{JSON.stringify doc._id}>:
+                                Field #{fieldName} is immutable"
 
                     setter[fieldName] = newValue
 

@@ -80,7 +80,7 @@ J._reactiveCalcsInProgress = {}
             }
         ]
 ###
-dataSessions = {}
+J._dataSessions = {}
 
 ###
     Stores Meteor's publisher functions
@@ -97,13 +97,13 @@ dataSessionPublisherContexts = {}
     The set of active cursors and exactly what each has sent to the client
     dataSessionId: modelName: docId: fieldName: querySpecString: value
 ###
-dataSessionFieldsByModelIdQuery = {}
+J._dataSessionFieldsByModelIdQuery = {}
 
 
 
 Meteor.methods
     _debugPublish: ->
-        dataSessionFieldsByModelIdQuery
+        J._dataSessionFieldsByModelIdQuery
 
 
     _updateDataQueries: (dataSessionId, addedQuerySpecs, deletedQuerySpecs) ->
@@ -117,7 +117,7 @@ Meteor.methods
 #        if deletedQuerySpecs.length
 #            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
 
-        session = dataSessions[dataSessionId]
+        session = J._dataSessions[dataSessionId]
         if not session?
             console.warn "Data session not found", dataSessionId
             throw new Meteor.Error "Data session not found: #{JSON.stringify dataSessionId}"
@@ -164,7 +164,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     log 'publish _jdata'
 
-    session = dataSessions[dataSessionId] = J.AutoDict(
+    session = J._dataSessions[dataSessionId] = J.AutoDict(
         "dataSessions[#{dataSessionId}]"
 
         querySpecSet: J.Dict() # qsString: true
@@ -174,7 +174,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         observerByQsString: J.Dict()
     )
     dataSessionPublisherContexts[dataSessionId] = @
-    dataSessionFieldsByModelIdQuery[dataSessionId] = {}
+    J._dataSessionFieldsByModelIdQuery[dataSessionId] = {}
 
     existingSessionInstance = $$.JDataSession.fetchOne dataSessionId
     if existingSessionInstance?
@@ -193,9 +193,9 @@ Meteor.publish '_jdata', (dataSessionId) ->
             console.warn "Uh oh, we were in the middle of updating observers."
             session.updateObserversFiber.reset()
 
-        delete dataSessionFieldsByModelIdQuery[dataSessionId]
+        delete J._dataSessionFieldsByModelIdQuery[dataSessionId]
         delete dataSessionPublisherContexts[dataSessionId]
-        delete dataSessions[dataSessionId]
+        delete J._dataSessions[dataSessionId]
         $$.JDataSession.remove dataSessionId
 
     @ready()
@@ -216,7 +216,7 @@ updateObservers = (dataSessionId) ->
         console.log.apply console, newArgs
     # log "Update observers"
 
-    session = dataSessions[dataSessionId]
+    session = J._dataSessions[dataSessionId]
 
     oldQsStrings = session.observerByQsString().getKeys()
     newQsStrings = session.mergedQuerySpecs().map(
@@ -226,7 +226,7 @@ updateObservers = (dataSessionId) ->
 
     # console.log "qsStringsDiff", qsStringsDiff
 
-    fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
+    fieldsByModelIdQuery = J._dataSessionFieldsByModelIdQuery[dataSessionId]
 
     
     getMergedSubfields = (a, b) ->
@@ -320,7 +320,7 @@ updateObservers = (dataSessionId) ->
                         if future?
                             # log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
                         else
-                            # log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
+                            log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
                             future = J._reactiveCalcsInProgress[reactiveKey] = do (reactiveName, reactiveKey) ->
                                 Future.task ->
                                     if instanceDoc is undefined

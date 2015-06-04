@@ -81,10 +81,13 @@ J.denorm =
 
     resetWatchers: (modelName, instanceId, oldValues, newValues) ->
         ###
-            Returns modelName: reactiveName: [instanceId]
+            Returns watcherModelName: reactiveName: [instanceId]
         ###
 
         modelClass = J.models[modelName]
+        if modelClass.immutable
+            return {}
+
         console.log 'resetWatchers', modelName, JSON.stringify(instanceId)
 
         # Makes sure every fieldSpec in he watching-selector is consistent
@@ -101,6 +104,9 @@ J.denorm =
             ]
 
         addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
+            # TODO: Handle more selectors besides just default (equality) and $in
+            # e.g. $gt, $gte, $lt, $lte
+
             subFieldNameSet = {}
             for subFieldName of oldSubValues
                 subFieldNameSet[subFieldName] = true
@@ -161,7 +167,7 @@ J.denorm =
         relevantProjectionSpecKeys = []
         # TODO
 
-        watchersByModelReactive = {} # modelName: reactiveName: [instanceId]
+        watchersByModelReactive = {} # watcherModelName: reactiveName: [instanceId]
         for watcherModelName, watcherModelClass of J.models
             for reactiveName, reactiveSpec of watcherModelClass.reactiveSpecs
                 if reactiveSpec.denorm
