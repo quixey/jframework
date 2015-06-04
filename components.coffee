@@ -694,6 +694,7 @@ $$ = (elemType, props, children...) ->
                         color: 'lime'
                         fontFamily: 'monospace'
                         opacity: 0.7
+                        zIndex: 1000
                     'data-component-tag': 1,
                     (elemType)
                 $$(elemType, props, children...)
