@@ -213,7 +213,13 @@ class J.Model
             @_fields.forceGet fieldName
 
 
-    insert: (collection = @collection, callback) ->
+    insert: (collection = @modelClass.collection, callback) ->
+        if _.isFunction(collection) and arguments.length is 1
+            # Can call save(callback) to use @collection
+            # as the collection.
+            callback = collection
+            collection = @collection
+
         @_save false, collection, callback
 
 
@@ -224,19 +230,19 @@ class J.Model
         Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
 
-    save: (collection = @collection, callback) ->
-        @_save true, collection, callback
-
-
-    _save: (upsert, collection, callback) ->
+    save: (collection = @modelClass.collection, callback) ->
         if _.isFunction(collection) and arguments.length is 1
             # Can call save(callback) to use @collection
             # as the collection.
             callback = collection
             collection = @collection
 
+        @_save true, collection, callback
+
+
+    _save: (upsert, collection, callback) ->
         unless collection instanceof Mongo.Collection
-            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.insert"
+            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
 
         if @attached and @collection is collection
             throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
