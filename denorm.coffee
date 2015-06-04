@@ -74,7 +74,8 @@ J.denorm =
         if modelClass.immutable
             return {}
 
-        console.log 'resetWatchers', modelName, JSON.stringify(instanceId)
+        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
+            #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
         makeWatcherMatcher = (instanceId, oldValues, newValues) ->
             # Makes sure every fieldSpec in the watching-selector is consistent
@@ -145,6 +146,12 @@ J.denorm =
                     mutableOldValues[fieldName] = oldValues[fieldName]
                 if fieldName of newValues
                     mutableNewValues[fieldName] = newValues[fieldName]
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                continue if not reactiveSpec.denorm
+                if reactiveName of oldValues
+                    mutableOldValues[reactiveName] = oldValues[reactiveName]
+                if reactiveName of newValues
+                    mutableNewValues[reactiveName] = newValues[reactiveName]
 
             addClauses 'selector', mutableOldValues, mutableNewValues
 
@@ -163,26 +170,26 @@ J.denorm =
 
             watcherMatcher
 
+        watcherMatcher = makeWatcherMatcher instanceId, oldValues, newValues
 
         resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
         resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
             watcherModelClass = J.models[watcherModelName]
-            console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{reactiveName} watching <#{modelName}
-                #{JSON.stringify instanceId}>.#{reactiveName}"
+            # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
+                #{JSON.stringify instanceId}>"
 
             selector = {}
-            selector["_reactives.#{reactiveName}.watching"] =
-                ts: $lt: timestamp
-                $elemMatch:
-                makeWatcherMatcher instanceId, oldValues, newValues
+            selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
+            selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
 
             setter = {}
-            setter["_reactives.#{reactiveName}.ts"] = timestamp
-            unsetter = {}
-            unsetter["_reactives.#{reactiveName}.val"] = 1
-            unsetter["_reactives.#{reactiveName}.watching"] = 1
+            setter["_reactives.#{watcherReactiveName}.ts"] = timestamp
 
-            resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"] ?= 0
+            unsetter = {}
+            unsetter["_reactives.#{watcherReactiveName}.val"] = 1
+            unsetter["_reactives.#{watcherReactiveName}.watching"] = 1
+
+            resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
             watcherModelClass.collection.rawCollection().findAndModify(
                 selector
             ,
@@ -199,10 +206,10 @@ J.denorm =
                         return
 
                     if doc?
-                        resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"] += 1
+                        resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
 
                         # Continue to reset one doc at a time until there are no more docs to reset
-                        resetOneWatcherDoc watcherModelClass, watcherReactiveName
+                        resetOneWatcherDoc watcherModelName, watcherReactiveName
 
                         # Also branch into resetting all docs watching this watching-reactive in this doc
                         watcherOldValues = {}
@@ -212,10 +219,11 @@ J.denorm =
                         J.denorm.resetWatchers watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
 
                     else
-                        numWatchersReset = resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"]
-                        console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                            #{numWatchersReset} watchers reset"
-                        # console.log "selector: #{JSON.stringify selector, null, 4}"
+                        numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
+                        if numWatchersReset
+                            console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
+                                #{numWatchersReset} watchers reset"
+                            # console.log "selector: #{JSON.stringify selector, null, 4}"
             )
 
 
