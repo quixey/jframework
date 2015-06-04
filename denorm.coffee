@@ -69,132 +69,162 @@ J.denorm =
         value
 
 
-    resetWatchers: (modelName, instanceId, oldValues, newValues) ->
-        ###
-            Returns watcherModelName: reactiveName: [instanceId]
-        ###
-
+    resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date()) ->
         modelClass = J.models[modelName]
         if modelClass.immutable
             return {}
 
         console.log 'resetWatchers', modelName, JSON.stringify(instanceId)
 
-        # Makes sure every fieldSpec in he watching-selector is consistent
-        # with either oldValues or newValues
-        subFieldSelectorMatcher = [
-            selector: $type: 3 # object
-        ]
-
-        subFieldSelectorMatcher.push
-            $or: [
-                'selector._id': $in: [null, instanceId]
-            ,
-                'selector._id.*DOLLAR*in': $in: [instanceId]
+        makeWatcherMatcher = (instanceId, oldValues, newValues) ->
+            # Makes sure every fieldSpec in the watching-selector is consistent
+            # with either oldValues or newValues
+            subFieldSelectorMatcher = [
+                selector: $type: 3 # object
             ]
 
-        addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
-            # TODO: Handle more selectors besides just default (equality) and $in
-            # e.g. $gt, $gte, $lt, $lte
+            subFieldSelectorMatcher.push
+                $or: [
+                    'selector._id': $in: [null, instanceId]
+                ,
+                    'selector._id.*DOLLAR*in': $in: [instanceId]
+                ]
 
-            subFieldNameSet = {}
-            for subFieldName of oldSubValues
-                subFieldNameSet[subFieldName] = true
-            for subFieldName of newSubValues
-                subFieldNameSet[subFieldName] = true
+            addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
+                # TODO: Handle more selectors besides just default (equality) and $in
+                # e.g. $gt, $gte, $lt, $lte
 
-            for subFieldName of subFieldNameSet
-                if selectorPrefix is 'selector'
-                    selectorPath = "selector.#{J.Model.escapeDot subFieldName}"
-                else
-                    selectorPath = "#{selectorPrefix}*DOT*#{J.Model.escapeDot subFieldName}"
+                subFieldNameSet = {}
+                for subFieldName of oldSubValues
+                    subFieldNameSet[subFieldName] = true
+                for subFieldName of newSubValues
+                    subFieldNameSet[subFieldName] = true
 
-                oldValue = oldSubValues[subFieldName]
-                newValue = newSubValues[subFieldName]
+                for subFieldName of subFieldNameSet
+                    if selectorPrefix is 'selector'
+                        selectorPath = "selector.#{J.Model.escapeDot subFieldName}"
+                    else
+                        selectorPath = "#{selectorPrefix}*DOT*#{J.Model.escapeDot subFieldName}"
 
-                term = $or: [{}, {}]
-                term.$or[0][selectorPath] =
-                    $in: [null]
-                term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
-                    $elemMatch: $in: [null]
+                    oldValue = oldSubValues[subFieldName]
+                    newValue = newSubValues[subFieldName]
 
-                if oldValue?
-                    term.$or[0][selectorPath].$in.push oldValue
-                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push oldValue
-                    if _.isArray oldValue then for elem in oldValue
-                        term.$or[0][selectorPath].$in.push elem
-                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
-                if newValue? and not EJSON.equals oldValue, newValue
-                    term.$or[0][selectorPath].$in.push newValue
-                    term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push newValue
-                    if _.isArray newValue then for elem in newValue
-                        term.$or[0][selectorPath].$in.push elem
-                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
+                    term = $or: [{}, {}]
+                    term.$or[0][selectorPath] =
+                        $in: [null]
+                    term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
+                        $elemMatch: $in: [null]
 
-                subFieldSelectorMatcher.push term
+                    if oldValue?
+                        term.$or[0][selectorPath].$in.push oldValue
+                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push oldValue
+                        if _.isArray oldValue then for elem in oldValue
+                            term.$or[0][selectorPath].$in.push elem
+                            term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
+                    if newValue? and not EJSON.equals oldValue, newValue
+                        term.$or[0][selectorPath].$in.push newValue
+                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push newValue
+                        if _.isArray newValue then for elem in newValue
+                            term.$or[0][selectorPath].$in.push elem
+                            term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
 
-                if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
-                    addClauses(
-                        selectorPath
-                        if J.util.isPlainObject(oldValue) then oldValue else {}
-                        if J.util.isPlainObject(newValue) then newValue else {}
-                    )
+                    subFieldSelectorMatcher.push term
 
-        mutableOldValues = {}
-        mutableNewValues = {}
-        for fieldName, fieldSpec of modelClass.fieldSpecs
-            continue if fieldSpec.immutable
-            if fieldName of oldValues
-                mutableOldValues[fieldName] = oldValues[fieldName]
-            if fieldName of newValues
-                mutableNewValues[fieldName] = newValues[fieldName]
+                    if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
+                        addClauses(
+                            selectorPath
+                            if J.util.isPlainObject(oldValue) then oldValue else {}
+                            if J.util.isPlainObject(newValue) then newValue else {}
+                        )
 
-        addClauses 'selector', mutableOldValues, mutableNewValues
+            mutableOldValues = {}
+            mutableNewValues = {}
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                continue if fieldSpec.immutable
+                if fieldName of oldValues
+                    mutableOldValues[fieldName] = oldValues[fieldName]
+                if fieldName of newValues
+                    mutableNewValues[fieldName] = newValues[fieldName]
 
-        # projectionSpecKeys makes sure one of the fieldspecs
-        # that have a diffed value is present in the
-        # watching-projection.
-        relevantProjectionSpecKeys = []
-        # TODO
+            addClauses 'selector', mutableOldValues, mutableNewValues
 
-        watchersByModelReactive = {} # watcherModelName: reactiveName: [instanceId]
-        for watcherModelName, watcherModelClass of J.models
-            for reactiveName, reactiveSpec of watcherModelClass.reactiveSpecs
-                if reactiveSpec.denorm
-                    # TODO: add relevantProjectionSpecKeys logic here too
-                    selector = {}
-                    selector["_reactives.#{reactiveName}.watching"] =
-                        $elemMatch:
-                            modelName: modelName
-                            $or: [
-                                selector: $in: [null, instanceId]
-                            ,
-                                $and: subFieldSelectorMatcher
-                            ]
+            watcherMatcher =
+                modelName: modelName
+                $or: [
+                    selector: $in: [null, instanceId]
+                ,
+                    $and: subFieldSelectorMatcher
+                ]
 
-                    setter = {}
-                    setter["_reactives.#{reactiveName}.ts"] = new Date()
-                    unsetter = {}
-                    unsetter["_reactives.#{reactiveName}.val"] = 1
-                    unsetter["_reactives.#{reactiveName}.watching"] = 1
+            # TODO: Add this to watcherMatcher:
+            #   fields: // smart logic that rules out watchers that
+            #              don't care about any of the fields that
+            #              were changed from oldValues to newValues
 
-                    watchersByModelReactive[watcherModelName] ?= {}
-                    numWatchersReset = watchersByModelReactive[watcherModelName][reactiveName] = watcherModelClass.update(
-                        selector
-                    ,
-                        $set: setter
-                        $unset: unsetter
-                    ,
-                        multi: true
-                    )
-                    if numWatchersReset
-                        console.log "    <#{watcherModelName}>.#{reactiveName}:
+            watcherMatcher
+
+
+        resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
+        resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
+            watcherModelClass = J.models[watcherModelName]
+            console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{reactiveName} watching <#{modelName}
+                #{JSON.stringify instanceId}>.#{reactiveName}"
+
+            selector = {}
+            selector["_reactives.#{reactiveName}.watching"] =
+                ts: $lt: timestamp
+                $elemMatch:
+                makeWatcherMatcher instanceId, oldValues, newValues
+
+            setter = {}
+            setter["_reactives.#{reactiveName}.ts"] = timestamp
+            unsetter = {}
+            unsetter["_reactives.#{reactiveName}.val"] = 1
+            unsetter["_reactives.#{reactiveName}.watching"] = 1
+
+            resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"] ?= 0
+            watcherModelClass.collection.rawCollection().findAndModify(
+                selector
+            ,
+                []
+            ,
+                $set: setter
+                $unset: unsetter
+            ,
+                (err, doc) ->
+                    if err
+                        console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
+                                    watchers of #{modelName}.#{JSON.stringify instanceId}:"
+                        console.error err
+                        return
+
+                    if doc?
+                        resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"] += 1
+
+                        # Continue to reset one doc at a time until there are no more docs to reset
+                        resetOneWatcherDoc watcherModelClass, watcherReactiveName
+
+                        # Also branch into resetting all docs watching this watching-reactive in this doc
+                        watcherOldValues = {}
+                        watcherOldValues[watcherReactiveName] = doc._reactives?[watcherReactiveName]?.val
+                        watcherNewValues = {}
+                        watcherNewValues[watcherReactiveName] = undefined
+                        J.denorm.resetWatchers watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
+
+                    else
+                        numWatchersReset = resetCountByModelReactive["#{watcherModelClass.name}.#{watcherReactiveName}"]
+                        console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                             #{numWatchersReset} watchers reset"
                         # console.log "selector: #{JSON.stringify selector, null, 4}"
+            )
 
-        watchersByModelReactive
 
+        for watcherModelName, watcherModelClass of J.models
+            for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
+                if watcherReactiveSpec.denorm
+                    resetOneWatcherDoc watcherModelName, watcherReactiveName
 
+        null
 
 
 
