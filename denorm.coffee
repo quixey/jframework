@@ -10,14 +10,9 @@ J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
 J.denorm =
     ensureAllReactiveWatcherIndexes: ->
-        helper = (reactiveModelClass, reactiveName) ->
-            ###
-                Build indexes that let NK (Normalized Kernel) nodes propagate
-                their value change to reset this reactive's value
-            ###
-
-            for nkModelClassname, nkModelClass of J.models
-                continue if nkModelClass in ['JDataSession']
+        for reactiveModelName, reactiveModelClass of J.models
+            for reactiveName, reactiveSpec of reactiveModelClass.reactiveSpecs
+                continue if not reactiveSpec.denorm
 
                 indexFieldsSpec = {}
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
@@ -25,16 +20,11 @@ J.denorm =
                 # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id"] = 1
                 # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.$in"] = 1
 
-                modelClass.collection._ensureIndex(
+                reactiveModelClass.collection._ensureIndex(
                     indexFieldsSpec
                     name: "_jReactiveWatcher_#{reactiveName}"
                     sparse: true
                 )
-
-        for modelClassName, modelClass of J.models
-            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                if reactiveSpec.denorm
-                    helper modelClass, reactiveName
 
 
     recalc: (instance, reactiveName, timestamp = new Date()) ->
