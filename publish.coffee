@@ -347,23 +347,25 @@ updateObservers = (dataSessionId) ->
                             val: reactiveValue
                             ts: reactiveTs
 
-            if not _.isEmpty futureByReactiveName
-                # log "#{J.util.stringify querySpec} waiting on futures for: #{_.keys futureByReactiveName}"
-                Future.wait _.values futureByReactiveName
+            SYNC_FLAG = false
+            if SYNC_FLAG
+                if not _.isEmpty futureByReactiveName
+                    # log "#{J.util.stringify querySpec} waiting on futures for: #{_.keys futureByReactiveName}"
+                    Future.wait _.values futureByReactiveName
 
-            for reactiveName, future of futureByReactiveName
-                try
-                    reactiveValue = future.get()
-                catch e
-                    console.error "Exception while getting future for #{reactiveName}
-                        in <#{modelName}.#{JSON.stringify id}>"
-                    console.error e
-                    throw e
-                reactivesObj[reactiveName] =
-                    val: reactiveValue
-                    ts: ts
-                # log "#{J.util.stringify querySpec} returning value of #{JSON.stringify id}.#{reactiveName}"
-                #    #{reactiveValue}"
+                    for reactiveName, future of futureByReactiveName
+                        try
+                            reactiveValue = future.get()
+                        catch e
+                            console.error "Exception while getting future for #{reactiveName}
+                                in <#{modelName}.#{JSON.stringify id}>"
+                            console.error e
+                            throw e
+                        reactivesObj[reactiveName] =
+                            val: reactiveValue
+                            ts: ts
+                        # log "#{J.util.stringify querySpec} returning value of #{JSON.stringify id}.#{reactiveName}"
+                        #    #{reactiveValue}"
 
             # console.log '...returning with _reactives =', JSON.stringify fieldsByModelIdQuery[modelName][id]._reactives[qsString]
 

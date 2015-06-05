@@ -112,7 +112,7 @@ J.denorm =
                     term.$or[0][selectorPath] =
                         $in: [null]
                     term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
-                        $elemMatch: $in: [null]
+                        $elemMatch: $in: []
 
                     if oldValue?
                         term.$or[0][selectorPath].$in.push oldValue
