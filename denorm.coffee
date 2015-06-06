@@ -71,13 +71,11 @@ J.denorm =
 
     resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date()) ->
         modelClass = J.models[modelName]
-        if modelClass.immutable
-            return {}
 
         console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
             #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
-        makeWatcherMatcher = (instanceId, oldValues, newValues) ->
+        makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
             # Makes sure every fieldSpec in the watching-selector is consistent
             # with either oldValues or newValues
             subFieldSelectorMatcher = [
@@ -138,21 +136,6 @@ J.denorm =
                             if J.util.isPlainObject(newValue) then newValue else {}
                         )
 
-            mutableOldValues = {}
-            mutableNewValues = {}
-            for fieldName, fieldSpec of modelClass.fieldSpecs
-                continue if fieldSpec.immutable
-                if fieldName of oldValues
-                    mutableOldValues[fieldName] = oldValues[fieldName]
-                if fieldName of newValues
-                    mutableNewValues[fieldName] = newValues[fieldName]
-            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                continue if not reactiveSpec.denorm
-                if reactiveName of oldValues
-                    mutableOldValues[reactiveName] = oldValues[reactiveName]
-                if reactiveName of newValues
-                    mutableNewValues[reactiveName] = newValues[reactiveName]
-
             addClauses 'selector', mutableOldValues, mutableNewValues
 
             watcherMatcher =
@@ -170,7 +153,26 @@ J.denorm =
 
             watcherMatcher
 
-        watcherMatcher = makeWatcherMatcher instanceId, oldValues, newValues
+
+        mutableOldValues = {}
+        mutableNewValues = {}
+        if not modelClass.immutable
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                continue if fieldSpec.immutable
+                if fieldName of oldValues
+                    mutableOldValues[fieldName] = oldValues[fieldName]
+                if fieldName of newValues
+                    mutableNewValues[fieldName] = newValues[fieldName]
+        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+            continue if not reactiveSpec.denorm
+            if reactiveName of oldValues
+                mutableOldValues[reactiveName] = oldValues[reactiveName]
+            if reactiveName of newValues
+                mutableNewValues[reactiveName] = newValues[reactiveName]
+        if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
+            return null
+
+        watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
 
         resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
         resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->

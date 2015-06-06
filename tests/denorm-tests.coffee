@@ -6,6 +6,37 @@
     LICENSE file in the root directory of this source tree.
 ###
 
+if Meteor.isServer then Tinytest.add "resetWatchers 1", (test) ->
+    $$.ModelA.remove {}
+    $$.ModelB.remove {}
+    $$.ModelC.remove {}
+
+    a = new $$.ModelA(
+        _id: 'aaa'
+        x: 5
+    )
+    a.save()
+
+    b = new $$.ModelB(
+        _id: 'bbb'
+        aId: 'aaa'
+        y: 60
+    )
+    b.save()
+    b2 = new $$.ModelB(
+        _id: 'bbb2'
+        aId: 'aaa'
+        y: 70
+    )
+    b2.save()
+
+    c = new $$.ModelC(
+        bId: 'bbb'
+    )
+    c.save()
+
+    test.equal b.br3(), 8
+
 
 
 if Meteor.isClient then Tinytest.addAsync "Denorm with overlapping cursors", (test, onComplete) ->

@@ -206,7 +206,7 @@ class J.Model
                     # or if the fetch query that brought up this instance happened to
                     # exclude reactiveName.
                     if reactiveValue is undefined
-                        reactiveValue = J.denorm.recalc @, reactiveName
+                        reactiveValue = J.Var(J.denorm.recalc @, reactiveName).get()
 
                     reactiveValue
 
