@@ -689,21 +689,23 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
-                    fieldNameSet = {}
-                    for fieldSpec in _.keys mongoFieldsArg
-                        fieldName = fieldSpec.split('.')[0]
-                        continue if fieldName is '_id'
-
-                        fieldNameSet[fieldName] = true
+                    mongoSelector = J.fetching.selectorToMongoSelector @, selector
 
                     mongoOptions = _.clone options
                     mongoOptions.fields = mongoFieldsArg
 
-                    instances = J.List @find(selector, mongoOptions).fetch()
+                    instances = J.List @find(mongoSelector, mongoOptions).fetch()
 
                     # Treat fields that are missing in the Mongo doc (even
                     # though they were included in the query) as having a
                     # default value of null.
+
+                    fieldNameSet = {}
+                    for fieldSpec in _.keys mongoFieldsArg
+                        fieldName = fieldSpec.split('.')[0]
+                        continue if fieldName is '_id'
+                        fieldNameSet[fieldName] = true
+
                     for fieldName of fieldNameSet
                         continue if fieldName is '_reactives'
 
@@ -820,8 +822,21 @@ Meteor.methods
             if newValue isnt undefined
                 newDoc[fieldName] = newValue
 
+        instance = modelClass.fromDoc doc
+
         if not _reserved
-            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc
+            timestamp = new Date()
+
+            # Recalculate all the included reactives
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.denorm and reactiveSpec.include
+                    J.denorm.recalc instance, reactiveName, timestamp
+
+            # Note that we won't reset the reactive values we just recalculated
+            # because timestamp is the same
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp
+
+        instance.onSave?()
 
         doc._id
 

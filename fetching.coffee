@@ -501,11 +501,12 @@ _.extend J.fetching,
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
+            mongoSelector = @selectorToMongoSelector modelClass, querySpec.selector
             options = @_qsToMongoOptions querySpec
 
             if Tracker.active
                 options.reactive = false
-                results = J.List modelClass.find(querySpec.selector, options).fetch()
+                results = J.List modelClass.find(mongoSelector, options).fetch()
 
                 # The individual model instances' getters have their own reactivity, so
                 # this query should only invalidate if a result gets added/removed/moved.
@@ -516,7 +517,7 @@ _.extend J.fetching,
 
                 initializing = true
                 invalidator = -> computation.invalidate() if not initializing
-                modelClass.find(querySpec.selector, idQueryOptions).observe
+                modelClass.find(mongoSelector, idQueryOptions).observe
                     added: invalidator
                     movedTo: invalidator
                     removed: invalidator
@@ -531,11 +532,57 @@ _.extend J.fetching,
             throw J.makeValueNotReadyObject()
 
 
+    selectorToMongoSelector: (modelClass, selector) ->
+        ###
+            Input:
+                The kind of selector passed to the first argument of .fetch
+                on a Model in JFramework
+            Output:
+                The corresponding Mongo-style selector that we can pass to
+                MongoCollection.find
+        ###
+
+        if not _.isObject selector
+            return selector
+
+        mongoSelector = {}
+        for selectorKey, selectorValue of selector
+            selectorKeyParts = selectorKey.split('.')
+            fieldOrReactiveName = selectorKeyParts[0]
+
+            if fieldOrReactiveName is '_id'
+                mongoSelector[selectorKey] = selectorValue
+
+            else if fieldOrReactiveName of modelClass.fieldSpecs
+                mongoSelector[selectorKey] = selectorValue
+
+            else if fieldOrReactiveName of modelClass.reactiveSpecs
+                reactiveSpec = modelClass.reactiveSpecs[fieldOrReactiveName]
+                if not reactiveSpec.denorm
+                    throw new Error "Can't fetch with a selector on a non-denorm
+                        reactive: #{modelClass.name}.#{fieldOrReactiveName}"
+                reactiveSelectorKey = ["_reactives.#{fieldOrReactiveName}.val"].concat(
+                    selectorKeyParts[1...]
+                ).join('.')
+                mongoSelector[reactiveSelectorKey] = selectorValue
+
+            else
+                throw new Error "#{modelClass} fetch selector contains invalid
+                    selectorKey: #{selectorKey}"
+
+        mongoSelector
+
+
     stringifyQs: (qs) ->
         qs = _.clone qs
-        for x in ['fields', 'sort', 'limit', 'skip']
-            if qs[x] is undefined
-                delete qs[x]
+        if qs.fields is undefined
+            delete qs.fields
+        if qs.sort is undefined
+            delete qs.sort
+        if not qs.limit
+            delete qs.limit
+        if not qs.skip
+            delete qs.skip
 
         EJSON.stringify
             modelName: qs.modelName

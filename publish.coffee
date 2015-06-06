@@ -386,11 +386,12 @@ updateObservers = (dataSessionId) ->
             if querySpec[optionName]?
                 mongoOptions[optionName] = querySpec[optionName]
 
+        mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
         mongoOptions.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
 
         # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
-        cursor = modelClass.collection.find querySpec.selector, mongoOptions
+        cursor = modelClass.collection.find mongoSelector, mongoOptions
 
         observer = cursor.observeChanges
             added: (id, fields) =>
