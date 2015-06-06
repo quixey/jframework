@@ -651,8 +651,17 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
             fetch: (selector = {}, options = {}) ->
                 if Meteor.isClient and not Tracker.active
-                    throw new Error "On the client, must call #{modelName}.fetch
-                        from a reactive computation."
+                    # trick to fetch a model anyway on the client side
+                    autoVar = J.AutoVar -> modelClass.fetch selector, options
+                    try
+                        return autoVar.get()
+                    catch e
+                        if e instanceof J.VALUE_NOT_READY
+                            console.log "Try fetching again."
+                            return
+                        throw e
+                    # throw new Error "On the client, must call #{modelName}.fetch
+                    #     from a reactive computation."
 
                 if selector instanceof J.Dict
                     selector = selector.toObj()

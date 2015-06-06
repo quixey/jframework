@@ -33,6 +33,19 @@ J.dm 'Foo', 'foos',
             val: ->
                 @b() + 1
 
+J.dm 'FooWatcher', 'fooWatchers',
+    _id: $$.str
+    reactives:
+        getA:
+            val: ->
+                $$.Foo.fetchOne { a: 1 }
+        getOnlyA:
+            val: ->
+                $$.Foo.fetchOne { a: 1 }, { a: true, _: false }
+        getNothing:
+            val: ->
+                $$.Foo.fetchOne { a: 1 }, { _: false }
+
 
 J.dm 'Bar', 'bars',
     _id: $$.str

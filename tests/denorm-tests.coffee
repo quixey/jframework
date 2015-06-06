@@ -233,6 +233,15 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
                     _.defer onComplete
         )
 
+if Meteor.isServer then Tinytest.add "Watcher - resetting a watcher", (test) ->
+    foo = new $$.Foo
+    foo.insert()
+    fooWatcher = new $$.FooWatcher
+    fooWatcher.insert()
+    fooWatcher.getA()
+    foo.a(1)
+    foo.save()
+    test.equal J._numWatchersReset, 1, "should have reset one watcher"
 
 if Meteor.isClient then Tinytest.addAsync "_lastTest3", (test, onComplete) ->
     setTimeout(

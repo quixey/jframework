@@ -114,7 +114,7 @@ J.denorm =
                     term.$or[0][selectorPath] =
                         $in: [null]
                     term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
-                        $elemMatch: $in: [null]
+                        $elemMatch: $in: []
 
                     if oldValue?
                         term.$or[0][selectorPath].$in.push oldValue
@@ -219,11 +219,11 @@ J.denorm =
                         J.denorm.resetWatchers watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
 
                     else
-                        numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
-                        if numWatchersReset
+                        J._numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
+                        if J._numWatchersReset
                             console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                                #{numWatchersReset} watchers reset"
-                            # console.log "selector: #{JSON.stringify selector, null, 4}"
+                                #{J._numWatchersReset} watchers reset"
+                            console.log "selector: #{JSON.stringify selector, null, 4}"
             )
 
 
