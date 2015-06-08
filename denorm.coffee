@@ -89,7 +89,17 @@ J.denorm =
                     'selector._id.*DOLLAR*in': $in: [instanceId]
                 ]
 
-            addClauses = (selectorPrefix, oldSubValues, newSubValues) =>
+            # We'll collect all the changed subFieldNames for later
+            changedSubFieldSpecSet = {} # changedSubFieldSpec: true
+
+            addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
+                ###
+                    1. Append clauses to subFieldSelectorMatcher so it restricts the
+                       set of matched watchers to ones that ever returned this doc.
+
+                    2. Mutate changedSubFieldNameSet for later
+                ###
+
                 # TODO: Handle more selectors besides just default (equality) and $in
                 # e.g. $gt, $gte, $lt, $lte
 
@@ -100,56 +110,76 @@ J.denorm =
                     subFieldNameSet[subFieldName] = true
 
                 for subFieldName of subFieldNameSet
-                    if selectorPrefix is 'selector'
-                        selectorPath = "selector.#{J.Model.escapeDot subFieldName}"
-                    else
-                        selectorPath = "#{selectorPrefix}*DOT*#{J.Model.escapeDot subFieldName}"
-
                     oldValue = oldSubValues[subFieldName]
                     newValue = newSubValues[subFieldName]
 
+                    if not EJSON.equals oldValue, newValue
+                        changedSubFieldSpecSet[subFieldName] = true
+
+                    fieldSpec = fieldSpecPrefix.concat [subFieldName]
+                    selectorKey = "selector.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+
                     term = $or: [{}, {}]
-                    term.$or[0][selectorPath] =
+                    term.$or[0][selectorKey] =
                         $in: [null]
-                    term.$or[1]["#{selectorPath}.*DOLLAR*in"] =
+                    term.$or[1]["#{selectorKey}.*DOLLAR*in"] =
                         $elemMatch: $in: []
 
                     if oldValue?
-                        term.$or[0][selectorPath].$in.push oldValue
-                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push oldValue
+                        term.$or[0][selectorKey].$in.push oldValue
+                        term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push oldValue
                         if _.isArray oldValue then for elem in oldValue
-                            term.$or[0][selectorPath].$in.push elem
-                            term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
+                            term.$or[0][selectorKey].$in.push elem
+                            term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
                     if newValue? and not EJSON.equals oldValue, newValue
-                        term.$or[0][selectorPath].$in.push newValue
-                        term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push newValue
+                        term.$or[0][selectorKey].$in.push newValue
+                        term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push newValue
                         if _.isArray newValue then for elem in newValue
-                            term.$or[0][selectorPath].$in.push elem
-                            term.$or[1]["#{selectorPath}.*DOLLAR*in"].$elemMatch.$in.push elem
+                            term.$or[0][selectorKey].$in.push elem
+                            term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
 
                     subFieldSelectorMatcher.push term
 
                     if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
-                        addClauses(
-                            selectorPath
+                        addSelectorClauses(
+                            fieldSpec
                             if J.util.isPlainObject(oldValue) then oldValue else {}
                             if J.util.isPlainObject(newValue) then newValue else {}
                         )
 
-            addClauses 'selector', mutableOldValues, mutableNewValues
+            addSelectorClauses [], mutableOldValues, mutableNewValues
+
+            for changedSubFieldSpec of changedSubFieldSpecSet
+                oldValue = J.util.getField mutableOldValues, changedSubFieldSpec.join('.')
+                newValue = J.util.getField mutableNewValues, changedSubFieldSpec.join('.')
+
+                # TODO
 
             watcherMatcher =
                 modelName: modelName
                 $or: [
                     selector: $in: [null, instanceId]
                 ,
-                    $and: subFieldSelectorMatcher
+                    $and: [
+                        # The watcher's selector has a shot at ever matching
+                        # the old or new document
+                        $and: subFieldSelectorMatcher
+                    ,
+                        $or: [
+                            # The watcher's set of docIds might have changed
+                            # because its selector mentions a changed subfield
+                            $or: changedSubfieldSelectorMatcher
+                        ,
+                            # The watcher's set of docIds might have changed
+                            # because its sort key mentions a changed subfield
+                            $or: changedSubfieldSortSpecMatcher
+                        ,
+                            # The watcher's set of field values might have changed
+                            # because its projection mentions a changed subfield
+                            $or: changedSubfieldProjectionMatcher
+                        ]
+                    ]
                 ]
-
-            # TODO: Add this to watcherMatcher:
-            #   fields: // smart logic that rules out watchers that
-            #              don't care about any of the fields that
-            #              were changed from oldValues to newValues
 
             watcherMatcher
 
@@ -225,7 +255,7 @@ J.denorm =
                         if numWatchersReset
                             console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                                 #{numWatchersReset} watchers reset"
-                            # console.log "selector: #{JSON.stringify selector, null, 4}"
+                            console.log "selector: #{JSON.stringify selector, null, 4}"
             )
 
 
