@@ -239,9 +239,9 @@ class J.Model
                     @_reactives.get reactiveName
 
                 else
-                    # Denormed reactives behave like non-denormed reactives on
-                    # unattached instances.
-                    @reactives[reactiveName].get()
+                    # On unattached instances, denormed reactives behave like
+                    # non-denormed reactives.
+                    reactiveSpec.val.call @
 
         else
             fieldName = fieldOrReactiveName
@@ -468,12 +468,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         for fieldName of @modelClass.fieldSpecs
             if fieldName not of nonIdInitFields
                 @_fields.setOrAdd fieldName, null # TODO: Support default values for fields of new model instances
-
-        @reactives = {} # reactiveName: autoVar
-        for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
-            @reactives[reactiveName] = do (reactiveName, reactiveSpec) =>
-                J.AutoVar "<#{modelName} ##{@_id}>.!#{reactiveName}",
-                    => reactiveSpec.val.call @
 
         # The @_reactives dict stores the published values of reactives
         # with denorm:true (i.e. server handles all their reactivity).

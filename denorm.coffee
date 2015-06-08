@@ -225,7 +225,7 @@ J.denorm =
                         if J._numWatchersReset
                             console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                                 #{J._numWatchersReset} watchers reset"
-                            console.log "selector: #{JSON.stringify selector, null, 4}"
+                            # console.log "selector: #{JSON.stringify selector, null, 4}"
             )
 
 
