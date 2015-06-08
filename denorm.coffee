@@ -69,239 +69,275 @@ J.denorm =
         value
 
 
-    resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date()) ->
-        modelClass = J.models[modelName]
-
-        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
+    resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date(), callback) ->
+        console.log "RESETWATCHERS <#{modelName} #{JSON.stringify(instanceId)}>
             #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
+        # Total number of running calls to resetWatchersHelper
+        semaphore = 0
 
-        makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
-            equalityClause = {}
-            equalityClause[selectorKey] =
-                $exists: true
-                $in: []
-
-            inClause = {}
-            inClause["#{selectorKey}.*DOLLAR*in"] =
-                $elemMatch: $in: []
-
-            for value in possibleValues
-                equalityClause[selectorKey].$in.push value
-                inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
-                if _.isArray value then for elem in value
-                    equalityClause[selectorKey].$in.push elem
-                    inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
-
-            termMatcher = $or: [equalityClause, inClause]
-            if not mustExist
-                doesntExistClause = {}
-                doesntExistClause[selectorKey] = $exists: false
-                termMatcher.$or.push doesntExistClause
-
-            termMatcher
+        semaAcquire = ->
+            # console.log 'semaAcquire', semaphore - 1
+            semaphore -= 1
+        semaRelease = ->
+            # console.log 'semaRelease', semaphore + 1
+            semaphore += 1
+            if semaphore is 0 then callback?()
 
 
-        makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
-            # Makes sure every fieldSpec in the watching-selector is consistent
-            # with either oldValues or newValues
-            subfieldSelectorMatcher = [
-                selector: $type: 3 # object
-            ,
-                $or: [
-                    'selector._id': $in: [null, instanceId]
-                ,
-                    'selector._id.*DOLLAR*in': $in: [instanceId]
-                ]
-            ]
+        resetWatchersHelper = (modelName, instanceId, oldValues, newValues, timestamp) ->
+            semaAcquire()
 
-            changedSubfieldSelectorMatcher = []
-            changedSubfieldSortSpecMatcher = []
-            changedSubfieldAlacarteProjectionMatcher = []
-            changedSubfieldOverrideProjectionMatcher = []
-
-            addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
-                # 1. Append clauses to subfieldSelectorMatcher so it restricts the
-                #    set of matched watchers to ones that ever returned this doc.
-                #
-                # 2. Mutate changedSubFieldNameSet for later
-                # FIXME
-
-                # TODO: Handle more selectors besides just default (equality) and $in
-                # e.g. $gt, $gte, $lt, $lte
-
-                subfieldNameSet = {}
-                for subfieldName of oldSubValues
-                    subfieldNameSet[subfieldName] = true
-                for subfieldName of newSubValues
-                    subfieldNameSet[subfieldName] = true
-
-                for subfieldName of subfieldNameSet
-                    oldValue = oldSubValues[subfieldName]
-                    newValue = newSubValues[subfieldName]
-                    changed = not EJSON.equals oldValue, newValue
-
-                    fieldSpec = fieldSpecPrefix.concat [subfieldName]
-                    selectorKey = "selector.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
-                    projectionKey = "fields.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
-                    sortSpecKey = "sort.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
-
-                    possibleValues = []
-                    if oldValue isnt undefined
-                        possibleValues.push oldValue
-                    if newValue isnt undefined and changed
-                        possibleValues.push newValue
-
-                    subfieldSelectorMatcher.push makeTermMatcher selectorKey, false, possibleValues
-
-                    if changed
-                        changedSubfieldSelectorMatcher.push makeTermMatcher selectorKey, true, possibleValues
-
-                        term = {}
-                        term[sortSpecKey] = $exists: true
-                        changedSubfieldSortSpecMatcher.push term
-
-                        term = {}
-                        term[projectionKey] = true
-                        changedSubfieldAlacarteProjectionMatcher.push term
-
-                        term = {}
-                        term[projectionKey] = true
-                        if fieldSpecPrefix.length is 0
-                            J.assert subfieldName of modelClass.fieldSpecs or subfieldName of modelClass.reactiveSpecs
-                            if subfieldName of modelClass.fieldSpecs
-                                if modelClass.fieldSpecs[subfieldName].include ? true
-                                    term[projectionKey] = $in: [null, true]
-                            else
-                                if modelClass.reactiveSpecs[subfieldName].include ? false
-                                    term[projectionKey] = $in: [null, true]
-                        changedSubfieldOverrideProjectionMatcher.push term
-
-                    if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
-                        addSelectorClauses(
-                            fieldSpec
-                            if J.util.isPlainObject(oldValue) then oldValue else {}
-                            if J.util.isPlainObject(newValue) then newValue else {}
-                        )
-
-            addSelectorClauses [], mutableOldValues, mutableNewValues
+            lockSema = 0
+            lockAcquire = ->
+                # console.log 'lockAcquire', lockSema - 1
+                lockSema -= 1
+            lockRelease = ->
+                # console.log 'lockRelease', lockSema + 1
+                lockSema += 1
+                if lockSema is 0 then semaRelease()
 
 
-            watcherMatcher =
-                modelName: modelName
-                $and: [
-                    # The watcher's selector has a shot at ever matching
-                    # the old or new document
-                    $or: [
-                        selector: $in: [null, instanceId]
-                    ,
-                        $and: subfieldSelectorMatcher
-                    ]
+            modelClass = J.models[modelName]
+
+            console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
+                #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
+
+
+            makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
+                equalityClause = {}
+                equalityClause[selectorKey] =
+                    $exists: true
+                    $in: []
+
+                inClause = {}
+                inClause["#{selectorKey}.*DOLLAR*in"] =
+                    $elemMatch: $in: []
+
+                for value in possibleValues
+                    equalityClause[selectorKey].$in.push value
+                    inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
+                    if _.isArray value then for elem in value
+                        equalityClause[selectorKey].$in.push elem
+                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+
+                termMatcher = $or: [equalityClause, inClause]
+                if not mustExist
+                    doesntExistClause = {}
+                    doesntExistClause[selectorKey] = $exists: false
+                    termMatcher.$or.push doesntExistClause
+
+                termMatcher
+
+
+            makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
+                # Makes sure every fieldSpec in the watching-selector is consistent
+                # with either oldValues or newValues
+                subfieldSelectorMatcher = [
+                    selector: $type: 3 # object
                 ,
                     $or: [
-                        # The watcher's set of docIds might have changed
-                        # because its selector mentions a changed subfield
-                        $or: changedSubfieldSelectorMatcher
+                        'selector._id': $in: [null, instanceId]
                     ,
-                        # The watcher's set of docIds might have changed
-                        # because its sort key mentions a changed subfield
-                        $or: changedSubfieldSortSpecMatcher
-                    ,
-                        # The watcher's set of field values might have changed
-                        # because its projection mentions a changed subfield
-                        'fields._': false
-                        $or: changedSubfieldAlacarteProjectionMatcher
-                    ,
-                        'fields._': $in: [null, true]
-                        $or: changedSubfieldOverrideProjectionMatcher
+                        'selector._id.*DOLLAR*in': $in: [instanceId]
                     ]
                 ]
 
-            watcherMatcher
+                changedSubfieldSelectorMatcher = []
+                changedSubfieldSortSpecMatcher = []
+                changedSubfieldAlacarteProjectionMatcher = []
+                changedSubfieldOverrideProjectionMatcher = []
+
+                addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
+                    # 1. Append clauses to subfieldSelectorMatcher so it restricts the
+                    #    set of matched watchers to ones that ever returned this doc.
+                    #
+                    # 2. Mutate changedSubFieldNameSet for later
+                    # FIXME
+
+                    # TODO: Handle more selectors besides just default (equality) and $in
+                    # e.g. $gt, $gte, $lt, $lte
+
+                    subfieldNameSet = {}
+                    for subfieldName of oldSubValues
+                        subfieldNameSet[subfieldName] = true
+                    for subfieldName of newSubValues
+                        subfieldNameSet[subfieldName] = true
+
+                    for subfieldName of subfieldNameSet
+                        oldValue = oldSubValues[subfieldName]
+                        newValue = newSubValues[subfieldName]
+                        changed = not EJSON.equals oldValue, newValue
+
+                        fieldSpec = fieldSpecPrefix.concat [subfieldName]
+                        selectorKey = "selector.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+                        projectionKey = "fields.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+                        sortSpecKey = "sort.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+
+                        possibleValues = []
+                        if oldValue isnt undefined
+                            possibleValues.push oldValue
+                        if newValue isnt undefined and changed
+                            possibleValues.push newValue
+
+                        subfieldSelectorMatcher.push makeTermMatcher selectorKey, false, possibleValues
+
+                        if changed
+                            changedSubfieldSelectorMatcher.push makeTermMatcher selectorKey, true, possibleValues
+
+                            term = {}
+                            term[sortSpecKey] = $exists: true
+                            changedSubfieldSortSpecMatcher.push term
+
+                            term = {}
+                            term[projectionKey] = true
+                            changedSubfieldAlacarteProjectionMatcher.push term
+
+                            term = {}
+                            term[projectionKey] = true
+                            if fieldSpecPrefix.length is 0
+                                J.assert subfieldName of modelClass.fieldSpecs or subfieldName of modelClass.reactiveSpecs
+                                if subfieldName of modelClass.fieldSpecs
+                                    if modelClass.fieldSpecs[subfieldName].include ? true
+                                        term[projectionKey] = $in: [null, true]
+                                else
+                                    if modelClass.reactiveSpecs[subfieldName].include ? false
+                                        term[projectionKey] = $in: [null, true]
+                            changedSubfieldOverrideProjectionMatcher.push term
+
+                        if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
+                            addSelectorClauses(
+                                fieldSpec
+                                if J.util.isPlainObject(oldValue) then oldValue else {}
+                                if J.util.isPlainObject(newValue) then newValue else {}
+                            )
+
+                addSelectorClauses [], mutableOldValues, mutableNewValues
 
 
-        mutableOldValues = {}
-        mutableNewValues = {}
-        if not modelClass.immutable
-            for fieldName, fieldSpec of modelClass.fieldSpecs
-                continue if fieldSpec.immutable
-                if fieldName of oldValues
-                    mutableOldValues[fieldName] = oldValues[fieldName]
-                if fieldName of newValues
-                    mutableNewValues[fieldName] = newValues[fieldName]
-        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-            continue if not reactiveSpec.denorm
-            if reactiveName of oldValues
-                mutableOldValues[reactiveName] = oldValues[reactiveName]
-            if reactiveName of newValues
-                mutableNewValues[reactiveName] = newValues[reactiveName]
-        if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
-            return null
+                watcherMatcher =
+                    modelName: modelName
+                    $and: [
+                        # The watcher's selector has a shot at ever matching
+                        # the old or new document
+                        $or: [
+                            selector: $in: [null, instanceId]
+                        ,
+                            $and: subfieldSelectorMatcher
+                        ]
+                    ,
+                        $or: [
+                            # The watcher's set of docIds might have changed
+                            # because its selector mentions a changed subfield
+                            $or: changedSubfieldSelectorMatcher
+                        ,
+                            # The watcher's set of docIds might have changed
+                            # because its sort key mentions a changed subfield
+                            $or: changedSubfieldSortSpecMatcher
+                        ,
+                            # The watcher's set of field values might have changed
+                            # because its projection mentions a changed subfield
+                            'fields._': false
+                            $or: changedSubfieldAlacarteProjectionMatcher
+                        ,
+                            'fields._': $in: [null, true]
+                            $or: changedSubfieldOverrideProjectionMatcher
+                        ]
+                    ]
 
-        watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
+                watcherMatcher
 
-        resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
-        resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
-            watcherModelClass = J.models[watcherModelName]
-            # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
-                #{JSON.stringify instanceId}>"
 
-            selector = {}
-            selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
-            selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
+            mutableOldValues = {}
+            mutableNewValues = {}
+            if not modelClass.immutable
+                for fieldName, fieldSpec of modelClass.fieldSpecs
+                    continue if fieldSpec.immutable
+                    if fieldName of oldValues
+                        mutableOldValues[fieldName] = oldValues[fieldName]
+                    if fieldName of newValues
+                        mutableNewValues[fieldName] = newValues[fieldName]
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                continue if not reactiveSpec.denorm
+                if reactiveName of oldValues
+                    mutableOldValues[reactiveName] = oldValues[reactiveName]
+                if reactiveName of newValues
+                    mutableNewValues[reactiveName] = newValues[reactiveName]
+            if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
+                return null
 
-            setter = {}
-            setter["_reactives.#{watcherReactiveName}.ts"] = timestamp
+            watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
 
-            unsetter = {}
-            unsetter["_reactives.#{watcherReactiveName}.val"] = 1
-            unsetter["_reactives.#{watcherReactiveName}.watching"] = 1
+            resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
+            resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
+                watcherModelClass = J.models[watcherModelName]
+                # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
+                    #{JSON.stringify instanceId}>"
 
-            resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
-            watcherModelClass.collection.rawCollection().findAndModify(
-                selector
-            ,
-                []
-            ,
-                $set: setter
-                $unset: unsetter
-            ,
-                (err, doc) ->
-                    if err
-                        console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
-                                    watchers of #{modelName}.#{JSON.stringify instanceId}:"
-                        console.error err
-                        return
+                selector = {}
+                selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
+                selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
 
-                    if doc?
-                        resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
+                setter = {}
+                setter["_reactives.#{watcherReactiveName}.ts"] = timestamp
 
-                        # Continue to reset one doc at a time until there are no more docs to reset
+                unsetter = {}
+                unsetter["_reactives.#{watcherReactiveName}.val"] = 1
+                unsetter["_reactives.#{watcherReactiveName}.watching"] = 1
+
+                resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
+                watcherModelClass.collection.rawCollection().findAndModify(
+                    selector
+                ,
+                    []
+                ,
+                    $set: setter
+                    $unset: unsetter
+                ,
+                    Meteor.bindEnvironment (err, doc) ->
+                        if err
+                            console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
+                                        watchers of #{modelName}.#{JSON.stringify instanceId}:"
+                            console.error err
+                            lockRelease()
+                            return
+
+                        if doc?
+                            resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
+
+                            # Continue to reset one doc at a time until there are no more docs to reset
+                            resetOneWatcherDoc watcherModelName, watcherReactiveName
+
+                            # Also branch into resetting all docs watching this watching-reactive in this doc
+                            watcherOldValues = {}
+                            watcherOldValues[watcherReactiveName] = doc._reactives?[watcherReactiveName]?.val
+                            watcherNewValues = {}
+                            watcherNewValues[watcherReactiveName] = undefined
+                            resetWatchersHelper watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
+
+                        else
+                            numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
+                            if numWatchersReset
+                                console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
+                                    #{numWatchersReset} watchers reset"
+                                console.log "selector: #{JSON.stringify selector, null, 4}"
+
+                            lockRelease()
+                )
+
+
+            for watcherModelName, watcherModelClass of J.models
+                for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
+                    if watcherReactiveSpec.denorm
+                        lockAcquire()
                         resetOneWatcherDoc watcherModelName, watcherReactiveName
 
-                        # Also branch into resetting all docs watching this watching-reactive in this doc
-                        watcherOldValues = {}
-                        watcherOldValues[watcherReactiveName] = doc._reactives?[watcherReactiveName]?.val
-                        watcherNewValues = {}
-                        watcherNewValues[watcherReactiveName] = undefined
-                        J.denorm.resetWatchers watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
+            if lockSema is 0 then semaRelease()
 
-                    else
-                        numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
-                        if numWatchersReset
-                            console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                                #{numWatchersReset} watchers reset"
-                            console.log "selector: #{JSON.stringify selector, null, 4}"
-            )
+            null
 
 
-        for watcherModelName, watcherModelClass of J.models
-            for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
-                if watcherReactiveSpec.denorm
-                    resetOneWatcherDoc watcherModelName, watcherReactiveName
-
-        null
-
+        resetWatchersHelper modelName, instanceId, oldValues, newValues, timestamp
 
 
 if Meteor.isServer then Meteor.startup ->

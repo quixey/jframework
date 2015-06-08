@@ -33,7 +33,7 @@ J.dm 'Foo', 'foos',
             val: ->
                 @b() + 1
 
-J.dm 'FooWatcher', 'fooWatchers',
+J.dm 'FooWatcher', 'foowatchers',
     _id: $$.str
     reactives:
         selectA:

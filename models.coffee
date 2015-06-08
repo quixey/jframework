@@ -112,7 +112,8 @@ class J.Model
         key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
 
 
-    _save: (upsert, collection, callback) ->
+    _save: (upsert, options, callback) ->
+        collection = options.collection ? @collection
         unless collection instanceof Mongo.Collection
             throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
 
@@ -132,7 +133,12 @@ class J.Model
         else
             doc._id = @_id ? Random.hexString(10)
 
-        Meteor.call '_jSave', @modelClass.name, doc, upsert, callback
+        if Meteor.isClient
+            options = _.clone options
+            delete options.collection
+            delete options.denormCallback
+
+        Meteor.call '_jSave', @modelClass.name, doc, upsert, options, callback
 
         # Returns @_id
         @_id ?= doc._id
@@ -286,14 +292,14 @@ class J.Model
             @_fields.forceGet fieldName
 
 
-    insert: (collection = @modelClass.collection, callback) ->
-        if _.isFunction(collection) and arguments.length is 1
+    insert: (options = {}, callback) ->
+        if _.isFunction(options) and arguments.length is 1
             # Can call save(callback) to use @collection
             # as the collection.
-            callback = collection
-            collection = @collection
+            callback = options
+            options = {}
 
-        @_save false, collection, callback
+        @_save false, options, callback
 
 
     remove: (callback) ->
@@ -303,14 +309,24 @@ class J.Model
         Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
 
-    save: (collection = @modelClass.collection, callback) ->
-        if _.isFunction(collection) and arguments.length is 1
+    save: (options = {}, callback) ->
+        if _.isFunction(options) and arguments.length is 1
             # Can call save(callback) to use @collection
             # as the collection.
-            callback = collection
-            collection = @collection
+            callback = options
+            options = {}
 
-        @_save true, collection, callback
+        @_save true, options, callback
+
+
+    saveAndDenorm: (options = {}, callback) ->
+        J.assert 'denormCallback' not of options
+
+        helper = (helperCallback) =>
+            options.denormCallback = helperCallback
+            @save options, callback
+
+        Meteor.wrapAsync(helper, @)()
 
 
     set: (fields) ->
@@ -760,7 +776,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
 
 Meteor.methods
-    _jSave: (modelName, doc, upsert) ->
+    _jSave: (modelName, doc, upsert, options) ->
         # This also runs on the client as a stub
 
         J.assert doc._id?
@@ -828,7 +844,7 @@ Meteor.methods
 
             # Note that we won't reset the reactive values we just recalculated
             # because timestamp is the same
-            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
 
         instance.onSave?()
 

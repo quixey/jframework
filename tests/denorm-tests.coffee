@@ -280,7 +280,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     fooWatcher.selectA_projectNothing()
 
     foo.a(5)
-    foo.save()
+    foo.saveAndDenorm()
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
@@ -288,40 +288,55 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
 
     foo.b(6)
     foo.c(16)
-    foo.save()
+    foo.saveAndDenorm()
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+    fooWatcher.selectA()
+    fooWatcher.selectA_projectA()
+    fooWatcher.selectA_projectC()
+    fooWatcher.selectA_projectNothing()
 
     foo.a(1)
-    foo.save()
+    foo.saveAndDenorm()
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+    fooWatcher.selectA()
+    fooWatcher.selectA_projectA()
+    fooWatcher.selectA_projectC()
+    fooWatcher.selectA_projectNothing()
 
     foo.b(7)
-    foo.save()
+    foo.saveAndDenorm()
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
 
     foo.c(17)
-    foo.save()
+    foo.saveAndDenorm()
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
     test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+    fooWatcher.selectA()
+    fooWatcher.selectA_projectA()
+    fooWatcher.selectA_projectC()
+    fooWatcher.selectA_projectNothing()
 
     foo.a(2)
-    foo.save()
+    foo.saveAndDenorm()
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
     test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
-
+    fooWatcher.selectA()
+    fooWatcher.selectA_projectA()
+    fooWatcher.selectA_projectC()
+    fooWatcher.selectA_projectNothing()
 
 
 _wasReset = (modelName, instanceId, reactiveName) ->
@@ -336,7 +351,6 @@ _wasReset = (modelName, instanceId, reactiveName) ->
     console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.val is undefined and reactiveObj?.ts?
 
     reactiveObj?.val is undefined and reactiveObj?.ts?
-
 
 
 if Meteor.isClient then Tinytest.addAsync "_lastTest3", (test, onComplete) ->
