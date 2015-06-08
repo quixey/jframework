@@ -93,11 +93,13 @@ J.denorm =
                     equalityClause[selectorKey].$in.push elem
                     inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
 
-            term = $or: [equalityClause, inClause]
+            termMatcher = $or: [equalityClause, inClause]
             if not mustExist
                 doesntExistClause = {}
                 doesntExistClause[selectorKey] = $exists: false
-                term.$or.push doesntExistClause
+                termMatcher.$or.push doesntExistClause
+
+            termMatcher
 
 
         makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->

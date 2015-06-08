@@ -39,7 +39,8 @@ J.dm 'FooWatcher', 'fooWatchers',
         selectA:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(a: 1)._id
+                $$.Foo.fetchOne(a: 1)
+                null
         selectA_projectA:
             denorm: true
             val: ->
@@ -49,7 +50,8 @@ J.dm 'FooWatcher', 'fooWatchers',
                     fields:
                         _: false
                         a: true
-                )._id
+                )
+                null
         selectA_projectC:
             denorm: true
             val: ->
@@ -59,7 +61,8 @@ J.dm 'FooWatcher', 'fooWatchers',
                     fields:
                         _: false
                         c: true
-                )._id
+                )
+                null
         selectA_projectNothing:
             denorm: true
             val: ->
@@ -68,7 +71,8 @@ J.dm 'FooWatcher', 'fooWatchers',
                 ,
                     fields:
                         _: false
-                )._id
+                )
+                null
 
 
 J.dm 'Bar', 'bars',
