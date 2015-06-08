@@ -75,70 +75,105 @@ J.denorm =
         console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
             #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
+
+        makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
+            equalityClause = {}
+            equalityClause[selectorKey] =
+                $exists: true
+                $in: []
+
+            inClause = {}
+            inClause["#{selectorKey}.*DOLLAR*in"] =
+                $elemMatch: $in: []
+
+            for value in possibleValues
+                equalityClause[selectorKey].$in.push value
+                inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
+                if _.isArray value then for elem in value
+                    equalityClause[selectorKey].$in.push elem
+                    inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+
+            term = $or: [equalityClause, inClause]
+            if not mustExist
+                doesntExistClause = {}
+                doesntExistClause[selectorKey] = $exists: false
+                term.$or.push doesntExistClause
+
+
         makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
             # Makes sure every fieldSpec in the watching-selector is consistent
             # with either oldValues or newValues
-            subFieldSelectorMatcher = [
+            subfieldSelectorMatcher = [
                 selector: $type: 3 # object
-            ]
-
-            subFieldSelectorMatcher.push
+            ,
                 $or: [
                     'selector._id': $in: [null, instanceId]
                 ,
                     'selector._id.*DOLLAR*in': $in: [instanceId]
                 ]
+            ]
 
-            # We'll collect all the changed subFieldNames for later
-            changedSubFieldSpecSet = {} # changedSubFieldSpec: true
+            changedSubfieldSelectorMatcher = []
+            changedSubfieldSortSpecMatcher = []
+            changedSubfieldAlacarteProjectionMatcher = []
+            changedSubfieldOverrideProjectionMatcher = []
 
             addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
-                ###
-                    1. Append clauses to subFieldSelectorMatcher so it restricts the
-                       set of matched watchers to ones that ever returned this doc.
-
-                    2. Mutate changedSubFieldNameSet for later
-                ###
+                # 1. Append clauses to subfieldSelectorMatcher so it restricts the
+                #    set of matched watchers to ones that ever returned this doc.
+                #
+                # 2. Mutate changedSubFieldNameSet for later
+                # FIXME
 
                 # TODO: Handle more selectors besides just default (equality) and $in
                 # e.g. $gt, $gte, $lt, $lte
 
-                subFieldNameSet = {}
-                for subFieldName of oldSubValues
-                    subFieldNameSet[subFieldName] = true
-                for subFieldName of newSubValues
-                    subFieldNameSet[subFieldName] = true
+                subfieldNameSet = {}
+                for subfieldName of oldSubValues
+                    subfieldNameSet[subfieldName] = true
+                for subfieldName of newSubValues
+                    subfieldNameSet[subfieldName] = true
 
-                for subFieldName of subFieldNameSet
-                    oldValue = oldSubValues[subFieldName]
-                    newValue = newSubValues[subFieldName]
+                for subfieldName of subfieldNameSet
+                    oldValue = oldSubValues[subfieldName]
+                    newValue = newSubValues[subfieldName]
+                    changed = not EJSON.equals oldValue, newValue
 
-                    if not EJSON.equals oldValue, newValue
-                        changedSubFieldSpecSet[subFieldName] = true
-
-                    fieldSpec = fieldSpecPrefix.concat [subFieldName]
+                    fieldSpec = fieldSpecPrefix.concat [subfieldName]
                     selectorKey = "selector.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+                    projectionKey = "fields.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+                    sortSpecKey = "sort.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
 
-                    term = $or: [{}, {}]
-                    term.$or[0][selectorKey] =
-                        $in: [null]
-                    term.$or[1]["#{selectorKey}.*DOLLAR*in"] =
-                        $elemMatch: $in: []
+                    possibleValues = []
+                    if oldValue isnt undefined
+                        possibleValues.push oldValue
+                    if newValue isnt undefined and changed
+                        possibleValues.push newValue
 
-                    if oldValue?
-                        term.$or[0][selectorKey].$in.push oldValue
-                        term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push oldValue
-                        if _.isArray oldValue then for elem in oldValue
-                            term.$or[0][selectorKey].$in.push elem
-                            term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
-                    if newValue? and not EJSON.equals oldValue, newValue
-                        term.$or[0][selectorKey].$in.push newValue
-                        term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push newValue
-                        if _.isArray newValue then for elem in newValue
-                            term.$or[0][selectorKey].$in.push elem
-                            term.$or[1]["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+                    subfieldSelectorMatcher.push makeTermMatcher selectorKey, false, possibleValues
 
-                    subFieldSelectorMatcher.push term
+                    if changed
+                        changedSubfieldSelectorMatcher.push makeTermMatcher selectorKey, true, possibleValues
+
+                        term = {}
+                        term[sortSpecKey] = $exists: true
+                        changedSubfieldSortSpecMatcher.push term
+
+                        term = {}
+                        term[projectionKey] = true
+                        changedSubfieldAlacarteProjectionMatcher.push term
+
+                        term = {}
+                        term[projectionKey] = true
+                        if fieldSpecPrefix.length is 0
+                            J.assert subfieldName of modelClass.fieldSpecs or subfieldName of modelClass.reactiveSpecs
+                            if subfieldName of modelClass.fieldSpecs
+                                if modelClass.fieldSpecs[subfieldName].include ? true
+                                    term[projectionKey] = $in: [null, true]
+                            else
+                                if modelClass.reactiveSpecs[subfieldName].include ? false
+                                    term[projectionKey] = $in: [null, true]
+                        changedSubfieldOverrideProjectionMatcher.push term
 
                     if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
                         addSelectorClauses(
@@ -149,35 +184,34 @@ J.denorm =
 
             addSelectorClauses [], mutableOldValues, mutableNewValues
 
-            for changedSubFieldSpec of changedSubFieldSpecSet
-                oldValue = J.util.getField mutableOldValues, changedSubFieldSpec.join('.')
-                newValue = J.util.getField mutableNewValues, changedSubFieldSpec.join('.')
-
-                # TODO
 
             watcherMatcher =
                 modelName: modelName
-                $or: [
-                    selector: $in: [null, instanceId]
-                ,
-                    $and: [
-                        # The watcher's selector has a shot at ever matching
-                        # the old or new document
-                        $and: subFieldSelectorMatcher
+                $and: [
+                    # The watcher's selector has a shot at ever matching
+                    # the old or new document
+                    $or: [
+                        selector: $in: [null, instanceId]
                     ,
-                        $or: [
-                            # The watcher's set of docIds might have changed
-                            # because its selector mentions a changed subfield
-                            $or: changedSubfieldSelectorMatcher
-                        ,
-                            # The watcher's set of docIds might have changed
-                            # because its sort key mentions a changed subfield
-                            $or: changedSubfieldSortSpecMatcher
-                        ,
-                            # The watcher's set of field values might have changed
-                            # because its projection mentions a changed subfield
-                            $or: changedSubfieldProjectionMatcher
-                        ]
+                        $and: subfieldSelectorMatcher
+                    ]
+                ,
+                    $or: [
+                        # The watcher's set of docIds might have changed
+                        # because its selector mentions a changed subfield
+                        $or: changedSubfieldSelectorMatcher
+                    ,
+                        # The watcher's set of docIds might have changed
+                        # because its sort key mentions a changed subfield
+                        $or: changedSubfieldSortSpecMatcher
+                    ,
+                        # The watcher's set of field values might have changed
+                        # because its projection mentions a changed subfield
+                        'fields._': false
+                        $or: changedSubfieldAlacarteProjectionMatcher
+                    ,
+                        'fields._': $in: [null, true]
+                        $or: changedSubfieldOverrideProjectionMatcher
                     ]
                 ]
 
