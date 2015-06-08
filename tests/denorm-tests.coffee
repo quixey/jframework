@@ -228,6 +228,7 @@ if Meteor.isClient then Tinytest.addAsync "isQueryReady 2", (test, onComplete) -
 
 if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (test) ->
     bar = new $$.Bar
+    bar.insert()
 
     foo = new $$.Foo
     foo.insert()
@@ -236,6 +237,9 @@ if Meteor.isServer then Tinytest.add "Server-side denormalization - A -> B", (te
     foo.a(4)
     foo.save()
     test.equal bar.numberOfFoosWithAEqualTo4(), beforeCount + 1, "should have 1 more Foo instance with a == 4"
+
+    foo.remove()
+    bar.remove()
 
 
 if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B", (test, onComplete) ->
@@ -264,15 +268,76 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
                     _.defer onComplete
         )
 
-if Meteor.isServer then Tinytest.add "Watcher - resetting a watcher", (test) ->
+if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections", (test) ->
     foo = new $$.Foo
     foo.insert()
     fooWatcher = new $$.FooWatcher
     fooWatcher.insert()
-    fooWatcher.getA()
+
+    fooWatcher.selectA()
+    fooWatcher.selectA_projectA()
+    fooWatcher.selectA_projectC()
+    fooWatcher.selectA_projectNothing()
+
+    foo.a(5)
+    foo.save()
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
+    foo.b(6)
+    foo.c(16)
+    foo.save()
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
     foo.a(1)
     foo.save()
-    test.equal J._numWatchersReset, 1, "should have reset one watcher"
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
+    foo.b(7)
+    foo.save()
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
+    foo.c(17)
+    foo.save()
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
+    foo.a(2)
+    foo.save()
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
+    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+
+
+
+_wasReset = (modelName, instanceId, reactiveName) ->
+    modelClass = J.models[modelName]
+    reactiveSpec = modelClass.reactiveSpecs[reactiveName]
+    J.assert reactiveSpec?.denorm
+
+    doc = modelClass.findOne instanceId, transform: false
+    J.assert doc?
+    reactiveObj = doc._reactives?[reactiveName]
+
+    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.val is undefined and reactiveObj?.ts?
+
+    reactiveObj?.val is undefined and reactiveObj?.ts?
+
+
 
 if Meteor.isClient then Tinytest.addAsync "_lastTest3", (test, onComplete) ->
     setTimeout(

@@ -36,15 +36,39 @@ J.dm 'Foo', 'foos',
 J.dm 'FooWatcher', 'fooWatchers',
     _id: $$.str
     reactives:
-        getA:
+        selectA:
+            denorm: true
             val: ->
-                $$.Foo.fetchOne { a: 1 }
-        getOnlyA:
+                $$.Foo.fetchOne(a: 1)._id
+        selectA_projectA:
+            denorm: true
             val: ->
-                $$.Foo.fetchOne { a: 1 }, { a: true, _: false }
-        getNothing:
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                        a: true
+                )._id
+        selectA_projectC:
+            denorm: true
             val: ->
-                $$.Foo.fetchOne { a: 1 }, { _: false }
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                        c: true
+                )._id
+        selectA_projectNothing:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                )._id
 
 
 J.dm 'Bar', 'bars',

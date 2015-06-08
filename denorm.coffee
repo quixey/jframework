@@ -221,10 +221,10 @@ J.denorm =
                         J.denorm.resetWatchers watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
 
                     else
-                        J._numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
-                        if J._numWatchersReset
+                        numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
+                        if numWatchersReset
                             console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                                #{J._numWatchersReset} watchers reset"
+                                #{numWatchersReset} watchers reset"
                             # console.log "selector: #{JSON.stringify selector, null, 4}"
             )
 
