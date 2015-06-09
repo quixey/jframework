@@ -61,9 +61,50 @@ _flushRecalcBuffer = ->
 
 
 
-# "#{modelName}.#{JSON.stringify id}.#{reactiveName}": future
+# "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}": reactiveCalcObj
 J._reactiveCalcsInProgress = {}
 
+# [{modelName, instanceId, reactiveName, priority}]
+J._reactiveCalcQueue = []
+
+J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
+    modelClass = J.models[modelName]
+    reactiveSpec = modelClass.reactiveSpecs[reactiveName]
+    priority ?= reactiveSpec.priority ? 0.5
+
+    reactiveKey = "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}"
+    reactiveCalcObj = J._reactiveCalcsInProgress[reactiveKey]
+    if reactiveCalcObj?
+        if priority > reactiveCalcObj.priority
+            reactiveCalcObj.priority = priority
+            J.util.sortByKey J._reactiveCalcQueue, 'priority'
+    else
+        reactiveCalcObj =
+            modelName: modelName
+            instanceId: instanceId
+            reactiveName: reactiveName
+            priority: priority
+        J._reactiveCalcsInProgress[reactiveKey] = reactiveCalcObj
+        J._reactiveCalcQueue.push reactiveCalcObj
+        J.util.sortByKey J._reactiveCalcQueue, 'priority'
+
+Meteor.setInterval(
+    ->
+        return if J._reactiveCalcQueue.length is 0
+
+        reactiveCalcObj = J._reactiveCalcQueue.pop()
+        reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+        delete J._reactiveCalcsInProgress[reactiveKey]
+
+        modelClass = J.models[reactiveCalcObj.modelName]
+        instance = modelClass.fetchOne reactiveCalcObj.instanceId
+        return if not instance?
+
+        console.log "Popped: #{reactiveKey}"
+        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+    1
+)
 
 ###
     dataSessionId: J.Dict
@@ -271,10 +312,6 @@ updateObservers = (dataSessionId) ->
 
             inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
 
-            instance = undefined
-
-            futureByReactiveName = {}
-            ts = new Date()
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 included = false
 
@@ -315,55 +352,14 @@ updateObservers = (dataSessionId) ->
                                 break
 
                     if needsRecalc
-                        reactiveKey = "#{modelName}.#{JSON.stringify id}.#{reactiveName}"
-                        future = J._reactiveCalcsInProgress[reactiveKey]
-                        if future?
-                            # log "#{J.util.stringify querySpec} Recalc of #{reactiveKey} already in progress."
-                        else
-                            log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
-                            future = J._reactiveCalcsInProgress[reactiveKey] = do (reactiveName, reactiveKey) ->
-                                Future.task ->
-                                    if instance is undefined
-                                        instance = modelClass.fetchOne id
-
-                                    # instance might not exist because the instance might have been
-                                    # deleted while we're still catching up publishing an @added or @changed
-                                    # that includes a reactive.
-                                    if instance?
-                                        ret = J.denorm.recalc instance, reactiveName, ts
-
-                                    delete J._reactiveCalcsInProgress[reactiveKey]
-
-                                    ret
-
-                        futureByReactiveName[reactiveName] = future
+                        # Keep publishing the previous value of reactivesObj[reactiveName]
+                        # until the recalc task gets popped off the queue asynchronously.
+                        J._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
                         reactivesObj[reactiveName] =
                             val: reactiveValue
                             ts: reactiveTs
-
-            SYNC_FLAG = false
-            if SYNC_FLAG
-                if not _.isEmpty futureByReactiveName
-                    # log "#{J.util.stringify querySpec} waiting on futures for: #{_.keys futureByReactiveName}"
-                    Future.wait _.values futureByReactiveName
-
-                    for reactiveName, future of futureByReactiveName
-                        try
-                            reactiveValue = future.get()
-                        catch e
-                            console.error "Exception while getting future for #{reactiveName}
-                                in <#{modelName}.#{JSON.stringify id}>"
-                            console.error e
-                            throw e
-                        reactivesObj[reactiveName] =
-                            val: reactiveValue
-                            ts: ts
-                        # log "#{J.util.stringify querySpec} returning value of #{JSON.stringify id}.#{reactiveName}"
-                        #    #{reactiveValue}"
-
-            # console.log '...returning with _reactives =', JSON.stringify fieldsByModelIdQuery[modelName][id]._reactives[qsString]
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
