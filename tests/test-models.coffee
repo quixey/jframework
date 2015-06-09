@@ -70,6 +70,29 @@ J.dm 'FooWatcher', 'foowatchers',
                 )
                 null
 
+        selectB:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne b: $in: [100, 101]
+                null
+        selectB_projectB:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(
+                    b: $in: [100, 101]
+                ,
+                    fields:
+                        _: false
+                        b: true
+                )
+                null
+
+        selectC:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne c: $in: [100, 101]
+                null
+
 
 J.dm 'Bar', 'bars',
     _id: $$.str

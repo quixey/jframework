@@ -267,16 +267,19 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
         )
 
 if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections", (test) ->
-    # `FooWatcher` watches `foos` with `foo.a == 1`.
-    #   `selectA`:                gets all default fields.
-    #   `selectA_projectA`:       gets only the `foo.a` field.
-    #   `selectA_projectC`:       gets only the `foo.c` field.
-    #   `selectA_projectNothing`: gets none of the fields.
     fooWatcherWatchers = [
-        'selectA',
-        'selectA_projectA',
-        'selectA_projectC',
-        'selectA_projectNothing'
+        # `foo`s with `foo.a == 1`:
+        'selectA',                 # gets the `foo.a` and `foo.c` fields.
+        'selectA_projectA',        # gets only the `foo.a` field.
+        'selectA_projectC',        # gets only the `foo.c` field.
+        'selectA_projectNothing',  # gets none of the fields.
+
+        # `foo`s with `foo.b in [100, 101]`:
+        'selectB',                 # gets the `foo.a` and `foo.c` fields.
+        'selectB_projectB',        # gets only the `foo.b` fields.
+
+        # `foo`s with `foo.c in [100, 101]`:
+        'selectC'                  # gets the `foo.a` and `foo.c` fields.
     ]
 
     # Accesses each reactive of a `fooWatcher`
@@ -289,11 +292,12 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
 
     # Check that a `fooWatcher` resets the
     # watchers it should and does not reset
-    # the ones it should not.
-    # Input: (
-    #   `FooWatcher` instance,
-    #   array of watchers that should be reset
-    # )
+    # the ones it should not. 
+    #
+    #     # Input: (
+    #     #   `FooWatcher` instance,
+    #     #   array of watchers that should be reset
+    #     # )
     checkFooWatcherReset = (fw, reset) ->
         for f in fooWatcherWatchers
             if f in reset
@@ -306,7 +310,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     foo.insert()
     fooWatcher = new $$.FooWatcher
     fooWatcher.insert()
-    touchFooWatcher(fooWatcher)
+    touchFooWatcher fooWatcher
 
     foo.a(5)
     foo.saveAndDenorm()
@@ -320,19 +324,19 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     foo.saveAndDenorm()
     # `foo.b` and foo.c` are irrelevant.
     checkFooWatcherReset fooWatcher, []
-    touchFooWatcher(fooWatcher)
+    touchFooWatcher fooWatcher
 
     foo.a(1)
     foo.saveAndDenorm()
     # We set `foo.a(1)`. This should
-    # reset all watchers on `fooWatcher`.
+    # reset all `selectA` watchers on `fooWatcher`.
     checkFooWatcherReset fooWatcher, [
         'selectA',
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
     ]
-    touchFooWatcher(fooWatcher)
+    touchFooWatcher fooWatcher
 
     foo.b(7)
     foo.saveAndDenorm()
@@ -349,21 +353,63 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
         'selectA',
         'selectA_projectC'
     ]
-    touchFooWatcher(fooWatcher)
+    touchFooWatcher fooWatcher
 
     foo.a(2)
     foo.saveAndDenorm()
     # We change `foo.a` from the matching value
     # `1` to `2`. Since `fooWatcher` has starting
-    # watching `foo`, it should reset all fields
-    # to stop watching.
+    # watching `foo`, it should reset all selectA
+    # watchers to stop watching.
     checkFooWatcherReset fooWatcher, [
         'selectA',
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
     ]
-    touchFooWatcher(fooWatcher)
+    touchFooWatcher fooWatcher
+
+    foo.b(100)
+    foo.saveAndDenorm()
+    # `100` is a watched `foo.b` value.
+    # The `selectB` watchers should reset.
+    checkFooWatcherReset fooWatcher, [
+        'selectB',
+        'selectB_projectB'
+    ]
+    touchFooWatcher fooWatcher
+
+    foo.b(101)
+    foo.saveAndDenorm()
+    # `101` is the other watched value.
+    checkFooWatcherReset fooWatcher, [
+        'selectB',
+        'selectB_projectB'
+    ]
+    touchFooWatcher fooWatcher
+
+    foo.b(102)
+    foo.saveAndDenorm()
+    # `102` is not watched. The `selectB`
+    # watchers should reset to unwatch.
+    checkFooWatcherReset fooWatcher, [
+        'selectB',
+        'selectB_projectB'
+    ]
+    touchFooWatcher fooWatcher
+
+    foo.b(103)
+    foo.saveAndDenorm()
+    # Changing `foo.b` to another unwatched
+    # value should not reset any watchers.
+    checkFooWatcherReset fooWatcher, []
+    touchFooWatcher fooWatcher
+
+    foo.c(100)
+    foo.saveAndDenorm()
+    # `foo.c` should now be watched by `selectC`.
+    checkFooWatcherReset fooWatcher, ['selectC']
+    touchFooWatcher fooWatcher
 
 
 _wasReset = (modelName, instanceId, reactiveName) ->
