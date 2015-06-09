@@ -13,6 +13,7 @@ J.defineModel 'JDataSession', 'jframework_datasessions',
 
 
 Fiber = Npm.require 'fibers'
+Future = Npm.require 'fibers/future'
 
 J._inMethod = new Meteor.EnvironmentVariable
 
@@ -26,6 +27,7 @@ J.methods = (methods) ->
                     methodFunc.apply @, args
 
     Meteor.methods wrappedMethods
+
 
 
 # JSON.stringify([modelName, instanceId, reactiveName]): true
@@ -56,6 +58,54 @@ _flushRecalcBuffer = ->
         J.denorm.recalc instance, reactiveName
 
 
+
+# "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}": reactiveCalcObj
+J._reactiveCalcsInProgress = {}
+
+# [{modelName, instanceId, reactiveName, priority}]
+J._reactiveCalcQueue = []
+
+J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
+    modelClass = J.models[modelName]
+    reactiveSpec = modelClass.reactiveSpecs[reactiveName]
+    priority ?= reactiveSpec.priority ? 0.5
+
+    reactiveKey = "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}"
+    reactiveCalcObj = J._reactiveCalcsInProgress[reactiveKey]
+    if reactiveCalcObj?
+        if priority > reactiveCalcObj.priority
+            reactiveCalcObj.priority = priority
+            J.util.sortByKey J._reactiveCalcQueue, 'priority'
+    else
+        reactiveCalcObj =
+            modelName: modelName
+            instanceId: instanceId
+            reactiveName: reactiveName
+            priority: priority
+        J._reactiveCalcsInProgress[reactiveKey] = reactiveCalcObj
+        J._reactiveCalcQueue.push reactiveCalcObj
+        J.util.sortByKey J._reactiveCalcQueue, 'priority'
+
+Meteor.setInterval(
+    ->
+        return if J._reactiveCalcQueue.length is 0
+
+        reactiveCalcObj = J._reactiveCalcQueue.pop()
+        reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+        delete J._reactiveCalcsInProgress[reactiveKey]
+
+        modelClass = J.models[reactiveCalcObj.modelName]
+        instance = modelClass.fetchOne reactiveCalcObj.instanceId
+        return if not instance?
+
+        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+    # Strategically betting that an interval of 50
+    # is slow enough to prioritize observer-callback
+    # and method fibers, but still pretty fast.
+    50
+)
+
 # dataSessionId: J.Dict
 #     updateObserversFiber: <Fiber>
 #     querySpecSet: {qsString: true}
@@ -69,7 +119,7 @@ _flushRecalcBuffer = ->
 #             limit:
 #         }
 #     ]
-dataSessions = {}
+J._dataSessions = {}
 
 # Stores Meteor's publisher functions
 # sessionId:
@@ -82,10 +132,15 @@ dataSessionPublisherContexts = {}
 
 # The set of active cursors and exactly what each has sent to the client
 # dataSessionId: modelName: docId: fieldName: querySpecString: value
-dataSessionFieldsByModelIdQuery = {}
+J._dataSessionFieldsByModelIdQuery = {}
+
 
 
 Meteor.methods
+    _debugPublish: ->
+        J._dataSessionFieldsByModelIdQuery
+
+
     _updateDataQueries: (dataSessionId, addedQuerySpecs, deletedQuerySpecs) ->
         log = ->
             newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
@@ -97,7 +152,7 @@ Meteor.methods
 #        if deletedQuerySpecs.length
 #            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
 
-        session = dataSessions[dataSessionId]
+        session = J._dataSessions[dataSessionId]
         if not session?
             console.warn "Data session not found", dataSessionId
             throw new Meteor.Error "Data session not found: #{JSON.stringify dataSessionId}"
@@ -144,7 +199,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     log 'publish _jdata'
 
-    session = dataSessions[dataSessionId] = J.AutoDict(
+    session = J._dataSessions[dataSessionId] = J.AutoDict(
         "dataSessions[#{dataSessionId}]"
 
         querySpecSet: J.Dict() # qsString: true
@@ -154,7 +209,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
         observerByQsString: J.Dict()
     )
     dataSessionPublisherContexts[dataSessionId] = @
-    dataSessionFieldsByModelIdQuery[dataSessionId] = {}
+    J._dataSessionFieldsByModelIdQuery[dataSessionId] = {}
 
     existingSessionInstance = $$.JDataSession.fetchOne dataSessionId
     if existingSessionInstance?
@@ -165,15 +220,17 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     @onStop =>
         console.log "[#{dataSessionId}] PUBLISHER STOPPED"
+        session.observerByQsString().forEach (qsString, observer) =>
+            observer.stop()
         session.stop()
 
         if session.updateObserversFiber?
             console.warn "Uh oh, we were in the middle of updating observers."
             session.updateObserversFiber.reset()
 
-        delete dataSessionFieldsByModelIdQuery[dataSessionId]
+        delete J._dataSessionFieldsByModelIdQuery[dataSessionId]
         delete dataSessionPublisherContexts[dataSessionId]
-        delete dataSessions[dataSessionId]
+        delete J._dataSessions[dataSessionId]
         $$.JDataSession.remove dataSessionId
 
     @ready()
@@ -194,7 +251,7 @@ updateObservers = (dataSessionId) ->
         console.log.apply console, newArgs
     # log "Update observers"
 
-    session = dataSessions[dataSessionId]
+    session = J._dataSessions[dataSessionId]
 
     oldQsStrings = session.observerByQsString().getKeys()
     newQsStrings = session.mergedQuerySpecs().map(
@@ -204,7 +261,7 @@ updateObservers = (dataSessionId) ->
 
     # console.log "qsStringsDiff", qsStringsDiff
 
-    fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
+    fieldsByModelIdQuery = J._dataSessionFieldsByModelIdQuery[dataSessionId]
 
     
     getMergedSubfields = (a, b) ->
@@ -237,42 +294,67 @@ updateObservers = (dataSessionId) ->
     setField = (modelName, id, fieldName, querySpec, value) ->
         modelClass = J.models[modelName]
         qsString = J.fetching.stringifyQs querySpec
-        fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
 
         if fieldName is '_reactives'
-            reactivesObj = JSON.parse(JSON.stringify(value ? {}))
-            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = reactivesObj
+            # log "#{J.util.stringify querySpec} sees #{JSON.stringify id}._reactives: #{JSON.stringify value}"
 
-            instance = undefined
+            fieldsByModelIdQuery[modelName][id]._reactives ?= {}
+            reactivesObj = _.clone fieldsByModelIdQuery[modelName][id]._reactives[qsString] ? {}
+            fieldsByModelIdQuery[modelName][id]._reactives[qsString] = reactivesObj
+
+            inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
 
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 included = false
 
                 if reactiveSpec.denorm
-                    for fieldOrReactiveSpec of querySpec.fields ? {}
+                    for fieldOrReactiveSpec of inclusionSet
                         if fieldOrReactiveSpec.split('.')[0] is reactiveName
                             included = true
                             break
 
-                if included and reactivesObj[reactiveName]?.val is undefined
-                    SYNC_RECALC = true
-                    if SYNC_RECALC
-                        reactivesObj[reactiveName] ?= {}
-                        instance ?= modelClass.fetchOne id
-                        if instance?
-                            # Instance might not exist because the instance might have been
-                            # deleted while we're still catching up publishing an @added or @changed
-                            # that includes a reactive.
-                            reactivesObj[reactiveName].val = J.denorm.recalc instance, reactiveName
+                if included
+                    reactiveValue = value[reactiveName]?.val
+                    reactiveTs = value[reactiveName]?.ts
+
+                    needsRecalc = false
+                    if reactiveValue is undefined
+                        needsRecalc = true
+                        for qss, qssReactivesObj of fieldsByModelIdQuery[modelName][id]._reactives
+                            continue if reactiveName not of qssReactivesObj
+                            qssVal = qssReactivesObj[reactiveName].val
+                            qssTs = qssReactivesObj[reactiveName].ts
+
+                            if qssVal isnt undefined and (not reactiveTs? or qssTs > reactiveTs)
+                                # A querySpec still thinks it knows what the reactive
+                                # value is, so we might not need to recompute it. Either qsString's
+                                # cursor will soon observe qss's same value, or else qss and all
+                                # the other cursors will observe undefined and the last one will
+                                # recalculate the value of reactiveName.
+                                needsRecalc = false
+
+                                # Note that qss might be the same as qsString. This is useful
+                                # when we've recalculated multiple reactives in the publisher
+                                # but the db's _reactives field is still catching up from multiple
+                                # update operations (one per reactive)
+                                if qss is qsString
+                                    reactiveValue = qssVal
+                                    reactiveTs = qssTs
+
+                                break
+
+                    if needsRecalc
+                        # Keep publishing the previous value of reactivesObj[reactiveName]
+                        # until the recalc task gets popped off the queue asynchronously.
+                        J._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
-                        bufferKey = JSON.stringify [modelName, id, reactiveName]
-                        console.log "#{JSON.stringify querySpec} <<< deferring recalc of #{reactiveName}
-                            #{if bufferKey of J._recalcBuffer then '(redundant)' else ''}"
-
-                        _addRecalcBufferKey bufferKey
+                        reactivesObj[reactiveName] =
+                            val: reactiveValue
+                            ts: reactiveTs
 
         else
+            fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
             fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
 
 
@@ -288,15 +370,16 @@ updateObservers = (dataSessionId) ->
             if querySpec[optionName]?
                 mongoOptions[optionName] = querySpec[optionName]
 
+        mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
         mongoOptions.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
 
         # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
-        cursor = modelClass.collection.find querySpec.selector, mongoOptions
+        cursor = modelClass.collection.find mongoSelector, mongoOptions
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                # log querySpec, "server says ADDED:", id, fields
+                # log querySpec, "server says ADDED:", JSON.stringify(id), fields
 
                 fields = _.clone fields
                 fields._reactives ?= {}
@@ -330,7 +413,7 @@ updateObservers = (dataSessionId) ->
                     @added modelClass.collection._name, id, changedFields
 
             changed: (id, fields) =>
-                # log querySpec, "server says CHANGED:", id, fields
+                # log querySpec, "server says CHANGED:", JSON.stringify(id), fields
 
                 fields = _.clone fields
                 fields._reactives ?= {}
@@ -345,11 +428,11 @@ updateObservers = (dataSessionId) ->
                         changedFields[fieldName] = newValue
 
                 if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id, changedFields
+                    # log querySpec, "sending CHANGED:", JSON.stringify(id), changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                # log querySpec, "server says REMOVED:", id
+                # log querySpec, "server says REMOVED:", JSON.stringify(id)
 
                 changedFields = {}
 
@@ -364,10 +447,10 @@ updateObservers = (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    # log querySpec, "sending REMOVED:", id
+                    # log querySpec, "sending REMOVED:", JSON.stringify(id)
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id
+                    # log querySpec, "sending CHANGED:", JSON.stringify(id)
                     @changed modelClass.collection._name, id, changedFields
 
         session.observerByQsString().setOrAdd qsString, observer

@@ -24,9 +24,51 @@ J.dm 'Foo', 'foos',
             val: ->
                 @a() + @c()
         e:
+            denorm: true
             include: true
             val: ->
                 @b() + 1
+
+J.dm 'FooWatcher', 'foowatchers',
+    _id: $$.str
+    reactives:
+        selectA:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(a: 1)
+                null
+        selectA_projectA:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                        a: true
+                )
+                null
+        selectA_projectC:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                        c: true
+                )
+                null
+        selectA_projectNothing:
+            denorm: true
+            val: ->
+                $$.Foo.fetchOne(
+                    a: 1
+                ,
+                    fields:
+                        _: false
+                )
+                null
 
 
 J.dm 'Bar', 'bars',
@@ -42,3 +84,72 @@ J.dm 'Bar', 'bars',
             denorm: true
             val: ->
                 $$.Foo.fetch({ a: 4 }).size()
+
+
+J.dm 'ModelA', 'as',
+    _id: $$.str
+
+    fields:
+        x:
+            type: $$.num
+
+    reactives:
+        ar1:
+            denorm: true
+            val: ->
+                @x() + 1
+
+        ar2:
+            denorm: true
+            val: ->
+                @ar1() + 1
+
+
+J.dm 'ModelB', 'bs',
+    _id: $$.str
+
+    fields:
+        aId:
+            type: $$.str
+
+        y:
+            type: $$.num
+
+    reactives:
+        br1:
+            denorm: true
+            val: ->
+                @y() + 1
+
+        br2:
+            denorm: true
+            val: ->
+                @br1() + 1
+
+        br3:
+            denorm: true
+            val: ->
+                $$.ModelA.fetchOne(
+                    @aId()
+                ,
+                    fields: ar2: true
+                ).ar2() + 1
+
+
+J.dm 'ModelC', 'cs',
+    _id: $$.str
+
+    immutable: true
+    fields:
+        bId:
+            type: $$.str
+
+    reactives:
+        cr1:
+            denorm: true
+            val: ->
+                $$.ModelB.fetchOne(
+                    @bId()
+                ,
+                    fields: br3: true
+                ).br3() + 1
