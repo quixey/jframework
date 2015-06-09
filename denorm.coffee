@@ -353,7 +353,7 @@ J.denorm =
         resetWatchersHelper modelName, instanceId, oldValues, newValues, timestamp
 
 
-if Meteor.isServer then Meteor.startup ->
+Meteor.startup ->
     J.methods
         testRecalc: (modelName, instanceId, reactiveName) ->
             modelClass = J.models[modelName]

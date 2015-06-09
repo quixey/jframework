@@ -103,6 +103,17 @@ J._dequeueReactiveCalc = ->
     J.denorm.recalc instance, reactiveCalcObj.reactiveName
 
 
+
+# This is a lightweight loop to make sure the highest-priority
+# recalcs are always getting dequeued
+Meteor.setInterval(
+    J._dequeueReactiveCalc
+    1000
+)
+
+
+# This loop is to do heavy lifting faster when conditions
+# seem kind of idle.
 _lastTs = new Date().getTime()
 Meteor.setInterval(
     ->
@@ -110,7 +121,7 @@ Meteor.setInterval(
         interval = ts - _lastTs
         _lastTs = ts
 
-        if interval > 150
+        if interval > 550
             # Wait for conditions to calm down because this recalc
             # loop is lower priority than handling methods and
             # running the publisher's observer callbacks
@@ -120,14 +131,11 @@ Meteor.setInterval(
         for i in [0...Math.min 5, J._reactiveCalcQueue.length]
             do (i) ->
                 Meteor.setTimeout(
-                    ->
-                        if J._reactiveCalcQueue.length > 0
-                            console.log "Minifiber ##{i} dequeue"
-                        J._dequeueReactiveCalc()
+                    J._dequeueReactiveCalc
                     50
                 )
 
-    100
+    500
 )
 
 

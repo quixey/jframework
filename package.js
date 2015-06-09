@@ -80,7 +80,6 @@ Package.onUse(function(api) {
         "proptypes.coffee",
         "models.coffee",
         "fetching.coffee",
-        "denorm.coffee",
         "routing.coffee",
         "dom.coffee"
     ]);
@@ -102,7 +101,8 @@ Package.onUse(function(api) {
     ]);
 
     api.addFiles([
-        "publish.coffee"
+        "publish.coffee",
+        "denorm.coffee"
     ], "server");
 
     api.addFiles([
