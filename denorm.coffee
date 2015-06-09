@@ -215,6 +215,33 @@ J.denorm =
                 addSelectorClauses [], mutableOldValues, mutableNewValues
 
 
+                # We have to build watcherMatcher piece by piece because
+                # we can't have an empty array of $or terms.
+                changeConditions = []
+
+                # The watcher's set of docIds might have changed
+                # because its selector mentions a changed subfield
+                if changedSubfieldSelectorMatcher.length
+                    changeConditions.push
+                        $or: changedSubfieldSelectorMatcher
+
+                # The watcher's set of docIds might have changed
+                # because its sort key mentions a changed subfield
+                if changedSubfieldSortSpecMatcher.length
+                    changeConditions.push
+                        $or: changedSubfieldSortSpecMatcher
+
+                # The watcher's set of field values might have changed
+                # because its projection mentions a changed subfield
+                if changedSubfieldAlacarteProjectionMatcher.length
+                    changeConditions.push
+                        'fields._': false
+                        $or: changedSubfieldAlacarteProjectionMatcher
+                if changedSubfieldOverrideProjectionMatcher.length
+                    changeConditions.push
+                        'fields._': $in: [null, true]
+                        $or: changedSubfieldOverrideProjectionMatcher
+
                 watcherMatcher =
                     modelName: modelName
                     $and: [
@@ -222,28 +249,14 @@ J.denorm =
                         # the old or new document
                         $or: [
                             selector: $in: [null, instanceId]
-                        ,
-                            $and: subfieldSelectorMatcher
-                        ]
-                    ,
-                        $or: [
-                            # The watcher's set of docIds might have changed
-                            # because its selector mentions a changed subfield
-                            $or: changedSubfieldSelectorMatcher
-                        ,
-                            # The watcher's set of docIds might have changed
-                            # because its sort key mentions a changed subfield
-                            $or: changedSubfieldSortSpecMatcher
-                        ,
-                            # The watcher's set of field values might have changed
-                            # because its projection mentions a changed subfield
-                            'fields._': false
-                            $or: changedSubfieldAlacarteProjectionMatcher
-                        ,
-                            'fields._': $in: [null, true]
-                            $or: changedSubfieldOverrideProjectionMatcher
                         ]
                     ]
+                if subfieldSelectorMatcher.length
+                    watcherMatcher.$and[0].$or.push
+                        $and: subfieldSelectorMatcher
+                if changeConditions.length
+                    watcherMatcher.$and.push
+                        $or: changeConditions
 
                 watcherMatcher
 
@@ -271,7 +284,7 @@ J.denorm =
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
                 watcherModelClass = J.models[watcherModelName]
-                # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
+                console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
                     #{JSON.stringify instanceId}>"
 
                 selector = {}
@@ -297,7 +310,7 @@ J.denorm =
                     Meteor.bindEnvironment (err, doc) ->
                         if err
                             console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
-                                        watchers of #{modelName}.#{JSON.stringify instanceId}:"
+                                watchers of #{modelName}.#{JSON.stringify instanceId}:"
                             console.error err
                             lockRelease()
                             return
@@ -320,7 +333,7 @@ J.denorm =
                             if numWatchersReset
                                 console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                                     #{numWatchersReset} watchers reset"
-                                console.log "selector: #{JSON.stringify selector, null, 4}"
+                                # console.log "selector: #{JSON.stringify selector, null, 4}"
 
                             lockRelease()
                 )
