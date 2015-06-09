@@ -86,25 +86,56 @@ J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
         J._reactiveCalcQueue.push reactiveCalcObj
         J.util.sortByKey J._reactiveCalcQueue, 'priority'
 
+
+J._dequeueReactiveCalc = ->
+    return if J._reactiveCalcQueue.length is 0
+
+    reactiveCalcObj = J._reactiveCalcQueue.pop()
+    reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+    delete J._reactiveCalcsInProgress[reactiveKey]
+
+    modelClass = J.models[reactiveCalcObj.modelName]
+    instance = modelClass.fetchOne reactiveCalcObj.instanceId
+    return if not instance?
+
+    J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+
+
+# This is a lightweight loop to make sure the highest-priority
+# recalcs are always getting dequeued
+Meteor.setInterval(
+    J._dequeueReactiveCalc
+    1000
+)
+
+
+# This loop is to do heavy lifting faster when conditions
+# seem kind of idle.
+_lastTs = new Date().getTime()
 Meteor.setInterval(
     ->
-        return if J._reactiveCalcQueue.length is 0
+        ts = new Date().getTime()
+        interval = ts - _lastTs
+        _lastTs = ts
 
-        reactiveCalcObj = J._reactiveCalcQueue.pop()
-        reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
-        delete J._reactiveCalcsInProgress[reactiveKey]
+        if interval > 550
+            # Wait for conditions to calm down because this recalc
+            # loop is lower priority than handling methods and
+            # running the publisher's observer callbacks
+            console.log "***INTERVAL: #{interval}"
+            return
 
-        modelClass = J.models[reactiveCalcObj.modelName]
-        instance = modelClass.fetchOne reactiveCalcObj.instanceId
-        return if not instance?
+        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
+            do (i) ->
+                Meteor.setTimeout(
+                    J._dequeueReactiveCalc
+                    50
+                )
 
-        J.denorm.recalc instance, reactiveCalcObj.reactiveName
-
-    # Strategically betting that an interval of 50
-    # is slow enough to prioritize observer-callback
-    # and method fibers, but still pretty fast.
-    50
+    500
 )
+
 
 # dataSessionId: J.Dict
 #     updateObserversFiber: <Fiber>

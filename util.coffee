@@ -4,6 +4,8 @@
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
 
+if Meteor.isServer
+    Fiber = Npm.require 'fibers'
 
 _.extend J,
     assert: (boolValue, errorMessage) ->
@@ -394,6 +396,18 @@ J.util =
             J.util.getField x, 'key'
         else
             throw new Meteor.Error "No default sort-key semantics for: #{x}"
+
+    sleep: (ms) ->
+        if Meteor.isClient
+            console.warn "Shouldn't call sleep on the client."
+            return
+
+        fiber = Fiber.current
+        setTimeout(
+            -> fiber.run()
+            ms
+        )
+        Fiber.yield()
 
     sortByKeyReverse: (arr, keySpec = J.util.sortByKeyFunc) ->
         J.util.sortByKey arr, keySpec
