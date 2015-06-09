@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 if Meteor.isServer then Tinytest.add "resetWatchers 1", (test) ->
     $$.ModelA.remove {}
@@ -269,74 +267,83 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
         )
 
 if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections", (test) ->
+    touchFooWatcher = (fw) ->
+        fw.selectA()
+        fw.selectA_projectA()
+        fw.selectA_projectC()
+        fw.selectA_projectNothing()
+    checkFooWatcherResetFields = (fw, resetFields, notResetFields) ->
+        for f in resetFields
+            test.isTrue _wasReset 'FooWatcher', fw._id, f
+        for f in notResetFields
+            test.isFalse _wasReset 'FooWatcher', fw._id, f
+
+
     foo = new $$.Foo
     foo.insert()
     fooWatcher = new $$.FooWatcher
     fooWatcher.insert()
-
-    fooWatcher.selectA()
-    fooWatcher.selectA_projectA()
-    fooWatcher.selectA_projectC()
-    fooWatcher.selectA_projectNothing()
+    touchFooWatcher(fooWatcher)
 
     foo.a(5)
     foo.saveAndDenorm()
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+    checkFooWatcherResetFields fooWatcher, [], [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ]
 
     foo.b(6)
     foo.c(16)
     foo.saveAndDenorm()
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
-    fooWatcher.selectA()
-    fooWatcher.selectA_projectA()
-    fooWatcher.selectA_projectC()
-    fooWatcher.selectA_projectNothing()
+    checkFooWatcherResetFields fooWatcher, [], [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ]
+    touchFooWatcher(fooWatcher)
 
     foo.a(1)
     foo.saveAndDenorm()
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
-    fooWatcher.selectA()
-    fooWatcher.selectA_projectA()
-    fooWatcher.selectA_projectC()
-    fooWatcher.selectA_projectNothing()
+    checkFooWatcherResetFields fooWatcher, [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ], []
+    touchFooWatcher(fooWatcher)
 
     foo.b(7)
     foo.saveAndDenorm()
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
+    checkFooWatcherResetFields fooWatcher, [], [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ]
 
     foo.c(17)
     foo.saveAndDenorm()
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isFalse _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
-    fooWatcher.selectA()
-    fooWatcher.selectA_projectA()
-    fooWatcher.selectA_projectC()
-    fooWatcher.selectA_projectNothing()
+    checkFooWatcherResetFields fooWatcher, [
+        'selectA',
+        'selectA_projectC'
+    ], [
+        'selectA_projectA',
+        'selectA_projectNothing'
+    ]
+    touchFooWatcher(fooWatcher)
 
     foo.a(2)
     foo.saveAndDenorm()
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectA'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectC'
-    test.isTrue _wasReset 'FooWatcher', fooWatcher._id, 'selectA_projectNothing'
-    fooWatcher.selectA()
-    fooWatcher.selectA_projectA()
-    fooWatcher.selectA_projectC()
-    fooWatcher.selectA_projectNothing()
+    checkFooWatcherResetFields fooWatcher, [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ], []
+    touchFooWatcher(fooWatcher)
 
 
 _wasReset = (modelName, instanceId, reactiveName) ->
