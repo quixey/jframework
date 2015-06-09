@@ -88,25 +88,48 @@ J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
         J._reactiveCalcQueue.push reactiveCalcObj
         J.util.sortByKey J._reactiveCalcQueue, 'priority'
 
+
+J._dequeueReactiveCalc = ->
+    return if J._reactiveCalcQueue.length is 0
+
+    reactiveCalcObj = J._reactiveCalcQueue.pop()
+    reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+    delete J._reactiveCalcsInProgress[reactiveKey]
+
+    modelClass = J.models[reactiveCalcObj.modelName]
+    instance = modelClass.fetchOne reactiveCalcObj.instanceId
+    return if not instance?
+
+    J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+
+_lastTs = new Date().getTime()
 Meteor.setInterval(
     ->
-        return if J._reactiveCalcQueue.length is 0
+        ts = new Date().getTime()
+        interval = ts - _lastTs
+        _lastTs = ts
 
-        reactiveCalcObj = J._reactiveCalcQueue.pop()
-        reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
-        delete J._reactiveCalcsInProgress[reactiveKey]
+        if interval > 150
+            # Wait for conditions to calm down because this recalc
+            # loop is lower priority than handling methods and
+            # running the publisher's observer callbacks
+            console.log "***INTERVAL: #{interval}"
+            return
 
-        modelClass = J.models[reactiveCalcObj.modelName]
-        instance = modelClass.fetchOne reactiveCalcObj.instanceId
-        return if not instance?
+        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
+            do (i) ->
+                Meteor.setTimeout(
+                    ->
+                        if J._reactiveCalcQueue.length > 0
+                            console.log "Minifiber ##{i} dequeue"
+                        J._dequeueReactiveCalc()
+                    50
+                )
 
-        J.denorm.recalc instance, reactiveCalcObj.reactiveName
-
-    # Strategically betting that an interval of 50
-    # is slow enough to prioritize observer-callback
-    # and method fibers, but still pretty fast.
-    50
+    100
 )
+
 
 ###
     dataSessionId: J.Dict
