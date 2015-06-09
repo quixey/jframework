@@ -517,14 +517,12 @@ _.extend J.fetching,
 
 
     selectorToMongoSelector: (modelClass, selector) ->
-        ###
-            Input:
-                The kind of selector passed to the first argument of .fetch
-                on a Model in JFramework
-            Output:
-                The corresponding Mongo-style selector that we can pass to
-                MongoCollection.find
-        ###
+        # Input:
+        #     The kind of selector passed to the first argument of .fetch
+        #     on a Model in JFramework
+        # Output:
+        #     The corresponding Mongo-style selector that we can pass to
+        #     MongoCollection.find
 
         if not _.isObject selector
             return selector

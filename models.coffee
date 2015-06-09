@@ -168,12 +168,10 @@ class J.Model
 
 
     _setReactives: (reactivesObj) ->
-        ###
-            reactivesObj:
-                The _reactives field from the raw Mongo doc,
-                filtered down to only the denormed reactives
-                we cared to fetch.
-        ###
+        # reactivesObj:
+        #     The _reactives field from the raw Mongo doc,
+        #     filtered down to only the denormed reactives
+        #     we cared to fetch.
 
         reactivesSetter = {}
 
@@ -328,10 +326,7 @@ class J.Model
 
     # ## insert
     # - - -
-    # Insert a model document into a collection.
-    #
-    #     model.insert(collection, callback)
-    #     model.insert(callback) # uses @collection
+    # Insert a model document into its collection.
     # - - -
     insert: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
@@ -354,11 +349,8 @@ class J.Model
 
     # ## save
     # - - -
-    # Save a model instance into a collection.  
+    # Save a model instance into its collection.
     # Returns `@_id`.
-    #
-    #     foo.save(collection, callback)
-    #     foo.save(callback) # uses @collection
     # - - -
     save: (options = {}, callback) ->
         if _.isFunction(options) and arguments.length is 1
