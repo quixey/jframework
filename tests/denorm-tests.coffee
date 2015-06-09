@@ -272,6 +272,12 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     #   `selectA_projectA`:       gets only the `foo.a` field.
     #   `selectA_projectC`:       gets only the `foo.c` field.
     #   `selectA_projectNothing`: gets none of the fields.
+    fooWatcherWatchers = [
+        'selectA',
+        'selectA_projectA',
+        'selectA_projectC',
+        'selectA_projectNothing'
+    ]
 
     # Accesses each reactive of a `fooWatcher`
     # to make sure that it starts watching `foo`.
@@ -286,14 +292,14 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     # the ones it should not.
     # Input: (
     #   `FooWatcher` instance,
-    #   array of watchers that should be reset,
-    #   array of watchers that should not be reset
+    #   array of watchers that should be reset
     # )
-    checkFooWatcherReset = (fw, reset, notReset) ->
-        for f in reset
-            test.isTrue _wasReset 'FooWatcher', fw._id, f
-        for f in notReset
-            test.isFalse _wasReset 'FooWatcher', fw._id, f
+    checkFooWatcherReset = (fw, reset) ->
+        for f in fooWatcherWatchers
+            if f in reset
+                test.isTrue _wasReset 'FooWatcher', fw._id, f
+            else
+                test.isFalse _wasReset 'FooWatcher', fw._id, f
 
 
     foo = new $$.Foo
@@ -307,23 +313,13 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     # Since we set `foo.a(5)` and `fooWatcher`
     # only cares if `foo.a == 1`, no watchers
     # should be reset.
-    checkFooWatcherReset fooWatcher, [], [
-        'selectA',
-        'selectA_projectA',
-        'selectA_projectC',
-        'selectA_projectNothing'
-    ]
+    checkFooWatcherReset fooWatcher, []
 
     foo.b(6)
     foo.c(16)
     foo.saveAndDenorm()
     # `foo.b` and foo.c` are irrelevant.
-    checkFooWatcherReset fooWatcher, [], [
-        'selectA',
-        'selectA_projectA',
-        'selectA_projectC',
-        'selectA_projectNothing'
-    ]
+    checkFooWatcherReset fooWatcher, []
     touchFooWatcher(fooWatcher)
 
     foo.a(1)
@@ -335,19 +331,14 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
-    ], []
+    ]
     touchFooWatcher(fooWatcher)
 
     foo.b(7)
     foo.saveAndDenorm()
     # `foo.b` is not a default fetched field,
     # so it should not affect `fooWatcher`.
-    checkFooWatcherReset fooWatcher, [], [
-        'selectA',
-        'selectA_projectA',
-        'selectA_projectC',
-        'selectA_projectNothing'
-    ]
+    checkFooWatcherReset fooWatcher, []
 
     foo.c(17)
     foo.saveAndDenorm()
@@ -357,9 +348,6 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     checkFooWatcherReset fooWatcher, [
         'selectA',
         'selectA_projectC'
-    ], [
-        'selectA_projectA',
-        'selectA_projectNothing'
     ]
     touchFooWatcher(fooWatcher)
 
@@ -374,7 +362,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
-    ], []
+    ]
     touchFooWatcher(fooWatcher)
 
 
