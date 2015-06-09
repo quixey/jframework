@@ -70,7 +70,7 @@ J.denorm =
 
 
     resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date(), callback) ->
-        console.log "RESETWATCHERS <#{modelName} #{JSON.stringify(instanceId)}>
+        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
             #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
         # Total number of running calls to resetWatchersHelper
@@ -100,7 +100,7 @@ J.denorm =
 
             modelClass = J.models[modelName]
 
-            console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
+            # console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
                 #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
 
 
@@ -284,7 +284,7 @@ J.denorm =
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
                 watcherModelClass = J.models[watcherModelName]
-                console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
+                # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
                     #{JSON.stringify instanceId}>"
 
                 selector = {}

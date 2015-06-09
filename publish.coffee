@@ -271,7 +271,7 @@ updateObservers = (dataSessionId) ->
 
             inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
 
-            instanceDoc = undefined
+            instance = undefined
 
             futureByReactiveName = {}
             ts = new Date()
@@ -323,17 +323,13 @@ updateObservers = (dataSessionId) ->
                             log "#{J.util.stringify querySpec} Fresh recalc of <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
                             future = J._reactiveCalcsInProgress[reactiveKey] = do (reactiveName, reactiveKey) ->
                                 Future.task ->
-                                    if instanceDoc is undefined
-                                        # Do a raw Mongo findOne which this includes the _reactives field.
-                                        instanceDoc = modelClass.findOne id,
-                                            fields: _reactives: 0
-                                            transform: false
+                                    if instance is undefined
+                                        instance = modelClass.fetchOne id
 
-                                    # instanceDoc might not exist because the instance might have been
+                                    # instance might not exist because the instance might have been
                                     # deleted while we're still catching up publishing an @added or @changed
                                     # that includes a reactive.
-                                    if instanceDoc?
-                                        instance = modelClass.fromDoc instanceDoc
+                                    if instance?
                                         ret = J.denorm.recalc instance, reactiveName, ts
 
                                     delete J._reactiveCalcsInProgress[reactiveKey]
