@@ -40,7 +40,11 @@ J.denorm =
             value = reactiveSpec.val.call instance
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        if value instanceof J.List
+        if _.isArray value
+            value = J.List(value).toArr()
+        else if J.util.isPlainObject value
+            value = J.Dict(value).toObj()
+        else if value instanceof J.List
             value = value.toArr()
         else if value instanceof J.Dict
             value = value.toObj()

@@ -73,6 +73,8 @@ J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
     reactiveKey = "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}"
     reactiveCalcObj = J._reactiveCalcsInProgress[reactiveKey]
     if reactiveCalcObj?
+        # reactiveCalcObj is either already in the queue, or has been
+        # dequeued and is currently being recalculated.
         if priority > reactiveCalcObj.priority
             reactiveCalcObj.priority = priority
             J.util.sortByKey J._reactiveCalcQueue, 'priority'
@@ -92,13 +94,16 @@ J._dequeueReactiveCalc = ->
 
     reactiveCalcObj = J._reactiveCalcQueue.pop()
     reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
-    delete J._reactiveCalcsInProgress[reactiveKey]
 
     modelClass = J.models[reactiveCalcObj.modelName]
     instance = modelClass.fetchOne reactiveCalcObj.instanceId
-    return if not instance?
 
-    J.denorm.recalc instance, reactiveCalcObj.reactiveName
+    # While this is recalculating, J._reactiveCalcsInProgress still contains reactiveKey
+    # or else a different fiber could redundantly start the same recalc
+    if instance?
+        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+    delete J._reactiveCalcsInProgress[reactiveKey]
 
 
 
