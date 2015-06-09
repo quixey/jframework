@@ -100,10 +100,12 @@ Meteor.setInterval(
         instance = modelClass.fetchOne reactiveCalcObj.instanceId
         return if not instance?
 
-        console.log "Popped: #{reactiveKey}"
         J.denorm.recalc instance, reactiveCalcObj.reactiveName
 
-    1
+    # Strategically betting that an interval of 50
+    # is slow enough to prioritize observer-callback
+    # and method fibers, but still pretty fast.
+    50
 )
 
 ###
