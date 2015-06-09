@@ -267,28 +267,10 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
         )
 
 if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections", (test) ->
-    fooWatcherWatchers = [
-        # `foo`s with `foo.a == 1`:
-        'selectA',                 # gets the `foo.a` and `foo.c` fields.
-        'selectA_projectA',        # gets only the `foo.a` field.
-        'selectA_projectC',        # gets only the `foo.c` field.
-        'selectA_projectNothing',  # gets none of the fields.
-
-        # `foo`s with `foo.b in [100, 101]`:
-        'selectB',                 # gets the `foo.a` and `foo.c` fields.
-        'selectB_projectB',        # gets only the `foo.b` fields.
-
-        # `foo`s with `foo.c in [100, 101]`:
-        'selectC'                  # gets the `foo.a` and `foo.c` fields.
-    ]
-
     # Accesses each reactive of a `fooWatcher`
     # to make sure that it starts watching `foo`.
     touchFooWatcher = (fw) ->
-        fw.selectA()
-        fw.selectA_projectA()
-        fw.selectA_projectC()
-        fw.selectA_projectNothing()
+        fw.get reactiveName for reactiveName, reactiveSpec of $$.FooWatcher.reactiveSpecs
 
     # Check that a `fooWatcher` resets the
     # watchers it should and does not reset
@@ -298,12 +280,24 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     #     #   `FooWatcher` instance,
     #     #   array of watchers that should be reset
     #     # )
+    #        # `foo`s with `foo.a == 1`:
+    #        'selectA',                 # gets the `foo.a` and `foo.c` fields.
+    #        'selectA_projectA',        # gets only the `foo.a` field.
+    #        'selectA_projectC',        # gets only the `foo.c` field.
+    #        'selectA_projectNothing',  # gets none of the fields.
+    #
+    #        # `foo`s with `foo.b in [100, 101]`:
+    #        'selectB',                 # gets the `foo.a` and `foo.c` fields.
+    #        'selectB_projectB',        # gets only the `foo.b` fields.
+    #
+    #        # `foo`s with `foo.c in [100, 101]`:
+    #        'selectC'                  # gets the `foo.a` and `foo.c` fields.
     checkFooWatcherReset = (fw, reset) ->
-        for f in fooWatcherWatchers
-            if f in reset
-                test.isTrue _wasReset 'FooWatcher', fw._id, f
+        for reactiveName of $$.FooWatcher.reactiveSpecs
+            if reactiveName in reset
+                test.isTrue _wasReset 'FooWatcher', fw._id, reactiveName
             else
-                test.isFalse _wasReset 'FooWatcher', fw._id, f
+                test.isFalse _wasReset 'FooWatcher', fw._id, reactiveName
 
 
     foo = new $$.Foo
