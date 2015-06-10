@@ -89,7 +89,7 @@ _.extend J.fetching,
         if _.isArray x
             J.util.sortByKey(
                 @_getCanonical y for y in x
-                @_getCanonical
+                (y) => EJSON.stringify @_getCanonical y
             )
         else if J.util.isPlainObject x
             sortedKeys = J.util.sortByKey _.keys x
