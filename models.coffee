@@ -281,7 +281,7 @@ class J.Model
                 else
                     # On unattached instances, denormed reactives behave like
                     # non-denormed reactives.
-                    reactiveSpec.val.call @
+                    J.Var(reactiveSpec.val.call @).get()
 
         else
             fieldName = fieldOrReactiveName
@@ -996,13 +996,14 @@ Meteor.methods
         if not doc?
             return 0
 
-        instance = modelClass.fromDoc doc
-
         ret = modelClass.collection.remove instanceId
 
         if not _reserved
-            J.denorm.resetWatchers modelName, instanceId, doc, {}
+            oldFields = _.clone doc
+            delete oldFields._reactives
+            J.denorm.resetWatchers modelName, instanceId, oldFields, {}
 
+        instance = modelClass.fromDoc doc
         instance.onRemove?()
 
         ret
