@@ -318,13 +318,8 @@ updateObservers = (dataSessionId) ->
 
         modelClass = J.models[querySpec.modelName]
 
-        mongoOptions = {}
-        for optionName in ['sort', 'skip', 'limit']
-            if querySpec[optionName]?
-                mongoOptions[optionName] = querySpec[optionName]
-
         mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
-        mongoOptions.fields = J.fetching.projectionToMongoFieldsArg modelClass, querySpec.fields ? {}
+        mongoOptions = J.fetching._qsToMongoOptions querySpec
 
         # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 

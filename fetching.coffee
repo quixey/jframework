@@ -136,8 +136,9 @@ _.extend J.fetching,
         modelClass = J.models[qs.modelName]
         options = {}
         options.fields = @projectionToMongoFieldsArg modelClass, qs.fields ? {}
-        for optionName in ['sort', 'skip', 'limit']
-            if qs[optionName]? then options[optionName] = J.util.deepClone qs[optionName]
+        options.sort = @sortSpecToMongoSortSpec modelClass, qs.sort ? {}
+        if qs.limit? then options.limit = J.util.deepClone qs.limit
+        if qs.skip? then options.skip = J.util.deepClone qs.skip
         options
 
 
@@ -555,6 +556,35 @@ _.extend J.fetching,
                     selectorKey: #{selectorKey}"
 
         mongoSelector
+
+
+    sortSpecToMongoSortSpec: (modelClass, sortSpec) ->
+        mongoSortSpec = {}
+        for sortKey, direction of sortSpec
+            sortKeyParts = sortKey.split('.')
+            fieldOrReactiveName = sortKeyParts[0]
+
+            if fieldOrReactiveName is '_id'
+                mongoSortSpec[sortKey] = direction
+
+            else if fieldOrReactiveName of modelClass.fieldSpecs
+                mongoSortSpec[sortKey] = direction
+
+            else if fieldOrReactiveName of modelClass.reactiveSpecs
+                reactiveSpec = modelClass.reactiveSpecs[fieldOrReactiveName]
+                if not reactiveSpec.selectable
+                    throw new Error "Can't sort on a non-selectable reactive:
+                        #{modelClass.name}.#{fieldOrReactiveName}.val"
+                reactiveSortKey = ["_reactives.#{fieldOrReactiveName}.val"].concat(
+                    sortKeyParts[1...]
+                ).join('.')
+                mongoSortSpec[reactiveSortKey] = direction
+
+            else
+                throw new Error "#{modelClass} fetch sort spec contains invalid
+                    key: #{sortKey}"
+
+        mongoSortSpec
 
 
     stringifyQs: (qs) ->
