@@ -352,16 +352,16 @@ updateObservers = (dataSessionId) ->
                 if included
                     reactiveValue = value[reactiveName]?.val
                     reactiveTs = value[reactiveName]?.ts
-                    reactiveDirty = value[reactiveName]?.dirty
+                    reactiveDirty = value[reactiveName]?.dirty ? true
 
                     needsRecalc = false
-                    if reactiveDirty ? true
+                    if reactiveDirty
                         needsRecalc = true
                         for qss, qssReactivesObj of fieldsByModelIdQuery[modelName][id]._reactives
                             continue if reactiveName not of qssReactivesObj
                             qssVal = qssReactivesObj[reactiveName].val
                             qssTs = qssReactivesObj[reactiveName].ts
-                            qssDirty = qssReactivesObj[reactiveName].dirty
+                            qssDirty = qssReactivesObj[reactiveName].dirty ? true
 
                             if not qssDirty and (not reactiveTs? or qssTs > reactiveTs)
                                 # A querySpec still thinks it knows what the reactive
