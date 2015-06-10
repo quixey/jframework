@@ -79,6 +79,7 @@ Package.onUse(function(api) {
         "components.coffee",
         "proptypes.coffee",
         "models.coffee",
+        "fetching.coffee",
         "routing.coffee",
         "dom.coffee"
     ]);
@@ -100,11 +101,11 @@ Package.onUse(function(api) {
     ]);
 
     api.addFiles([
-        "publish.coffee"
+        "publish.coffee",
+        "denorm.coffee"
     ], "server");
 
     api.addFiles([
-        "fetching.coffee"
     ], "client");
 
     api.export("Tracker");
@@ -126,12 +127,13 @@ Package.onTest(function(api) {
     ]);
 
     api.addFiles([
-        "tests/util-tests.coffee",
         "tests/test-models.coffee",
+        "tests/util-tests.coffee",
         "tests/autovar-tests.coffee",
         "tests/list-tests.coffee",
         "tests/dict-tests.coffee",
-        "tests/jframework-tests.coffee"
+        "tests/jframework-tests.coffee",
+        "tests/denorm-tests.coffee"
     ]);
 
     api.addFiles([

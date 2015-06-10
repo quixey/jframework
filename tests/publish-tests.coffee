@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 addTest = (testName, testFunc) ->
@@ -302,11 +300,23 @@ addTest "Fetching - throw out of AutoVar valueFunc when missing fetch data", (te
         ->
             count1 += 1
             if count1 is 5 then crash
-            smallFoos = $$.Foo.fetch b: $lte: 3
+            smallFoos = $$.Foo.fetch(
+                b: $lte: 3
+            ,
+                fields: b: true
+            )
             count2 += 1
-            mediumFoos = $$.Foo.fetch b: $lte: 7
+            mediumFoos = $$.Foo.fetch(
+                b: $lte: 7
+            ,
+                fields: b: true
+            )
             count3 += 1
-            largeFoos = $$.Foo.fetch b: $lte: 10
+            largeFoos = $$.Foo.fetch(
+                b: $lte: 10
+            ,
+                fields: b: true
+            )
             test.equal count1, 4
             test.equal count2, 3
             test.equal count3, 2
@@ -327,7 +337,7 @@ addTest "Fetching - Don't call AutoVar.onChange until data is ready", (test, onC
             if completeCount is 2 then onComplete()
     )
     b = J.AutoVar(
-        -> $$.Foo.fetchOne({xyz: 'dont find me'})
+        -> $$.Foo.fetchOne({a: 'dont find me'})
         (oldFoo, newFoo) ->
             test.isTrue newFoo is null
             b.stop()
@@ -381,7 +391,7 @@ addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
                 if count is 1
                     test.isUndefined oldFoo
                     test.equal newFoo._id, foo._id
-                    selector.setOrAdd 'nonExistentField', 5
+                    selector.setOrAdd 'a', -1234321
                     test.throws -> a.get()
                 else
                     test.equal oldFoo._id, foo._id, "should have continuity since before a was undefined"

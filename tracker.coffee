@@ -1,19 +1,15 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
-###
-    A few things to augment Meteor's Tracker.
-
-    We monkey patch the tracker package because
-    we want other Meteor packages like "mongo"
-    to use the same global object.
-###
+# A few things to augment Meteor's Tracker.
+#
+# We monkey patch the tracker package because
+# we want other Meteor packages like "mongo"
+# to use the same global object.
 
 
 dummyComputation = Tracker.autorun ->
@@ -253,14 +249,12 @@ Tracker.afterFlush = (f, sortKey = 0.5) ->
 
 
 class Tracker.Dependency
-    ###
-        Like Meteor's Tracker.Dependency except that a "creator",
-        i.e. a reactive data source, should be able to freely read
-        its own reactive values as it's mutating them without
-        invalidating itself.
-        But the creator should still invalidate if it reads
-        its own values which other objects then mutate.
-    ###
+    # Like Meteor's Tracker.Dependency except that a "creator",
+    # i.e. a reactive data source, should be able to freely read
+    # its own reactive values as it's mutating them without
+    # invalidating itself.
+    # But the creator should still invalidate if it reads
+    # its own values which other objects then mutate.
 
     constructor: (creator) ->
         @creator =

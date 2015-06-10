@@ -1,12 +1,57 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Projection semantics of querySpec.fields:
+#     "_" is a magic boolean key considered true by default.
+#     When true, the querySpec.fields object extends the
+#     model's set of field and reactive inclusion defaults.
+#     When false, the querySpec.fields object represents the
+#     whole set of field inclusions being requested.
+#
+# E.g. a model with these definitions...
+#     fields: # included by default
+#         a: {}
+#         b: include: false
+#         c: {}
+#     reactives: # not-included by default
+#         d: {}
+#         e: include: true
+#
+# ...would have this mapping from querySpec.fields to included fields:
+#     _: false
+#         []
+#
+#     {} or _: true
+#         ['a', 'c', 'e']
+#
+#     a: true
+#         ['a', 'c', 'e']
+#
+#     _: false, a: true
+#         ['a']
+#
+#     a: false
+#         ['c', 'e']
+#
+#     b: true
+#         ['a', 'b', 'c', 'e']
+#
+#     e: false
+#         ['a', 'c']
+#
+#     'a.x.y': true, c: false
+#         ['a', 'a.x.y', 'e']
+#
+#     _: false, 'a.x.y': true, c: false
+#         ['a.x.y']
 
-J.fetching =
+
+J.fetching = {}
+
+if Meteor.isClient then _.extend J.fetching,
     SESSION_ID: "#{parseInt Math.random() * 1000000}"
 
     _requestInProgress: false
@@ -24,106 +69,330 @@ J.fetching =
     _unmergedQsSet: {} # mergedQuerySpecString: true
     _mergedQsSet: {} # mergedQuerySpecString: true
 
+_.extend J.fetching,
+    _deleteComputationQsRequests: (computation) ->
+        return if not computation._requestingData
+        for qsString in _.keys @_requestersByQs
+            delete @_requestersByQs[qsString][computation._id]
+            if _.isEmpty @_requestersByQs[qsString]
+                delete @_requestersByQs[qsString]
+        computation._requestingData = false
+        @_requestsChanged = true
+        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
-    _getIdsForSimpleIdQs: (qs) ->
-        if _.isString(qs.selector) and not qs.fields?
-            [qs.selector]
-        else if _.size(qs.selector) is 1 and qs.selector._id? and not qs.fields?
-            if _.isString qs.selector._id
-                [qs.selector._id]
-            else if _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-            qs.selector._id.$in? and not qs.fields? and not qs.skip? and not qs.limit?
-                qs.selector._id.$in
+
+    _getCanonical: (x) ->
+        # Like EJSON.stringify but reorders object keys and
+        # array elements to make "the same objects" yield
+        # the same strings.
+
+        if _.isArray x
+            J.util.sortByKey(
+                @_getCanonical y for y in x
+                (y) => EJSON.stringify @_getCanonical y
+            )
+        else if J.util.isPlainObject x
+            sortedKeys = J.util.sortByKey _.keys x
+            ret = {}
+            for k in sortedKeys
+                ret[k] = @_getCanonical x[k]
+            ret
+        else
+            x
+
+
+    _projectionToInclusionSet: (modelClass, projection) ->
+        # See the projection semantics documentation at the top of this file.
+
+        # Returns {includedFieldOrReactiveName: true}
+
+        inclusionSet = {}
+
+        if projection._ is false
+            for fieldOrReactiveName, include of projection
+                continue if fieldOrReactiveName is '_'
+                if include then inclusionSet[fieldOrReactiveName] = true
+
+        else
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                if fieldSpec.include ? true
+                    inclusionSet[fieldName] = true
+
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                if reactiveSpec.include ? false
+                    inclusionSet[reactiveName] = true
+
+            for fieldOrReactiveName, include of projection
+                continue if fieldOrReactiveName is '_'
+                if include
+                    inclusionSet[fieldOrReactiveName] = true
+                else
+                    delete inclusionSet[fieldOrReactiveName]
+
+        inclusionSet
+
+
+    _qsToMongoOptions: (qs) ->
+        modelClass = J.models[qs.modelName]
+        options = {}
+        options.fields = @projectionToMongoFieldsArg modelClass, qs.fields ? {}
+        options.sort = @sortSpecToMongoSortSpec modelClass, qs.sort ? {}
+        if qs.limit? then options.limit = J.util.deepClone qs.limit
+        if qs.skip? then options.skip = J.util.deepClone qs.skip
+        options
 
 
     checkQuerySpec: (querySpec) ->
-        ###
-            Throws an error if the querySpec is invalid
-        ###
+        # Throws an error if the querySpec is invalid
 
-        if querySpec.fields?
-            for sKey, sValue of querySpec.selector
-                if sKey[0] isnt '$'
-                    ok = false
-                    for fKey, fValue of querySpec.fields
-                        if fKey.split('.')[0] is sKey
-                            ok = true
-                            break
-                    if not ok
-                        throw new Error "
-                            Missing projection for selector key #{JSON.stringify sKey}.
-                            When fetching with a projection, the projection must
-                            include/exclude every key in the selector so that
-                            the fetch also works as expected on the client."
+        modelClass = J.models[querySpec.modelName]
+        inclusionSet = @_projectionToInclusionSet modelClass, querySpec.fields ? {}
 
-            if querySpec.sort? then for sKey, sValue of querySpec.sort
-                if sKey[0] isnt '$'
-                    ok = false
-                    for fKey, fValue of querySpec.fields
-                        if fKey.split('.')[0] is sKey
-                            ok = true
-                            break
-                    if not ok
-                        throw new Error "
-                            Missing projection for sort key #{JSON.stringify sKey}.
-                            When fetching with a projection, the projection must
-                            include/exclude every key in the sort so that
-                            the fetch also works as expected on the client."
+        if J.util.isPlainObject(querySpec.selector) then for sKey, sValue of querySpec.selector
+            if sKey isnt '_id' and sKey[0] isnt '$'
+                ok = false
+                for fKey, fValue of inclusionSet
+                    if fKey.split('.')[0] is sKey.split('.')[0]
+                        ok = true
+                        break
+                if not ok
+                    throw new Error "
+                        Missing projection for selector key #{JSON.stringify sKey}.
+                        The projection must include/exclude every key in the selector
+                        so that the fetch also works as expected on the client."
 
-
-    isQueryReady: (querySpec) ->
-        querySpecString = EJSON.stringify querySpec
-        simpleIds = @_getIdsForSimpleIdQs querySpec
-
-        _isQueryReady = (readyQsSet) =>
-            return querySpecString of readyQsSet if not simpleIds?
-
-            for readyQsString of readyQsSet
-                readyQs = EJSON.parse readyQsString
-                continue if readyQs.modelName isnt querySpec.modelName
-
-                readySimpleIds = @_getIdsForSimpleIdQs readyQs
-                continue if not readySimpleIds?
-
-                return true if _.all(id in readySimpleIds for id in simpleIds)
-
-            false
-
-        _isQueryReady(@_mergedQsSet) and _isQueryReady(@_nextMergedQsSet)
+        if querySpec.sort? then for sKey, sValue of querySpec.sort
+            if sKey isnt '_id' and sKey[0] isnt '$'
+                ok = false
+                for fKey, fValue of inclusionSet
+                    if fKey.split('.')[0] is sKey.split('.')[0]
+                        ok = true
+                        break
+                if not ok
+                    throw new Error "
+                        Missing projection for sort key #{JSON.stringify sKey}.
+                        The projection must include/exclude every key in the sort
+                        so that the fetch also works as expected on the client."
 
 
     getMerged: (querySpecs) ->
-        # FIXME: EJSON.stringify doesn't canonically order the keys
-        # so {a: 5, b: 6} and {b: 6, a: 5} may look like different
-        # querySpecs.
-        # TODO: The client can make more inferences about which
-        # of its requested data is already available for use.
-        # For example, the client should realize that any query
-        # for an _id can be satisfied synchronously if that _id
-        # is present in the local collection, even as the result
-        # of previously watching a non-id-based query.
+        # 1.
+        #     Merge all the querySpecs that select on _id using
+        #     inclusionSetByModelInstance.
+        # 2.
+        #     Attempt to pairwise merge all the querySpecs that
+        #     don't select on _id.
 
-        requestedIdsByModel = {} # modelName: {id: true}
-
+        inclusionSetByModelInstance = {} # modelName: id: fieldOrReactiveSpec: true
+        nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
-        for qs in querySpecs
-            simpleIds = @_getIdsForSimpleIdQs qs
-            if simpleIds?.length
-                # We'll add a merged version of it later
-                requestedIdsByModel[qs.modelName] ?= {}
-                for id in simpleIds
-                    requestedIdsByModel[qs.modelName][id] = true
-            else
-                mergedQuerySpecs.push qs
+        _getSelectorIds = (qs) =>
+            qs = J.util.deepClone qs
+            if _.isString(qs.selector)
+                qs.selector = _id: qs.selector
 
-        _.forEach requestedIdsByModel, (requestedIdSet, modelName) ->
-            return if _.isEmpty requestedIdSet
-            mergedQuerySpecs.push
-                modelName: modelName
-                selector: _id: $in: _.keys(requestedIdSet).sort()
+            if qs.selector._id?
+                # Note that if the selector has keys other than "_id" that may drop
+                # the result count from 1 to 0, we'll just ignore that and send a
+                # dumber merged query to the server.
+
+                if _.isString qs.selector._id
+                    [qs.selector._id]
+                else if (
+                    _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
+                    qs.selector._id.$in? and not qs.limit? and not qs.skip
+                )
+                    qs.selector._id.$in
+
+
+        for qs in querySpecs
+            modelClass = J.models[qs.modelName]
+            selectorIds = _getSelectorIds qs
+            if selectorIds?.length
+                # (1) Merge this QS into inclusionSetByModelInstance
+
+                for selectorId in selectorIds
+                    existingIncludes = J.util.getField(
+                        inclusionSetByModelInstance
+                        [qs.modelName, '?.', selectorId]
+                    ) ? J.util.setField(
+                        inclusionSetByModelInstance
+                        [qs.modelName, selectorId]
+                        {}
+                        true
+                    )
+
+                    inclusionSet = @_projectionToInclusionSet modelClass, qs.fields ? {}
+                    for fieldSpec, include of inclusionSet
+                        existingIncludes[fieldSpec] = Boolean(
+                            existingIncludes[fieldSpec] or include
+                        )
+
+            else
+                # (2) Add this to the list of non-ID-selecting querySpecs
+                # to be pairwise merged.
+
+                nonIdQuerySpecsByModel[qs.modelName] ?= []
+                nonIdQuerySpecsByModel[qs.modelName].push qs
+
+
+        # (1) Dump inclusionSetByModelInstance into mergedQuerySpecs
+        for modelName, inclusionSetById of inclusionSetByModelInstance
+            idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
+            for instanceId, inclusionSet of inclusionSetById
+                inclusionSetString = EJSON.stringify @_getCanonical inclusionSet
+                idsByInclusionSetString[inclusionSetString] ?= []
+                idsByInclusionSetString[inclusionSetString].push instanceId
+
+            for inclusionSetString, instanceIds of idsByInclusionSetString
+                mergedProjection = _.extend(
+                    _: false
+                    EJSON.parse inclusionSetString
+                )
+                mergedQuerySpecs.push
+                    modelName: modelName
+                    selector: _id: $in: instanceIds
+                    fields: mergedProjection
+
+
+        # (2) Pairwise merge the nonIdQuerySpecs
+        for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
+            qsStringSet = {} # qsString: true
+            for qs in nonIdQuerySpecs
+                qsStringSet[J.fetching.stringifyQs qs] = true
+
+            # Iterate until no pair of qsStrings in qsStringSet
+            # can be pairwise merged.
+            while true
+                mergedSomething = false
+
+                qsStrings = _.keys qsStringSet
+                for qsString, i in qsStrings[qsStrings.length - 1]
+                    for qss in qsStrings[i + 1...]
+                        pairwiseMergedQsString = @tryQsPairwiseMerge qsString, qss
+                        if pairwiseMergedQsString?
+                            delete qsStringSet[qsString]
+                            delete qsStringSet[qss]
+                            qsStringSet[pairwiseMergedQsString] = true
+                            mergedSomething = true
+                            break
+
+                    break if mergedSomething
+
+                break if not mergedSomething
+
+            # Dump qsStringSet into mergedQuerySpecs
+            for qsString of qsStringSet
+                mergedQuerySpecs.push J.fetching.parseQs qsString
+
 
         mergedQuerySpecs
+
+
+    isQueryReady: (qs) ->
+        # A query is considered ready if:
+        # (1) It was bundled into the set of merged queries that the server
+        #     has come back and said are ready.
+        # (2) It has an _id selector, and all of the first-level doc values
+        #     in its projection aren't undefined.
+        #     (Note that we can't infer anything about first-level objects
+        #     in the doc, because they may or may not be partial subdocs.)
+
+        qsString = J.fetching.stringifyQs qs
+        modelClass = J.models[qs.modelName]
+
+        qs = J.util.deepClone qs
+        if not J.util.isPlainObject qs.selector
+            # Note that this makes qs inconsistent with qsString
+            qs.selector = _id: qs.selector
+
+        helper = =>
+            return true if qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
+
+            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
+                # For queries with an _id filter, say it's ready as long as minimongo
+                # has an attached entry with that _id and no other parts of the selector
+                # rule out the one possible match.
+                options = @_qsToMongoOptions(qs)
+                options.transform = false
+                options.reactive = false
+                doc = modelClass.findOne(qs.selector, options)
+                if doc?
+                    for fieldSpec of options.fields
+                        fieldSpecParts = fieldSpec.split('.')
+                        if fieldSpecParts[0] is '_id'
+                            continue
+                        else if fieldSpecParts[0] is '_reactives'
+                            reactiveName = fieldSpecParts[1]?
+                            value = doc._reactives?[reactiveName]?.val
+                        else
+                            fieldName = fieldSpecParts[0]
+                            value = doc[fieldName]
+
+                        return false if value is undefined
+
+                        # This value might be ready, but there's a risk that
+                        # it's actually a partial subdoc, so we can only
+                        # trust it after qsString appears in @_unmergedQsSet.
+                        # FIXME:
+                        # It's possible to do smarter bookkeeping to return true
+                        # when the full (sub)object being requested is already
+                        # on the client.
+                        return false if J.util.isPlainObject value
+
+                    return true
+
+            false
+
+        ret = helper()
+        # console.debug 'isQueryReady', ret, qsString
+        ret
+
+
+    parseQs: (qsString) ->
+        EJSON.parse qsString
+
+
+    projectionToMongoFieldsArg: (modelClass, projection) ->
+        # Input:
+        #     The kind of projection passed to the "fields" argument when calling .fetch
+        #     on a Model in JFramework.
+        # Output:
+        #     The corresponding Mongo-style fields-argument that we can pass to
+        #     the second argument of MongoCollection.find.
+
+        inclusionSet = @_projectionToInclusionSet modelClass, projection
+
+        mongoFieldsArg = {}
+
+        for includeSpec of inclusionSet
+            includeSpecParts = includeSpec.split('.')
+            fieldOrReactiveName = includeSpecParts[0]
+
+            if not (
+                fieldOrReactiveName of modelClass.fieldSpecs or
+                fieldOrReactiveName of modelClass.reactiveSpecs
+            )
+                throw new Meteor.Error "Invalid fieldOrReactiveName in
+                    #{modelClass.name} inclusion set: #{includeSpec}"
+
+            if fieldOrReactiveName of modelClass.reactiveSpecs
+                # Convert someReactiveName.[etc] to _reactives.#{reactiveName}.val.[etc]
+                reactiveValSpec =
+                    ["_reactives.#{fieldOrReactiveName}.val"].concat(includeSpecParts[1...]).join('.')
+                mongoFieldsArg[reactiveValSpec] = 1
+                reactiveTsSpec = "_reactives.#{fieldOrReactiveName}.ts"
+                mongoFieldsArg[reactiveTsSpec] = 1
+                reactiveDirtySpec = "_reactives.#{fieldOrReactiveName}.dirty"
+                mongoFieldsArg[reactiveDirtySpec] = 1
+            else
+                mongoFieldsArg[includeSpec] = 1
+
+        if _.isEmpty mongoFieldsArg
+            mongoFieldsArg._id = 1
+
+        mongoFieldsArg
 
 
     remergeQueries: ->
@@ -131,21 +400,36 @@ J.fetching =
         @_requestsChanged = false
 
         newUnmergedQsStrings = _.keys @_requestersByQs
-        newUnmergedQuerySpecs = (EJSON.parse qsString for qsString in newUnmergedQsStrings)
+        newUnmergedQuerySpecs = (J.fetching.parseQs qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
         unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
         newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
-        newMergedQsStrings = (EJSON.stringify querySpec for querySpec in newMergedQuerySpecs)
+        newMergedQsStrings = (J.fetching.stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
         mergedQsStringsDiff = J.util.diffStrings _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
-        addedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.added)
-        deletedQuerySpecs = (EJSON.parse qsString for qsString in mergedQsStringsDiff.deleted)
+        addedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.added)
+        deletedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.deleted)
 
-        return unless addedQuerySpecs.length or deletedQuerySpecs.length
+        doAfterUpdatingUnmergedQsSet = =>
+            for addedUnmergedQsString in unmergedQsStringsDiff.added
+                for computationId in _.keys @_requestersByQs[addedUnmergedQsString] ? {}
+                    @_requestersByQs[addedUnmergedQsString][computationId].invalidate()
+
+            # There may be changes to @_requestersByQs that we couldn't act on
+            # until this request was done.
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+        if not (addedQuerySpecs.length or deletedQuerySpecs.length)
+            # The merged query set hasn't changed so we don't need to hit the server,
+            # but it's important to update @_unmergedQsSet as if we had.
+            @_unmergedQsSet = _.clone @_nextUnmergedQsSet
+            doAfterUpdatingUnmergedQsSet()
+            return
+
 
         debug = true
         if debug
@@ -181,24 +465,7 @@ J.fetching =
                 @_unmergedQsSet = _.clone @_nextUnmergedQsSet
                 @_mergedQsSet = _.clone @_nextMergedQsSet
 
-                for addedUnmergedQsString in unmergedQsStringsDiff.added
-                    for computationId in _.keys @_requestersByQs[addedUnmergedQsString] ? {}
-                        @_requestersByQs[addedUnmergedQsString][computationId].invalidate()
-
-                # There may be changes to @_requestersByQs that we couldn't act on
-                # until this request was done.
-                Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
-
-
-    _deleteComputationQsRequests: (computation) ->
-        return if not computation._requestingData
-        for qsString in _.keys @_requestersByQs
-            delete @_requestersByQs[qsString][computation._id]
-            if _.isEmpty @_requestersByQs[qsString]
-                delete @_requestersByQs[qsString]
-        computation._requestingData = false
-        @_requestsChanged = true
-        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+                doAfterUpdatingUnmergedQsSet()
 
 
     requestQuery: (querySpec) ->
@@ -206,14 +473,9 @@ J.fetching =
 
         @checkQuerySpec querySpec
 
-        qsString = EJSON.stringify querySpec
+        qsString = J.fetching.stringifyQs querySpec
         computation = Tracker.currentComputation
 
-        # We may not need reactivity per se, since the query should
-        # never stop once it's started. But we still want to track
-        # which computations need this querySpec.
-        # console.log computation.tag, 'requests a query', querySpec.modelName,
-        #     querySpec.selector, @isQueryReady querySpec
         @_requestersByQs[qsString] ?= {}
         if computation._id not of @_requestersByQs[qsString]
             @_requestersByQs[qsString][computation._id] = computation
@@ -221,26 +483,28 @@ J.fetching =
             # Note: AutoVar handles logic to remove from @_requestersByQueue
             # because it involves complicated sequencing with React component
             # rendering.
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
-            options = {}
-            for optionName in ['fields', 'sort', 'skip', 'limit']
-                if querySpec[optionName]? then options[optionName] = querySpec[optionName]
+            mongoSelector = @selectorToMongoSelector modelClass, querySpec.selector
+            options = @_qsToMongoOptions querySpec
 
             if Tracker.active
-                results = J.List Tracker.nonreactive ->
-                    modelClass.find(querySpec.selector, options).fetch()
+                options.reactive = false
+                results = J.List modelClass.find(mongoSelector, options).fetch()
 
                 # The individual model instances' getters have their own reactivity, so
                 # this query should only invalidate if a result gets added/removed/moved.
                 idQueryOptions = _.clone options
                 idQueryOptions.fields = _id: 1
-                idQueryOptions.transform = null
+                idQueryOptions.reactive = true
+                idQueryOptions.transform = false
 
                 initializing = true
                 invalidator = -> computation.invalidate() if not initializing
-                modelClass.find(querySpec.selector, idQueryOptions).observe
+                modelClass.find(mongoSelector, idQueryOptions).observe
                     added: invalidator
                     movedTo: invalidator
                     removed: invalidator
@@ -252,6 +516,98 @@ J.fetching =
                 J.List modelClass.find(querySpec.selector, options).fetch()
 
         else
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
             throw J.makeValueNotReadyObject()
+
+
+    selectorToMongoSelector: (modelClass, selector) ->
+        # Input:
+        #     The kind of selector passed to the first argument of .fetch
+        #     on a Model in JFramework
+        # Output:
+        #     The corresponding Mongo-style selector that we can pass to
+        #     MongoCollection.find
+
+        if not _.isObject selector
+            return selector
+
+        mongoSelector = {}
+        for selectorKey, selectorValue of selector
+            selectorKeyParts = selectorKey.split('.')
+            fieldOrReactiveName = selectorKeyParts[0]
+
+            if fieldOrReactiveName is '_id'
+                mongoSelector[selectorKey] = selectorValue
+
+            else if fieldOrReactiveName of modelClass.fieldSpecs
+                mongoSelector[selectorKey] = selectorValue
+
+            else if fieldOrReactiveName of modelClass.reactiveSpecs
+                reactiveSpec = modelClass.reactiveSpecs[fieldOrReactiveName]
+                if not reactiveSpec.selectable
+                    throw new Error "Can't fetch with a selector on a non-selectable
+                        reactive: #{modelClass.name}.#{fieldOrReactiveName}"
+                reactiveSelectorKey = ["_reactives.#{fieldOrReactiveName}.val"].concat(
+                    selectorKeyParts[1...]
+                ).join('.')
+                mongoSelector[reactiveSelectorKey] = selectorValue
+
+            else
+                throw new Error "#{modelClass} fetch selector contains invalid
+                    selectorKey: #{selectorKey}"
+
+        mongoSelector
+
+
+    sortSpecToMongoSortSpec: (modelClass, sortSpec) ->
+        mongoSortSpec = {}
+        for sortKey, direction of sortSpec
+            sortKeyParts = sortKey.split('.')
+            fieldOrReactiveName = sortKeyParts[0]
+
+            if fieldOrReactiveName is '_id'
+                mongoSortSpec[sortKey] = direction
+
+            else if fieldOrReactiveName of modelClass.fieldSpecs
+                mongoSortSpec[sortKey] = direction
+
+            else if fieldOrReactiveName of modelClass.reactiveSpecs
+                reactiveSpec = modelClass.reactiveSpecs[fieldOrReactiveName]
+                if not reactiveSpec.selectable
+                    throw new Error "Can't sort on a non-selectable reactive:
+                        #{modelClass.name}.#{fieldOrReactiveName}.val"
+                reactiveSortKey = ["_reactives.#{fieldOrReactiveName}.val"].concat(
+                    sortKeyParts[1...]
+                ).join('.')
+                mongoSortSpec[reactiveSortKey] = direction
+
+            else
+                throw new Error "#{modelClass} fetch sort spec contains invalid
+                    key: #{sortKey}"
+
+        mongoSortSpec
+
+
+    stringifyQs: (qs) ->
+        qs = _.clone qs
+        if qs.fields is undefined
+            delete qs.fields
+        if qs.sort is undefined
+            delete qs.sort
+        if not qs.limit
+            delete qs.limit
+        if not qs.skip
+            delete qs.skip
+
+        EJSON.stringify
+            modelName: qs.modelName
+            selector: @_getCanonical qs.selector
+            fields: @_getCanonical qs.fields
+            sort: @_getCanonical qs.sort
+            limit: qs.limit
+            skip: qs.skip
+
+
+    tryQsPairwiseMerge: (a, b) ->
+        return null if a.modelName isnt b.modelName
+
+        null

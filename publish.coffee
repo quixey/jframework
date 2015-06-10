@@ -1,10 +1,8 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+#
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 J.defineModel 'JDataSession', 'jframework_datasessions',
     _id: $$.str
@@ -15,6 +13,7 @@ J.defineModel 'JDataSession', 'jframework_datasessions',
 
 
 Fiber = Npm.require 'fibers'
+Future = Npm.require 'fibers/future'
 
 J._inMethod = new Meteor.EnvironmentVariable
 
@@ -30,42 +29,69 @@ J.methods = (methods) ->
     Meteor.methods wrappedMethods
 
 
-###
-    dataSessionId: J.Dict
-        updateObserversFiber: <Fiber>
-        querySpecSet: {qsString: true}
-        mergedQuerySpecs: [
-            {
-                modelName:
-                selector:
-                fields:
-                sort:
-                skip:
-                limit:
-            }
-        ]
-###
-dataSessions = {}
 
-###
-    Stores Meteor's publisher functions
-    sessionId:
-        userId
-        added
-        changed
-        removed
-        ...etc
-###
+# This loop is to do heavy lifting faster when conditions
+# seem kind of idle.
+_lastTs = new Date().getTime()
+Meteor.setInterval(
+    ->
+        ts = new Date().getTime()
+        interval = ts - _lastTs
+        _lastTs = ts
+
+        if interval > 550
+            # Wait for conditions to calm down because this recalc
+            # loop is lower priority than handling methods and
+            # running the publisher's observer callbacks
+            console.log "***INTERVAL: #{interval}"
+            return
+
+        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
+            do (i) ->
+                Meteor.setTimeout(
+                    J._dequeueReactiveCalc
+                    50
+                )
+
+    500
+)
+
+
+# dataSessionId: J.Dict
+#     updateObserversFiber: <Fiber>
+#     querySpecSet: {qsString: true}
+#     mergedQuerySpecs: [
+#         {
+#             modelName:
+#             selector:
+#             fields:
+#             sort:
+#             skip:
+#             limit:
+#         }
+#     ]
+J._dataSessions = {}
+
+# Stores Meteor's publisher functions
+# sessionId:
+#     userId
+#     added
+#     changed
+#     removed
+#     ...etc
 dataSessionPublisherContexts = {}
 
-###
-    The set of active cursors and exactly what each has sent to the client
-    dataSessionId: modelName: docId: fieldName: querySpecString: value
-###
-dataSessionFieldsByModelIdQuery = {}
+# The set of active cursors and exactly what each has sent to the client
+# dataSessionId: modelName: docId: fieldName: querySpecString: value
+J._dataSessionFieldsByModelIdQuery = {}
+
 
 
 Meteor.methods
+    _debugPublish: ->
+        J._dataSessionFieldsByModelIdQuery
+
+
     _updateDataQueries: (dataSessionId, addedQuerySpecs, deletedQuerySpecs) ->
         log = ->
             newArgs = ["[#{dataSessionId}]"].concat _.toArray arguments
@@ -77,7 +103,7 @@ Meteor.methods
 #        if deletedQuerySpecs.length
 #            log '    deleted:', J.util.stringify qs for qs in deletedQuerySpecs
 
-        session = dataSessions[dataSessionId]
+        session = J._dataSessions[dataSessionId]
         if not session?
             console.warn "Data session not found", dataSessionId
             throw new Meteor.Error "Data session not found: #{JSON.stringify dataSessionId}"
@@ -91,12 +117,12 @@ Meteor.methods
         actualAdded = []
         actualDeleted = []
         for querySpec in deletedQuerySpecs
-            qsString = EJSON.stringify querySpec
+            qsString = J.fetching.stringifyQs querySpec
             if session.querySpecSet().hasKey(qsString)
                 actualDeleted.push querySpec
                 session.querySpecSet().delete qsString
         for querySpec in addedQuerySpecs
-            qsString = EJSON.stringify querySpec
+            qsString = J.fetching.stringifyQs querySpec
             unless session.querySpecSet().hasKey(qsString)
                 actualAdded.push qsString
                 session.querySpecSet().setOrAdd qsString, true
@@ -124,7 +150,7 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     log 'publish _jdata'
 
-    session = dataSessions[dataSessionId] = J.AutoDict(
+    session = J._dataSessions[dataSessionId] = J.AutoDict(
         "dataSessions[#{dataSessionId}]"
 
         querySpecSet: J.Dict() # qsString: true
@@ -134,26 +160,28 @@ Meteor.publish '_jdata', (dataSessionId) ->
         observerByQsString: J.Dict()
     )
     dataSessionPublisherContexts[dataSessionId] = @
-    dataSessionFieldsByModelIdQuery[dataSessionId] = {}
+    J._dataSessionFieldsByModelIdQuery[dataSessionId] = {}
 
     existingSessionInstance = $$.JDataSession.fetchOne dataSessionId
     if existingSessionInstance?
         existingQuerySpecs = existingSessionInstance.querySpecStrings().map(
-            (querySpecString) => EJSON.parse querySpecString
+            (querySpecString) => J.fetching.parseQs querySpecString
         ).toArr()
         Meteor.call '_updateDataQueries', dataSessionId, existingQuerySpecs, []
 
     @onStop =>
         console.log "[#{dataSessionId}] PUBLISHER STOPPED"
+        session.observerByQsString().forEach (qsString, observer) =>
+            observer.stop()
         session.stop()
 
         if session.updateObserversFiber?
             console.warn "Uh oh, we were in the middle of updating observers."
             session.updateObserversFiber.reset()
 
-        delete dataSessionFieldsByModelIdQuery[dataSessionId]
+        delete J._dataSessionFieldsByModelIdQuery[dataSessionId]
         delete dataSessionPublisherContexts[dataSessionId]
-        delete dataSessions[dataSessionId]
+        delete J._dataSessions[dataSessionId]
         $$.JDataSession.remove dataSessionId
 
     @ready()
@@ -163,7 +191,7 @@ getMergedQuerySpecs = (querySpecSet) =>
     mergedQuerySpecs = J.List()
     querySpecSet.forEach (rawQsString) ->
         # TODO: Fancier merge stuff
-        rawQuerySpec = EJSON.parse rawQsString
+        rawQuerySpec = J.fetching.parseQs rawQsString
         mergedQuerySpecs.push rawQuerySpec
     mergedQuerySpecs
 
@@ -174,18 +202,19 @@ updateObservers = (dataSessionId) ->
         console.log.apply console, newArgs
     # log "Update observers"
 
-    session = dataSessions[dataSessionId]
+    session = J._dataSessions[dataSessionId]
 
     oldQsStrings = session.observerByQsString().getKeys()
     newQsStrings = session.mergedQuerySpecs().map(
-        (qs) => EJSON.stringify qs.toObj()
+        (qs) => J.fetching.stringifyQs qs.toObj()
     ).toArr()
     qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
 
     # console.log "qsStringsDiff", qsStringsDiff
 
-    fieldsByModelIdQuery = dataSessionFieldsByModelIdQuery[dataSessionId]
+    fieldsByModelIdQuery = J._dataSessionFieldsByModelIdQuery[dataSessionId]
 
+    
     getMergedSubfields = (a, b) ->
         return a if b is undefined
         return b if a is undefined
@@ -199,39 +228,109 @@ updateObservers = (dataSessionId) ->
                 ret[key] = getMergedSubfields a[key], b[key]
             ret
         else
-            ###
-                It's possible that a != b (by value) right now because
-                one cursor is triggering an observer for an updated value
-                right before all the other cursors are going to trigger
-                observers for the same updated value. It's fine to just
-                arbitrarily pick (a) and let the merge become eventually
-                consistent.
-            ###
+            # It's possible that a != b (by value) right now because
+            # one cursor is triggering an observer for an updated value
+            # right before all the other cursors are going to trigger
+            # observers for the same updated value. It's fine to just
+            # arbitrarily pick (a) and let the merge become eventually
+            # consistent.
             a
+
 
     getField = (modelName, id, fieldName) ->
         fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
         _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
 
+
+    setField = (modelName, id, fieldName, querySpec, value) ->
+        modelClass = J.models[modelName]
+        qsString = J.fetching.stringifyQs querySpec
+
+        if fieldName is '_reactives'
+            # log "#{J.util.stringify querySpec} sees #{JSON.stringify id}._reactives: #{JSON.stringify value}"
+
+            fieldsByModelIdQuery[modelName][id]._reactives ?= {}
+            reactivesObj = _.clone fieldsByModelIdQuery[modelName][id]._reactives[qsString] ? {}
+            fieldsByModelIdQuery[modelName][id]._reactives[qsString] = reactivesObj
+
+            inclusionSet = J.fetching._projectionToInclusionSet modelClass, querySpec.fields ? {}
+
+            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                included = false
+
+                if reactiveSpec.denorm
+                    for fieldOrReactiveSpec of inclusionSet
+                        if fieldOrReactiveSpec.split('.')[0] is reactiveName
+                            included = true
+                            break
+
+                if included
+                    reactiveValue = value[reactiveName]?.val
+                    reactiveTs = value[reactiveName]?.ts
+                    reactiveDirty = value[reactiveName]?.dirty ? true
+
+                    needsRecalc = false
+                    if reactiveDirty
+                        needsRecalc = true
+                        for qss, qssReactivesObj of fieldsByModelIdQuery[modelName][id]._reactives
+                            continue if reactiveName not of qssReactivesObj
+                            qssVal = qssReactivesObj[reactiveName].val
+                            qssTs = qssReactivesObj[reactiveName].ts
+                            qssDirty = qssReactivesObj[reactiveName].dirty ? true
+
+                            if not qssDirty and (not reactiveTs? or qssTs > reactiveTs)
+                                # A querySpec still thinks it knows what the reactive
+                                # value is, so we might not need to recompute it. Either qsString's
+                                # cursor will soon observe qss's same value, or else qss and all
+                                # the other cursors will observe undefined and the last one will
+                                # recalculate the value of reactiveName.
+                                needsRecalc = false
+
+                                # Note that qss might be the same as qsString. This is useful
+                                # when we've recalculated multiple reactives in the publisher
+                                # but the db's _reactives field is still catching up from multiple
+                                # update operations (one per reactive)
+                                if qss is qsString
+                                    reactiveValue = qssVal
+                                    reactiveTs = qssTs
+
+                                break
+
+                    if needsRecalc
+                        # Keep publishing the previous value of reactivesObj[reactiveName]
+                        # until the recalc task gets popped off the queue asynchronously.
+                        J._enqueueReactiveCalc modelName, id, reactiveName
+
+                    else
+                        reactivesObj[reactiveName] =
+                            val: reactiveValue
+                            ts: reactiveTs
+
+        else
+            fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
+            fieldsByModelIdQuery[modelName][id][fieldName][qsString] = value
+
+
     qsStringsDiff.added.forEach (qsString) =>
-        querySpec = EJSON.parse qsString
+        querySpec = J.fetching.parseQs qsString
 
         # log "Add observer for: ", querySpec
 
         modelClass = J.models[querySpec.modelName]
 
-        options = {}
-        for optionName in ['fields', 'sort', 'skip', 'limit']
-            if querySpec[optionName]?
-                options[optionName] = querySpec[optionName]
+        mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
+        mongoOptions = J.fetching._qsToMongoOptions querySpec
 
-        # TODO: Interpret options.fields with fancy semantics
+        # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
-        cursor = modelClass.collection.find querySpec.selector, options
+        cursor = modelClass.collection.find mongoSelector, mongoOptions
 
         observer = cursor.observeChanges
             added: (id, fields) =>
-                # log querySpec, "server says ADDED:", id, fields
+                # log querySpec, "server says ADDED:", JSON.stringify(id), fields
+
+                fields = _.clone fields
+                fields._reactives ?= {}
 
                 if id of (fieldsByModelIdQuery?[querySpec.modelName] ? {})
                     # The set of projections being watched on this doc may have grown.
@@ -239,8 +338,7 @@ updateObservers = (dataSessionId) ->
 
                     for fieldName, value of fields
                         oldValue = getField querySpec.modelName, id, fieldName
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                        fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                        setField querySpec.modelName, id, fieldName, querySpec, value
                         newValue = getField querySpec.modelName, id, fieldName
                         if not EJSON.equals oldValue, newValue
                             changedFields[fieldName] = newValue
@@ -250,34 +348,39 @@ updateObservers = (dataSessionId) ->
                         @changed modelClass.collection._name, id, changedFields
 
                 else
-                    # log querySpec, "sending ADDED:", id, fields
-                    @added modelClass.collection._name, id, fields
+                    fieldsByModelIdQuery[querySpec.modelName] ?= {}
+                    fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
 
-                fieldsByModelIdQuery[querySpec.modelName] ?= {}
-                fieldsByModelIdQuery[querySpec.modelName][id] ?= {}
-                for fieldName, value of fields
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    changedFields = {}
+
+                    for fieldName, value of fields
+                        setField querySpec.modelName, id, fieldName, querySpec, value
+                        changedFields[fieldName] = getField querySpec.modelName, id, fieldName
+
+                    # log querySpec, "sending ADDED:", id, changedFields
+                    @added modelClass.collection._name, id, changedFields
 
             changed: (id, fields) =>
-                # log querySpec, "server says CHANGED:", id, fields
+                # log querySpec, "server says CHANGED:", JSON.stringify(id), fields
+
+                fields = _.clone fields
+                fields._reactives ?= {}
 
                 changedFields = {}
 
                 for fieldName, value of fields
                     oldValue = getField querySpec.modelName, id, fieldName
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName] ?= {}
-                    fieldsByModelIdQuery[querySpec.modelName][id][fieldName][qsString] = value
+                    setField querySpec.modelName, id, fieldName, querySpec, value
                     newValue = getField querySpec.modelName, id, fieldName
                     if not EJSON.equals oldValue, newValue
                         changedFields[fieldName] = newValue
 
                 if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id, changedFields
+                    # log querySpec, "sending CHANGED:", JSON.stringify(id), changedFields
                     @changed modelClass.collection._name, id, changedFields
 
             removed: (id) =>
-                # log querySpec, "server says REMOVED:", id
+                # log querySpec, "server says REMOVED:", JSON.stringify(id)
 
                 changedFields = {}
 
@@ -292,16 +395,16 @@ updateObservers = (dataSessionId) ->
 
                 if _.isEmpty fieldsByModelIdQuery[querySpec.modelName][id]
                     delete fieldsByModelIdQuery[querySpec.modelName][id]
-                    # log querySpec, "sending REMOVED:", id
+                    # log querySpec, "sending REMOVED:", JSON.stringify(id)
                     @removed modelClass.collection._name, id
                 else if not _.isEmpty changedFields
-                    # log querySpec, "sending CHANGED:", id
+                    # log querySpec, "sending CHANGED:", JSON.stringify(id)
                     @changed modelClass.collection._name, id, changedFields
 
         session.observerByQsString().setOrAdd qsString, observer
 
     qsStringsDiff.deleted.forEach (qsString) =>
-        querySpec = EJSON.parse qsString
+        querySpec = J.fetching.parseQs qsString
 
         observer = session.observerByQsString().get qsString
         observer.stop()

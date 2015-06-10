@@ -1,28 +1,23 @@
-###
-    Copyright 2015, Quixey Inc.
-    All rights reserved.
-
-    Licensed under the Modified BSD License found in the
-    LICENSE file in the root directory of this source tree.
-###
+# Copyright 2015, Quixey Inc.
+# All rights reserved.
+# Licensed under the Modified BSD License found in the
+# LICENSE file in the root directory of this source tree.
 
 
 class J.AutoDict extends J.Dict
     constructor: (tag, keysFunc, valueFunc, options) ->
-        ###
-            Overloads
-            (1) J.AutoDict [tag], keysFunc, valueFunc, [options]
-            (2) J.AutoDict [tag], keysList, valueFunc, [options]
-            (3) J.AutoDict [tag], fieldSpecs, [options]
+        # Overloads
+        # (1) J.AutoDict [tag], keysFunc, valueFunc, [options]
+        # (2) J.AutoDict [tag], keysList, valueFunc, [options]
+        # (3) J.AutoDict [tag], fieldSpecs, [options]
 
-            Options:
-                creator
-                withFieldFuncs
-                fineGrained
-                filterFunc
-                    Pretend like the only keys are ones whose corresponding
-                    value passes filterFunc
-        ###
+        # Options:
+        #     creator
+        #     withFieldFuncs
+        #     fineGrained
+        #     filterFunc
+        #         Pretend like the only keys are ones whose corresponding
+        #         value passes filterFunc
 
         unless @ instanceof J.AutoDict
             return new J.AutoDict tag, keysFunc, valueFunc, options
