@@ -6,6 +6,63 @@
 
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
+# "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}": reactiveCalcObj
+J._reactiveCalcsInProgress = {}
+
+# [{modelName, instanceId, reactiveName, priority}]
+J._reactiveCalcQueue = []
+
+J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
+    modelClass = J.models[modelName]
+    reactiveSpec = modelClass.reactiveSpecs[reactiveName]
+    priority ?= reactiveSpec.priority ? 0.5
+
+    reactiveKey = "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}"
+    reactiveCalcObj = J._reactiveCalcsInProgress[reactiveKey]
+    if reactiveCalcObj?
+        # reactiveCalcObj is either already in the queue, or has been
+        # dequeued and is currently being recalculated.
+        if priority > reactiveCalcObj.priority
+            reactiveCalcObj.priority = priority
+            J.util.sortByKey J._reactiveCalcQueue, 'priority'
+    else
+        reactiveCalcObj =
+            modelName: modelName
+            instanceId: instanceId
+            reactiveName: reactiveName
+            priority: priority
+        J._reactiveCalcsInProgress[reactiveKey] = reactiveCalcObj
+        J._reactiveCalcQueue.push reactiveCalcObj
+        J.util.sortByKey J._reactiveCalcQueue, 'priority'
+
+
+J._dequeueReactiveCalc = ->
+    return if J._reactiveCalcQueue.length is 0
+
+    reactiveCalcObj = J._reactiveCalcQueue.pop()
+    reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+
+    modelClass = J.models[reactiveCalcObj.modelName]
+    instance = modelClass.fetchOne reactiveCalcObj.instanceId
+
+    # While this is recalculating, J._reactiveCalcsInProgress still contains reactiveKey
+    # or else a different fiber could redundantly start the same recalc
+    if instance?
+        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+
+    delete J._reactiveCalcsInProgress[reactiveKey]
+
+
+
+# This is a lightweight loop to make sure the highest-priority
+# recalcs are always getting dequeued
+Meteor.setInterval(
+    J._dequeueReactiveCalc
+    1000
+)
+
+
+
 J.denorm =
     ensureAllReactiveWatcherIndexes: ->
         for reactiveModelName, reactiveModelClass of J.models
@@ -30,6 +87,9 @@ J.denorm =
         # Returns the recalculated value
 
         reactiveSpec = instance.modelClass.reactiveSpecs[reactiveName]
+        if not reactiveSpec.denorm
+            throw new Error "Can't recalc a non-denorm reactive:
+                #{instance.modelClass.name}.#{reactiveName}"
 
         value = null
         watchedQuerySpecSet = null
@@ -285,10 +345,12 @@ J.denorm =
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
                 watcherModelClass = J.models[watcherModelName]
+                watcherReactiveSpec = watcherModelClass.reactiveSpecs[watcherReactiveName]
                 # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
                     #{JSON.stringify instanceId}>"
 
                 selector = {}
+                selector["_reactives.#{watcherReactiveName}.dirty"] = false
                 selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
                 selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
 
@@ -314,6 +376,11 @@ J.denorm =
 
                         if doc?
                             resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
+
+                            if watcherReactiveSpec.selectable
+                                # Selectable reactives must stay updated
+                                priority = (watcherReactiveSpec.priority ? 0.5) / 10
+                                J._enqueueReactiveCalc watcherModelName, doc._id, watcherReactiveName, priority
 
                             # Continue to reset one doc at a time until there are no more docs to reset
                             resetOneWatcherDoc watcherModelName, watcherReactiveName
@@ -352,7 +419,7 @@ J.denorm =
 
 Meteor.startup ->
     J.methods
-        testRecalc: (modelName, instanceId, reactiveName) ->
+        recalc: (modelName, instanceId, reactiveName) ->
             modelClass = J.models[modelName]
             instance = modelClass.fetchOne instanceId
             if not instance
@@ -360,5 +427,23 @@ Meteor.startup ->
 
             J.denorm.recalc instance, reactiveName
 
-        testResetWatchers: (modelName, instanceId, oldValues, newValues) ->
+        fixMissingReactives: (modelName, reactiveName) ->
+            modelClass = J.models[modelName]
+            selector = {}
+            selector["_reactives.#{reactiveName}.dirty"] = $ne: false
+            while true
+                instances = modelClass.find(
+                    selector
+                ,
+                    limit: 100
+                ).fetch()
+                break if instances.length is 0
+
+                console.log "Fixing batch of #{instances.length} missing reactives"
+                for instance in instances
+                    J.denorm.recalc instance, reactiveName
+
+            null
+
+        resetWatchers: (modelName, instanceId, oldValues, newValues) ->
             J.denorm.resetWatchers modelName, instanceId, oldValues, newValues

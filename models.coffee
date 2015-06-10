@@ -578,7 +578,16 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
             keyReady = false
             try
-                key = Tracker.nonreactive => @key()
+                # Try calculating the expected value of key but without
+                # tracking any client-side or server-side dependencies
+                key = Tracker.nonreactive =>
+                    if Meteor.isServer and J._watchedQuerySpecSet.get()?
+                        J._watchedQuerySpecSet.withValue(
+                            null
+                            => @key()
+                        )
+                    else
+                        @key()
                 keyReady = true
             catch e
                 if e not instanceof J.VALUE_NOT_READY
@@ -911,7 +920,13 @@ Meteor.methods
                 fields:
                     _reactives: 0
                 transform: false
-            ) ? {_id: doc._id}
+            )
+
+            if oldDoc?
+                isNew = false
+            else
+                isNew = true
+                oldDoc = {_id: doc._id}
 
             setter = {}
             for fieldName, newValue of fields
@@ -930,8 +945,8 @@ Meteor.methods
                 $set: setter
 
         else
+            isNew = true
             oldDoc = {_id: doc._id}
-
             modelClass.collection.insert doc
 
         newDoc = J.util.deepClone oldDoc
@@ -943,11 +958,11 @@ Meteor.methods
 
         if not _reserved
             timestamp = new Date()
-
-            # Recalculate all the included reactives
-            for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                if reactiveSpec.denorm and reactiveSpec.include
-                    J.denorm.recalc instance, reactiveName, timestamp
+            if isNew
+                # Initialize all the selectable reactives
+                for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+                    if reactiveSpec.selectable
+                        J.denorm.recalc instance, reactiveName, timestamp
 
             # Note that we won't reset the reactive values we just recalculated
             # because timestamp is the same
@@ -958,7 +973,7 @@ Meteor.methods
         doc._id
 
 
-    _jRemove: (modelName, instanceId, oldDoc = null) ->
+    _jRemove: (modelName, instanceId) ->
         # This also runs on the client as a stub
 
         J.assert instanceId?
@@ -970,22 +985,25 @@ Meteor.methods
             console.log 'jRemove', modelName, JSON.stringify(instanceId), @isSimulation
 
         if @isSimulation
-            modelClass.collection.remove instanceId
-            return
+            return modelClass.collection.remove instanceId
 
-        if not oldDoc?
-            oldDoc = modelClass.findOne(
-                instanceId
-            ,
-                fields:
-                    _reactives: 0
-                transform: false
-            )
+        doc = modelClass.findOne(
+            instanceId
+        ,
+            transform: false
+        )
+
+        if not doc?
+            return 0
+
+        instance = modelClass.fromDoc doc
 
         ret = modelClass.collection.remove instanceId
 
         if not _reserved
-            J.denorm.resetWatchers modelName, instanceId, oldDoc, {}
+            J.denorm.resetWatchers modelName, instanceId, doc, {}
+
+        instance.onRemove?()
 
         ret
 
