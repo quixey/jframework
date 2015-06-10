@@ -542,8 +542,8 @@ _.extend J.fetching,
 
             else if fieldOrReactiveName of modelClass.reactiveSpecs
                 reactiveSpec = modelClass.reactiveSpecs[fieldOrReactiveName]
-                if not reactiveSpec.denorm
-                    throw new Error "Can't fetch with a selector on a non-denorm
+                if not reactiveSpec.selectable
+                    throw new Error "Can't fetch with a selector on a non-selectable
                         reactive: #{modelClass.name}.#{fieldOrReactiveName}"
                 reactiveSelectorKey = ["_reactives.#{fieldOrReactiveName}.val"].concat(
                     selectorKeyParts[1...]
