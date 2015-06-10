@@ -352,16 +352,18 @@ updateObservers = (dataSessionId) ->
                 if included
                     reactiveValue = value[reactiveName]?.val
                     reactiveTs = value[reactiveName]?.ts
+                    reactiveDirty = value[reactiveName]?.dirty
 
                     needsRecalc = false
-                    if reactiveValue is undefined
+                    if reactiveDirty ? true
                         needsRecalc = true
                         for qss, qssReactivesObj of fieldsByModelIdQuery[modelName][id]._reactives
                             continue if reactiveName not of qssReactivesObj
                             qssVal = qssReactivesObj[reactiveName].val
                             qssTs = qssReactivesObj[reactiveName].ts
+                            qssDirty = qssReactivesObj[reactiveName].dirty
 
-                            if qssVal isnt undefined and (not reactiveTs? or qssTs > reactiveTs)
+                            if not qssDirty and (not reactiveTs? or qssTs > reactiveTs)
                                 # A querySpec still thinks it knows what the reactive
                                 # value is, so we might not need to recompute it. Either qsString's
                                 # cursor will soon observe qss's same value, or else qss and all

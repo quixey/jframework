@@ -177,7 +177,9 @@ class J.Model
 
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
             if reactiveSpec.denorm
-                if reactiveName of reactivesObj
+                if reactiveName of reactivesObj and (
+                    Meteor.isClient or reactivesObj[reactiveName].dirty is false
+                )
                     reactivesSetter[reactiveName] =
                         @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
                 if reactivesSetter[reactiveName] is undefined

@@ -383,6 +383,8 @@ _.extend J.fetching,
                 mongoFieldsArg[reactiveValSpec] = 1
                 reactiveTsSpec = "_reactives.#{fieldOrReactiveName}.ts"
                 mongoFieldsArg[reactiveTsSpec] = 1
+                reactiveDirtySpec = "_reactives.#{fieldOrReactiveName}.dirty"
+                mongoFieldsArg[reactiveDirtySpec] = 1
             else
                 mongoFieldsArg[includeSpec] = 1
 

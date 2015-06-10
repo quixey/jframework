@@ -61,6 +61,7 @@ J.denorm =
             val: J.Model._getEscapedSubdoc value
             watching: J.Model._getEscapedSubdoc watchedQuerySpecs
             ts: timestamp
+            dirty: false
         instance.modelClass.update(
             instance._id
             $set: setter
@@ -293,10 +294,7 @@ J.denorm =
 
                 setter = {}
                 setter["_reactives.#{watcherReactiveName}.ts"] = timestamp
-
-                unsetter = {}
-                unsetter["_reactives.#{watcherReactiveName}.val"] = 1
-                unsetter["_reactives.#{watcherReactiveName}.watching"] = 1
+                setter["_reactives.#{watcherReactiveName}.dirty"] = true
 
                 resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
                 watcherModelClass.collection.rawCollection().findAndModify(
@@ -305,7 +303,6 @@ J.denorm =
                     []
                 ,
                     $set: setter
-                    $unset: unsetter
                 ,
                     Meteor.bindEnvironment (err, doc) ->
                         if err
