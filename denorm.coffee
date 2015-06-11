@@ -71,8 +71,8 @@ J.denorm =
 
                 indexFieldsSpec = {}
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
-                indexFieldsSpec["_reactives.#{reactiveName}.watching.selector"] = 1
-                # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.watching.dirty"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id"] = 1
                 # indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.$in"] = 1
 
                 reactiveModelClass.collection._ensureIndex(
