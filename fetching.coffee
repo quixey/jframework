@@ -136,7 +136,9 @@ _.extend J.fetching,
         modelClass = J.models[qs.modelName]
         options = {}
         options.fields = @projectionToMongoFieldsArg modelClass, qs.fields ? {}
+        if _.isEmpty options.fields then delete options.fields
         options.sort = @sortSpecToMongoSortSpec modelClass, qs.sort ? {}
+        if _.isEmpty options.sort then delete options.sort
         if qs.limit? then options.limit = J.util.deepClone qs.limit
         if qs.skip? then options.skip = J.util.deepClone qs.skip
         options
@@ -589,9 +591,9 @@ _.extend J.fetching,
 
     stringifyQs: (qs) ->
         qs = _.clone qs
-        if qs.fields is undefined
+        if qs.fields is undefined or _.isEmpty qs.fields
             delete qs.fields
-        if qs.sort is undefined
+        if qs.sort is undefined or _.isEmpty qs.sort
             delete qs.sort
         if not qs.limit
             delete qs.limit

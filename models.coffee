@@ -301,6 +301,22 @@ class J.Model
                     dummyQsString = J.fetching.stringifyQs dummyQuerySpec
                     J._watchedQuerySpecSet.get()[dummyQsString] = true
 
+                if @_fields.tryGet(fieldName) is undefined
+                    console.warn "Field <#{@modelClass.name} #{JSON.stringify @_id}>.#{fieldName}
+                        missing from projection"
+
+                    mongoFieldsArg = {}
+                    mongoFieldsArg[fieldName] = 1
+                    doc = @modelClass.collection.findOne(
+                        @_id
+                    ,
+                        fields: mongoFieldsArg
+                        transform: false
+                    )
+                    value = undefined
+                    if doc? then value = doc[fieldName]
+                    if value isnt undefined then @_fields.set fieldName, value
+
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
                     console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
@@ -363,6 +379,9 @@ class J.Model
 
 
     saveAndDenorm: (options = {}, callback) ->
+        if Meteor.isClient
+            throw new Error "Can only call saveAndDenorm on the server."
+
         J.assert 'denormCallback' not of options
 
         helper = (helperCallback) =>
