@@ -72,12 +72,17 @@ if Meteor.isClient then Tinytest.addAsync "Denorm with overlapping cursors", (te
                             console.log 'mutating b to 24'
                             fooInstances[0].b 24
                             fooInstances[0].save ->
-                                newFoos.forEach (foo) ->
-                                    if foo._id is fooInstances[0]._id
-                                        test.equal foo.e(), 25
-                                for j in [0...3]
-                                    avs[j].stop()
-                                onComplete()
+                                # Wait for e to get denormalized
+                                setTimeout(
+                                    ->
+                                        newFoos.forEach (foo) ->
+                                            if foo._id is fooInstances[0]._id
+                                                test.equal foo.e(), 25
+                                        for j in [0...3]
+                                            avs[j].stop()
+                                        onComplete()
+                                    1000
+                                )
                 )
 
 
@@ -274,7 +279,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
 
     # Check that a `fooWatcher` resets the
     # watchers it should and does not reset
-    # the ones it should not. 
+    # the ones it should not.
     #
     #     # Input: (
     #     #   `FooWatcher` instance,
@@ -295,9 +300,11 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     checkFooWatcherReset = (fw, reset) ->
         for reactiveName of $$.FooWatcher.reactiveSpecs
             if reactiveName in reset
-                test.isTrue _wasReset 'FooWatcher', fw._id, reactiveName
+                test.isTrue _wasReset('FooWatcher', fw._id, reactiveName),
+                    "Should have reset <FooWatcher ##{fw._id}>.#{reactiveName}"
             else
-                test.isFalse _wasReset 'FooWatcher', fw._id, reactiveName
+                test.isFalse _wasReset('FooWatcher', fw._id, reactiveName),
+                    "Should NOT have reset <FooWatcher ##{fw._id}>.#{reactiveName}"
 
 
     foo = new $$.Foo
@@ -415,9 +422,9 @@ _wasReset = (modelName, instanceId, reactiveName) ->
     J.assert doc?
     reactiveObj = doc._reactives?[reactiveName]
 
-    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.val is undefined and reactiveObj?.ts?
+    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.dirty isnt false
 
-    reactiveObj?.val is undefined and reactiveObj?.ts?
+    reactiveObj?.dirty isnt false
 
 
 if Meteor.isClient then Tinytest.addAsync "_lastTest3", (test, onComplete) ->

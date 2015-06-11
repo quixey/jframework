@@ -82,13 +82,21 @@ class J.Model
     # to the corresponding fields of a given document.
     # - - -
     @fromDoc: (doc) ->
+        if doc._reactives
+            reactivesObj = doc._reactives
+            delete doc._reactives
+
         fields = EJSON.fromJSONValue @_getUnescapedSubdoc doc
 
         for fieldName of @fieldSpecs
             if fieldName not of fields
                 fields[fieldName] = J.makeValueNotReadyObject()
 
-        new @ fields
+        instance = new @ fields
+
+        instance._setReactives reactivesObj ? {}
+
+        instance
 
     # ## @toSubdoc
     # - - -
@@ -749,11 +757,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             # The server uses exclusively detached instances
             collection = new Mongo.Collection collectionName,
                 transform: (doc) ->
-                    reactivesObj = doc._reactives
-                    delete doc._reactives
                     instance = modelClass.fromDoc doc
                     instance.collection = collection
-                    instance._setReactives reactivesObj ? {}
                     instance
 
             for indexSpec in modelClass.indexSpecs
