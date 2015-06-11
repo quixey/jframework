@@ -690,6 +690,9 @@ J.lazy = (childrenFunc) ->
     J._defineComponent componentName,
         _isLazy: true
 
+        renderLoader: ->
+            $$ ('Loader')
+
         render: ->
             childrenFunc() ? null
 

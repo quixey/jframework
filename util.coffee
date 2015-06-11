@@ -110,6 +110,9 @@ J.util =
         else
             false
 
+    escapeRegexPattern: (pattern) ->
+        pattern.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')
+
     withoutUndefined: (x) ->
         helper = (y) ->
             trivial = true
