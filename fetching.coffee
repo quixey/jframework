@@ -74,8 +74,6 @@ _.extend J.fetching,
         return if not computation._requestingData
         for qsString in _.keys @_requestersByQs
             delete @_requestersByQs[qsString][computation._id]
-            if _.isEmpty @_requestersByQs[qsString]
-                delete @_requestersByQs[qsString]
         computation._requestingData = false
         @_requestsChanged = true
         Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
@@ -400,6 +398,13 @@ _.extend J.fetching,
     remergeQueries: ->
         return if @_requestInProgress or not @_requestsChanged
         @_requestsChanged = false
+
+        # Clean the empty objects out of @_requestersByQs.
+        # It would have been nice to do this in @_deleteComputationQsRequests, but that
+        # turns out to be a significant performance hit compared to doing it here.
+        for qsString in _.keys @_requestersByQs
+            if _.isEmpty @_requestersByQs[qsString]
+                delete @_requestersByQs[qsString]
 
         newUnmergedQsStrings = _.keys @_requestersByQs
         newUnmergedQuerySpecs = (J.fetching.parseQs qsString for qsString in newUnmergedQsStrings)

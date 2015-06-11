@@ -44,6 +44,19 @@ if Meteor.isServer
         cslLog.apply console, arguments
 
 
+Mongo.Collection.prototype._getFindOptions = (args) ->
+    # Monkey-patch this function because Meteor uses the check
+    # library which instantiates heavy Error objects and
+    # hurts performance.
+    if args.length < 2
+        transform: @_transform
+    else
+        _.extend(
+            transform: @_transform
+            args[1]
+        )
+
+
 J.stats = ->
     for id, x of J.graph
         if x instanceof J.List
