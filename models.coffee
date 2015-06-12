@@ -224,7 +224,7 @@ class J.Model
     # - - -
     get: (fieldOrReactiveName) ->
         if not @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         isReactive = fieldOrReactiveName of @modelClass.reactiveSpecs
 
@@ -258,7 +258,10 @@ class J.Model
                     # or if the fetch query that brought up this instance happened to
                     # exclude reactiveName.
                     if reactiveValue is undefined
-                        reactiveValue = J.Var(J.denorm.recalc @, reactiveName).get()
+                        priority = 10 * (reactiveSpec.priority ? 0.5)
+                        reactiveCalcObj = J._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
+                        Meteor.defer => J._dequeueReactiveCalc()
+                        reactiveValue = reactiveCalcObj.future.wait()
 
                     reactiveValue
 
@@ -418,7 +421,7 @@ class J.Model
             throw new Meteor.Error "Invalid fields setter: #{fields}"
 
         unless @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         if @attached
             throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
@@ -756,8 +759,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
                     instance.alive = false
-                    for reactiveName, reactive of instance.reactives
-                        reactive.stop()
                     delete collection._attachedInstances[id]
 
         if Meteor.isServer
@@ -987,15 +988,13 @@ Meteor.methods
 
         if not _reserved
             timestamp = new Date()
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
+
             if isNew
                 # Initialize all the selectable reactives
                 for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                     if reactiveSpec.selectable
-                        J.denorm.recalc instance, reactiveName, timestamp
-
-            # Note that we won't reset the reactive values we just recalculated
-            # because timestamp is the same
-            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
+                        J._enqueueReactiveCalc modelName, instance._id, reactiveName
 
         instance.onSave?()
 

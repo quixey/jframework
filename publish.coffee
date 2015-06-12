@@ -28,35 +28,6 @@ J.methods = (methods) ->
 
     Meteor.methods wrappedMethods
 
-
-
-# This loop is to do heavy lifting faster when conditions
-# seem kind of idle.
-_lastTs = new Date().getTime()
-Meteor.setInterval(
-    ->
-        ts = new Date().getTime()
-        interval = ts - _lastTs
-        _lastTs = ts
-
-        if interval > 550
-            # Wait for conditions to calm down because this recalc
-            # loop is lower priority than handling methods and
-            # running the publisher's observer callbacks
-            console.log "***INTERVAL: #{interval}"
-            return
-
-        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
-            do (i) ->
-                Meteor.setTimeout(
-                    J._dequeueReactiveCalc
-                    50
-                )
-
-    500
-)
-
-
 # dataSessionId: J.Dict
 #     updateObserversFiber: <Fiber>
 #     querySpecSet: {qsString: true}

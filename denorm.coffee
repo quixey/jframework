@@ -4,6 +4,8 @@
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
 
+Future = Npm.require 'fibers/future'
+
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
 # "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}": reactiveCalcObj
@@ -31,13 +33,23 @@ J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
             instanceId: instanceId
             reactiveName: reactiveName
             priority: priority
+            future: new Future
         J._reactiveCalcsInProgress[reactiveKey] = reactiveCalcObj
-        J._reactiveCalcQueue.push reactiveCalcObj
+        J._reactiveCalcQueue.unshift reactiveCalcObj
         J.util.sortByKey J._reactiveCalcQueue, 'priority'
+
+    reactiveCalcObj
 
 
 J._dequeueReactiveCalc = ->
     return if J._reactiveCalcQueue.length is 0
+
+    if false
+        console.log "DEQUEUE"
+        for reactiveCalcObj, i in J._reactiveCalcQueue
+            reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+            console.log "    Calc ##{i}: #{reactiveKey}"
+            console.log "        Priority: #{reactiveCalcObj.priority}"
 
     reactiveCalcObj = J._reactiveCalcQueue.pop()
     reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
@@ -48,9 +60,11 @@ J._dequeueReactiveCalc = ->
     # While this is recalculating, J._reactiveCalcsInProgress still contains reactiveKey
     # or else a different fiber could redundantly start the same recalc
     if instance?
-        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+        value = J.denorm.recalc instance, reactiveCalcObj.reactiveName
 
     delete J._reactiveCalcsInProgress[reactiveKey]
+
+    reactiveCalcObj.future.return value
 
 
 
@@ -60,6 +74,34 @@ Meteor.setInterval(
     J._dequeueReactiveCalc
     1000
 )
+
+
+# This loop is to do heavy lifting faster when conditions
+# seem kind of idle.
+_lastTs = new Date().getTime()
+Meteor.setInterval(
+    ->
+        ts = new Date().getTime()
+        interval = ts - _lastTs
+        _lastTs = ts
+
+        if interval > 550
+            # Wait for conditions to calm down because this recalc
+            # loop is lower priority than handling methods and
+            # running the publisher's observer callbacks
+            console.log "***INTERVAL: #{interval}"
+            return
+
+        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
+            do (i) ->
+                Meteor.setTimeout(
+                    J._dequeueReactiveCalc
+                    50
+                )
+
+    500
+)
+
 
 
 
@@ -90,23 +132,20 @@ J.denorm =
             throw new Error "Can't recalc a non-denorm reactive:
                 #{instance.modelClass.name}.#{reactiveName}"
 
-        value = null
-        watchedQuerySpecSet = null
-
         console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
+        watchedQuerySpecSet = null
+        wrappedValue = undefined
         J._watchedQuerySpecSet.withValue {}, =>
-            value = reactiveSpec.val.call instance
+            wrappedValue = J.Var(reactiveSpec.val.call instance).get()
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        if _.isArray value
-            value = J.List(value).toArr()
-        else if J.util.isPlainObject value
-            value = J.Dict(value).toObj()
-        else if value instanceof J.List
-            value = value.toArr()
-        else if value instanceof J.Dict
-            value = value.toObj()
+        if wrappedValue instanceof J.List
+            value = wrappedValue.toArr()
+        else if wrappedValue instanceof J.Dict
+            value = wrappedValue.toObj()
+        else
+            value = wrappedValue
 
         # console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
@@ -126,7 +165,7 @@ J.denorm =
             $set: setter
         )
 
-        value
+        wrappedValue
 
 
     resetWatchers: (modelName, instanceId, oldDoc, newDoc, timestamp = new Date(), callback) ->
@@ -334,7 +373,7 @@ J.denorm =
                 continue if not reactiveSpec.denorm
                 mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
                 mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
-            if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
+            if _.all(v is undefined for k, v of mutableOldValues) and _.all(v is undefined for k, v of mutableNewValues)
                 return null
 
             watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
