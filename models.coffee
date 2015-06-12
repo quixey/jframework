@@ -169,7 +169,8 @@ class J.Model
             delete options.collection
             delete options.denormCallback
 
-        Meteor.call '_jSave', @modelClass.name, doc, upsert, options, callback
+        Meteor.call '_jSave', @modelClass.name, doc, upsert, options, =>
+            callback? doc._id
 
         # Returns @_id
         @_id ?= doc._id
@@ -181,19 +182,18 @@ class J.Model
         #     filtered down to only the denormed reactives
         #     we cared to fetch.
 
+        @_reactives = reactivesObj
+
         reactivesSetter = {}
 
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
-            if reactiveSpec.denorm
-                if reactiveName of reactivesObj and (
-                    Meteor.isClient or reactivesObj[reactiveName].dirty is false
-                )
-                    reactivesSetter[reactiveName] =
-                        @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+            if reactiveSpec.denorm and reactiveName of reactivesObj
+                reactiveValue = @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                reactivesSetter[reactiveName] = reactiveValue
                 if reactivesSetter[reactiveName] is undefined
                     reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
 
-        @_reactives._forceSet reactivesSetter
+        @reactives._forceSet reactivesSetter
 
 
     # ## clone
@@ -225,36 +225,45 @@ class J.Model
     # - - -
     get: (fieldOrReactiveName) ->
         if not @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         isReactive = fieldOrReactiveName of @modelClass.reactiveSpecs
 
         if isReactive
             reactiveName = fieldOrReactiveName
-            reactiveSpec = @modelClass.reactiveSpecs[fieldOrReactiveName]
+            reactiveSpec = @modelClass.reactiveSpecs[reactiveName]
 
             if Meteor.isServer
                 if reactiveSpec.denorm
                     J.assert @_id?
 
                     if J._watchedQuerySpecSet.get()?
-                        projection = _: false
-                        projection[reactiveName] = true
-                        dummyQuerySpec =
-                            modelName: @modelClass.name
-                            selector: @_id
-                            fields: projection
-                            limit: 1
-                        dummyQsString = J.fetching.stringifyQs dummyQuerySpec
-                        J._watchedQuerySpecSet.get()[dummyQsString] = true
+                        if reactiveSpec.watchable ? @modelClass.watchable
+                            projection = _: false
+                            projection[reactiveName] = true
+                            dummyQuerySpec =
+                                modelName: @modelClass.name
+                                selector: @_id
+                                fields: projection
+                                limit: 1
+                            dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                            J._watchedQuerySpecSet.get()[dummyQsString] = true
 
-                    reactiveValue = @_reactives.tryGet reactiveName
+                    reactiveValue = @reactives.tryGet reactiveName
+                    if reactiveValue isnt undefined and J._watchedQuerySpecSet.get()?
+                        if @_reactives[reactiveName].dirty isnt false
+                            # Normally we can use dirty values of reactives, but not when
+                            # we're in the process of recalculating a different reactive.
+                            reactiveValue = undefined
 
                     # NOTE: Will recompute either if the reactive value doesn't exist,
                     # or if the fetch query that brought up this instance happened to
                     # exclude reactiveName.
                     if reactiveValue is undefined
-                        reactiveValue = J.Var(J.denorm.recalc @, reactiveName).get()
+                        priority = 10 * (reactiveSpec.priority ? 0.5)
+                        reactiveCalcObj = J._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
+                        Meteor.defer => J._dequeueReactiveCalc()
+                        reactiveValue = reactiveCalcObj.future.wait()
 
                     reactiveValue
 
@@ -274,7 +283,7 @@ class J.Model
                         # pulled away.
                         # While we do want to stop watching this field when the current computation
                         # invalidates, we might *not* need to invalidate the current computation when
-                        # the new field data arrives. The reactivity is handled by the @_reactives dict.
+                        # the new field data arrives. The reactivity is handled by the @reactives dict.
                         # Therefore a child J.AutoVar is the perfect place to do the bookkeeping.
                         J.AutoVar(
                             "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
@@ -284,7 +293,7 @@ class J.Model
                             true
                         )
 
-                    @_reactives.get reactiveName
+                    @reactives.get reactiveName
 
                 else
                     # On unattached instances, denormed reactives behave like
@@ -293,12 +302,13 @@ class J.Model
 
         else
             fieldName = fieldOrReactiveName
+            fieldSpec = @modelClass.fieldSpecs[fieldName]
 
             if Meteor.isServer and J._watchedQuerySpecSet.get()?
                 J.assert @_id?
 
                 # Treat an own-field access the same as any query
-                if not @modelClass.immutable
+                if fieldSpec.watchable ? @modelClass.watchable
                     projection = _: false
                     projection[fieldName] = true
                     dummyQuerySpec =
@@ -414,7 +424,7 @@ class J.Model
             throw new Meteor.Error "Invalid fields setter: #{fields}"
 
         unless @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection} is dead"
+            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         if @attached
             throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
@@ -628,12 +638,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             if fieldName not of nonIdInitFields
                 @_fields.setOrAdd fieldName, null # TODO: Support default values for fields of new model instances
 
-        # The @_reactives dict stores the published values of reactives
+        # The @reactives dict stores the published values of reactives
         # with denorm:true (i.e. server handles all their reactivity).
-        @_reactives = J.Dict() # denormedReactiveName: value
+        @reactives = J.Dict() # denormedReactiveName: value
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
             if reactiveSpec.denorm
-                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+                @reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+
+        # @_reactives is a faithful copy of (a subset of keys of) the Mongo doc field
+        @_reactives = undefined
 
         null
 
@@ -654,8 +667,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     memberSpecs = _.clone members
     modelClass.idSpec = memberSpecs._id
     delete memberSpecs._id
-    modelClass.immutable = memberSpecs.immutable ? false
-    delete memberSpecs.immutable
+    modelClass.watchable = memberSpecs.watchable ? true
+    delete memberSpecs.watchable
     modelClass.fieldSpecs = memberSpecs.fields ? {}
     delete memberSpecs.fields
     modelClass.reactiveSpecs = memberSpecs.reactives ? {}
@@ -749,8 +762,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                 removed: (id) ->
                     instance = collection._attachedInstances[id]
                     instance.alive = false
-                    for reactiveName, reactive of instance.reactives
-                        reactive.stop()
                     delete collection._attachedInstances[id]
 
         if Meteor.isServer
@@ -834,8 +845,13 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
-                        if not modelClass.immutable
-                            J._watchedQuerySpecSet.get()[qsString] = true
+                        for selectorKey, value of selector
+                            if J.util.isPlainObject(value) and not _.any(k[0] is '$' for k of value)
+                                console.warn "***Dependencies for object-valued selector keys are untracked.
+                                    Use a combination of individual dot-paths instead."
+                                console.warn "    #{JSON.stringify querySpec, null, 4}"
+
+                        J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
@@ -941,8 +957,6 @@ Meteor.methods
             oldDoc = modelClass.findOne(
                 doc._id
             ,
-                fields:
-                    _reactives: 0
                 transform: false
             )
 
@@ -954,15 +968,7 @@ Meteor.methods
 
             setter = {}
             for fieldName, newValue of fields
-                fieldSpec = modelClass.fieldSpecs[fieldName]
-
                 if newValue isnt undefined
-                    oldValue = oldDoc[fieldName]
-                    if oldValue isnt undefined and newValue isnt oldValue
-                        if modelClass.immutable or fieldSpec.immutable
-                            throw new Meteor.Error "Can't save <#{modelName} #{JSON.stringify doc._id}>:
-                                Field #{fieldName} is immutable"
-
                     setter[fieldName] = newValue
 
             modelClass.collection.upsert doc._id,
@@ -982,15 +988,13 @@ Meteor.methods
 
         if not _reserved
             timestamp = new Date()
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
+
             if isNew
                 # Initialize all the selectable reactives
                 for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                     if reactiveSpec.selectable
-                        J.denorm.recalc instance, reactiveName, timestamp
-
-            # Note that we won't reset the reactive values we just recalculated
-            # because timestamp is the same
-            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
+                        J._enqueueReactiveCalc modelName, instance._id, reactiveName
 
         instance.onSave?()
 

@@ -259,6 +259,7 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
             ->
                 attachedBar.get().numberOfFoosWithAEqualTo4()
             (oldCount, newCount) ->
+                console.log 'onchange', oldCount, newCount
                 if oldCount is undefined
                     foo.a(4)
                     foo.save()
@@ -422,7 +423,7 @@ _wasReset = (modelName, instanceId, reactiveName) ->
     J.assert doc?
     reactiveObj = doc._reactives?[reactiveName]
 
-    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.dirty isnt false
+    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.val is undefined and reactiveObj?.ts?
 
     reactiveObj?.dirty isnt false
 

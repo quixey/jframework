@@ -4,6 +4,8 @@
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
 
+Future = Npm.require 'fibers/future'
+
 J._watchedQuerySpecSet = new Meteor.EnvironmentVariable
 
 # "#{modelName}.#{JSON.stringify instanceId}.#{reactiveName}": reactiveCalcObj
@@ -31,13 +33,23 @@ J._enqueueReactiveCalc = (modelName, instanceId, reactiveName, priority) ->
             instanceId: instanceId
             reactiveName: reactiveName
             priority: priority
+            future: new Future
         J._reactiveCalcsInProgress[reactiveKey] = reactiveCalcObj
-        J._reactiveCalcQueue.push reactiveCalcObj
+        J._reactiveCalcQueue.unshift reactiveCalcObj
         J.util.sortByKey J._reactiveCalcQueue, 'priority'
+
+    reactiveCalcObj
 
 
 J._dequeueReactiveCalc = ->
     return if J._reactiveCalcQueue.length is 0
+
+    if false
+        console.log "DEQUEUE"
+        for reactiveCalcObj, i in J._reactiveCalcQueue
+            reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
+            console.log "    Calc ##{i}: #{reactiveKey}"
+            console.log "        Priority: #{reactiveCalcObj.priority}"
 
     reactiveCalcObj = J._reactiveCalcQueue.pop()
     reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
@@ -48,18 +60,18 @@ J._dequeueReactiveCalc = ->
     # While this is recalculating, J._reactiveCalcsInProgress still contains reactiveKey
     # or else a different fiber could redundantly start the same recalc
     if instance?
-        J.denorm.recalc instance, reactiveCalcObj.reactiveName
+        value = J.denorm.recalc instance, reactiveCalcObj.reactiveName
 
     delete J._reactiveCalcsInProgress[reactiveKey]
 
+    reactiveCalcObj.future.return value
 
 
-# This is a lightweight loop to make sure the highest-priority
-# recalcs are always getting dequeued
 Meteor.setInterval(
     J._dequeueReactiveCalc
-    1000
+    100
 )
+
 
 
 
@@ -90,23 +102,22 @@ J.denorm =
             throw new Error "Can't recalc a non-denorm reactive:
                 #{instance.modelClass.name}.#{reactiveName}"
 
-        value = null
-        watchedQuerySpecSet = null
-
         console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
+        if J._reactiveCalcQueue.length > 0
+            console.log "    (#{J._reactiveCalcQueue.length} more in queue)"
 
+        watchedQuerySpecSet = null
+        wrappedValue = undefined
         J._watchedQuerySpecSet.withValue {}, =>
-            value = reactiveSpec.val.call instance
+            wrappedValue = J.Var(reactiveSpec.val.call instance).get()
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
-        if _.isArray value
-            value = J.List(value).toArr()
-        else if J.util.isPlainObject value
-            value = J.Dict(value).toObj()
-        else if value instanceof J.List
-            value = value.toArr()
-        else if value instanceof J.Dict
-            value = value.toObj()
+        if wrappedValue instanceof J.List
+            value = wrappedValue.toArr()
+        else if wrappedValue instanceof J.Dict
+            value = wrappedValue.toObj()
+        else
+            value = wrappedValue
 
         # console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
@@ -126,12 +137,16 @@ J.denorm =
             $set: setter
         )
 
-        value
+        wrappedValue
 
 
-    resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date(), callback) ->
-        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
-            #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
+    resetWatchers: (modelName, instanceId, oldDoc, newDoc, timestamp = new Date(), callback) ->
+        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>",
+            JSON.stringify
+                oldDoc: _.keys(oldDoc)
+                oldReactives: _.keys(oldDoc._reactives ? {})
+                newDoc: _.keys(newDoc)
+                newReactives: _.keys(newDoc._reactives ? {})
 
         # Total number of running calls to resetWatchersHelper
         semaphore = 0
@@ -142,26 +157,32 @@ J.denorm =
         semaRelease = ->
             # console.log 'semaRelease', semaphore + 1
             semaphore += 1
-            if semaphore is 0 then callback?()
+            if semaphore is 0
+                console.log "...resetWatchers <#{modelName} #{JSON.stringify(instanceId)}> done"
+                callback?()
 
 
-        resetWatchersHelper = (modelName, instanceId, oldValues, newValues, timestamp) ->
+        resetWatchersHelper = (modelName, instanceId, oldDoc, newDoc, timestamp) ->
             semaAcquire()
 
-            lockSema = 0
-            lockAcquire = ->
-                # console.log 'lockAcquire', lockSema - 1
-                lockSema -= 1
-            lockRelease = ->
-                # console.log 'lockRelease', lockSema + 1
-                lockSema += 1
-                if lockSema is 0 then semaRelease()
+            # false: Locked while waiting for series of findAndModify operations
+            # true: Unlocked because series of findAndModifyOperations is done
+            lockSema = {} # "#{watcherModelName}.#{watcherReactiveName}": true
+            lockAcquire = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                lockSema[lockKey] = false
+            lockRelease = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                J.assert lockSema[lockKey] in [true, false]
+                if lockSema[lockKey] is false
+                    lockSema[lockKey] = true
+                    if _.all(_.values lockSema) then semaRelease()
 
 
             modelClass = J.models[modelName]
 
             # console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
-                #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
+                #{JSON.stringify (oldDoc: _.keys(oldDoc), newDoc: _.keys(newDoc))}"
 
 
             makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
@@ -175,13 +196,35 @@ J.denorm =
                     $elemMatch: $in: []
 
                 for value in possibleValues
-                    equalityClause[selectorKey].$in.push value
-                    inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
-                    if _.isArray value then for elem in value
-                        equalityClause[selectorKey].$in.push elem
-                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+                    # NOTE: We don't support equality matching on objects
+                    continue if J.util.isPlainObject value
 
-                termMatcher = $or: [equalityClause, inClause]
+                    allOk = true
+
+                    if _.isArray value
+                        for elem in value
+                            # NOTE: We don't support equality matching on nested arrays
+                            # or objects in arrays
+
+                            if _.isArray(elem) or J.util.isPlainObject(elem)
+                                allOk = false
+                            else
+                                equalityClause[selectorKey].$in.push elem
+                                inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+
+                    if allOk
+                        equalityClause[selectorKey].$in.push value
+                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
+
+                termMatcher = $or: []
+                if equalityClause[selectorKey].$in.length
+                    termMatcher.$or.push equalityClause
+                if inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.length
+                    termMatcher.$or.push inClause
+
+                # Selector is meaningless for unmatchable values
+                return null if not termMatcher.$or.length
+
                 if not mustExist
                     doesntExistClause = {}
                     doesntExistClause[selectorKey] = $exists: false
@@ -209,11 +252,9 @@ J.denorm =
                 changedSubfieldOverrideProjectionMatcher = []
 
                 addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
-                    # 1. Append clauses to subfieldSelectorMatcher so it restricts the
-                    #    set of matched watchers to ones that ever returned this doc.
-                    #
-                    # 2. Mutate changedSubFieldNameSet for later
-                    # FIXME
+                    # Append clauses to subfieldSelectorMatcher so it restricts the
+                    # set of matched watchers to ones that ever returned this doc.
+                    # Also append clauses to the other changedSubfield*Matcher lists.
 
                     # TODO: Handle more selectors besides just default (equality) and $in
                     # e.g. $gt, $gte, $lt, $lte
@@ -240,10 +281,12 @@ J.denorm =
                         if newValue isnt undefined and changed
                             possibleValues.push newValue
 
-                        subfieldSelectorMatcher.push makeTermMatcher selectorKey, false, possibleValues
+                        termMatcher = makeTermMatcher selectorKey, false, possibleValues
+                        if termMatcher? then subfieldSelectorMatcher.push termMatcher
 
                         if changed
-                            changedSubfieldSelectorMatcher.push makeTermMatcher selectorKey, true, possibleValues
+                            termMatcher = makeTermMatcher selectorKey, true, possibleValues
+                            if termMatcher? then changedSubfieldSelectorMatcher.push termMatcher
 
                             term = {}
                             term[sortSpecKey] = $exists: true
@@ -323,26 +366,33 @@ J.denorm =
 
             mutableOldValues = {}
             mutableNewValues = {}
-            if not modelClass.immutable
-                for fieldName, fieldSpec of modelClass.fieldSpecs
-                    continue if fieldSpec.immutable
-                    if fieldName of oldValues
-                        mutableOldValues[fieldName] = oldValues[fieldName]
-                    if fieldName of newValues
-                        mutableNewValues[fieldName] = newValues[fieldName]
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                continue if not (fieldSpec.watchable ? modelClass.watchable)
+                mutableOldValues[fieldName] = oldDoc[fieldName]
+                mutableNewValues[fieldName] = newDoc[fieldName]
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 continue if not reactiveSpec.denorm
-                if reactiveName of oldValues
-                    mutableOldValues[reactiveName] = oldValues[reactiveName]
-                if reactiveName of newValues
-                    mutableNewValues[reactiveName] = newValues[reactiveName]
-            if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
+                continue if not (reactiveSpec.watchable ? modelClass.watchable)
+                mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
+                mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
+
+            if _.all(v is undefined for k, v of mutableOldValues) and _.all(v is undefined for k, v of mutableNewValues)
+                semaRelease()
                 return null
 
             watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
 
+            watcherMatcherLength = JSON.stringify(watcherMatcher).length
+            if watcherMatcherLength > 10000
+                console.warn "***watcherMatcher for <#{modelName} #{JSON.stringify instanceId}>
+                    #{JSON.stringify _.keys mutableOldValues} is #{watcherMatcherLength} chars long"
+                console.log JSON.stringify watcherMatcher
+
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                return if lockSema[lockKey]
+
                 watcherModelClass = J.models[watcherModelName]
                 watcherReactiveSpec = watcherModelClass.reactiveSpecs[watcherReactiveName]
                 # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
@@ -365,31 +415,30 @@ J.denorm =
                 ,
                     $set: setter
                 ,
-                    Meteor.bindEnvironment (err, doc) ->
+                    Meteor.bindEnvironment (err, oldWatcherDoc) ->
                         if err
                             console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
                                 watchers of #{modelName}.#{JSON.stringify instanceId}:"
                             console.error err
-                            lockRelease()
+                            lockRelease watcherModelName, watcherReactiveName
                             return
 
-                        if doc?
+                        if oldWatcherDoc?
                             resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
 
                             if watcherReactiveSpec.selectable
                                 # Selectable reactives must stay updated
                                 priority = (watcherReactiveSpec.priority ? 0.5) / 10
-                                J._enqueueReactiveCalc watcherModelName, doc._id, watcherReactiveName, priority
+                                J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
 
                             # Continue to reset one doc at a time until there are no more docs to reset
                             resetOneWatcherDoc watcherModelName, watcherReactiveName
 
                             # Also branch into resetting all docs watching this watching-reactive in this doc
-                            watcherOldValues = {}
-                            watcherOldValues[watcherReactiveName] = doc._reactives?[watcherReactiveName]?.val
-                            watcherNewValues = {}
-                            watcherNewValues[watcherReactiveName] = undefined
-                            resetWatchersHelper watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
+                            newWatcherDoc = _.clone oldWatcherDoc
+                            newWatcherDoc._reactives = _.clone oldWatcherDoc._reactives
+                            delete newWatcherDoc._reactives[watcherReactiveName]
+                            resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
 
                         else
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
@@ -398,22 +447,22 @@ J.denorm =
                                     #{numWatchersReset} watchers reset"
                                 # console.log "selector: #{JSON.stringify selector, null, 4}"
 
-                            lockRelease()
+                            lockRelease watcherModelName, watcherReactiveName
                 )
 
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
                     if watcherReactiveSpec.denorm
-                        lockAcquire()
+                        lockAcquire watcherModelName, watcherReactiveName
                         resetOneWatcherDoc watcherModelName, watcherReactiveName
 
-            if lockSema is 0 then semaRelease()
+            if _.all(_.values lockSema) then semaRelease()
 
             null
 
 
-        resetWatchersHelper modelName, instanceId, oldValues, newValues, timestamp
+        resetWatchersHelper modelName, instanceId, oldDoc, newDoc, timestamp
 
 
 Meteor.startup ->

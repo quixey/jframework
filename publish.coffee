@@ -28,35 +28,6 @@ J.methods = (methods) ->
 
     Meteor.methods wrappedMethods
 
-
-
-# This loop is to do heavy lifting faster when conditions
-# seem kind of idle.
-_lastTs = new Date().getTime()
-Meteor.setInterval(
-    ->
-        ts = new Date().getTime()
-        interval = ts - _lastTs
-        _lastTs = ts
-
-        if interval > 550
-            # Wait for conditions to calm down because this recalc
-            # loop is lower priority than handling methods and
-            # running the publisher's observer callbacks
-            console.log "***INTERVAL: #{interval}"
-            return
-
-        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
-            do (i) ->
-                Meteor.setTimeout(
-                    J._dequeueReactiveCalc
-                    50
-                )
-
-    500
-)
-
-
 # dataSessionId: J.Dict
 #     updateObserversFiber: <Fiber>
 #     querySpecSet: {qsString: true}
@@ -136,7 +107,7 @@ Meteor.methods
         jDataSession = new $$.JDataSession
             _id: dataSessionId
             querySpecStrings: session.querySpecSet().getKeys()
-        jDataSession.save()
+        jDataSession.save ->
 
         # log '..._updateDataQueries done'
 
@@ -297,14 +268,23 @@ updateObservers = (dataSessionId) ->
                                 break
 
                     if needsRecalc
-                        # Keep publishing the previous value of reactivesObj[reactiveName]
+                        if reactivesObj[reactiveName] is undefined
+                            # We know this value is dirty, but publish it anyway.
+                            reactivesObj[reactiveName] =
+                                val: reactiveValue
+                                ts: reactiveTs
+                                dirty: reactiveDirty
+
+                        # Else keep publishing the previous value of reactivesObj[reactiveName]
                         # until the recalc task gets popped off the queue asynchronously.
+
                         J._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
                         reactivesObj[reactiveName] =
                             val: reactiveValue
                             ts: reactiveTs
+                            dirty: reactiveDirty
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
