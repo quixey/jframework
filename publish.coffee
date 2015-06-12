@@ -107,7 +107,7 @@ Meteor.methods
         jDataSession = new $$.JDataSession
             _id: dataSessionId
             querySpecStrings: session.querySpecSet().getKeys()
-        jDataSession.save()
+        jDataSession.save ->
 
         # log '..._updateDataQueries done'
 

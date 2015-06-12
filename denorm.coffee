@@ -67,39 +67,9 @@ J._dequeueReactiveCalc = ->
     reactiveCalcObj.future.return value
 
 
-
-# This is a lightweight loop to make sure the highest-priority
-# recalcs are always getting dequeued
 Meteor.setInterval(
     J._dequeueReactiveCalc
-    1000
-)
-
-
-# This loop is to do heavy lifting faster when conditions
-# seem kind of idle.
-_lastTs = new Date().getTime()
-Meteor.setInterval(
-    ->
-        ts = new Date().getTime()
-        interval = ts - _lastTs
-        _lastTs = ts
-
-        if interval > 550
-            # Wait for conditions to calm down because this recalc
-            # loop is lower priority than handling methods and
-            # running the publisher's observer callbacks
-            console.log "***INTERVAL: #{interval}"
-            return
-
-        for i in [0...Math.min 5, J._reactiveCalcQueue.length]
-            do (i) ->
-                Meteor.setTimeout(
-                    J._dequeueReactiveCalc
-                    50
-                )
-
-    500
+    100
 )
 
 
@@ -133,6 +103,8 @@ J.denorm =
                 #{instance.modelClass.name}.#{reactiveName}"
 
         console.log "Recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
+        if J._reactiveCalcQueue.length > 0
+            console.log "    (#{J._reactiveCalcQueue.length} more in queue)"
 
         watchedQuerySpecSet = null
         wrappedValue = undefined
@@ -185,20 +157,26 @@ J.denorm =
         semaRelease = ->
             # console.log 'semaRelease', semaphore + 1
             semaphore += 1
-            if semaphore is 0 then callback?()
+            if semaphore is 0
+                console.log "...resetWatchers <#{modelName} #{JSON.stringify(instanceId)}> done"
+                callback?()
 
 
         resetWatchersHelper = (modelName, instanceId, oldDoc, newDoc, timestamp) ->
             semaAcquire()
 
-            lockSema = 0
-            lockAcquire = ->
-                # console.log 'lockAcquire', lockSema - 1
-                lockSema -= 1
-            lockRelease = ->
-                # console.log 'lockRelease', lockSema + 1
-                lockSema += 1
-                if lockSema is 0 then semaRelease()
+            # false: Locked while waiting for series of findAndModify operations
+            # true: Unlocked because series of findAndModifyOperations is done
+            lockSema = {} # "#{watcherModelName}.#{watcherReactiveName}": true
+            lockAcquire = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                lockSema[lockKey] = false
+            lockRelease = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                J.assert lockSema[lockKey] in [true, false]
+                if lockSema[lockKey] is false
+                    lockSema[lockKey] = true
+                    if _.all(_.values lockSema) then semaRelease()
 
 
             modelClass = J.models[modelName]
@@ -380,6 +358,9 @@ J.denorm =
 
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
+                lockKey = "#{watcherModelName}.#{watcherReactiveName}"
+                return if lockSema[lockKey]
+
                 watcherModelClass = J.models[watcherModelName]
                 watcherReactiveSpec = watcherModelClass.reactiveSpecs[watcherReactiveName]
                 # console.log "resetOneWatcherDoc: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
@@ -407,7 +388,7 @@ J.denorm =
                             console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
                                 watchers of #{modelName}.#{JSON.stringify instanceId}:"
                             console.error err
-                            lockRelease()
+                            lockRelease watcherModelName, watcherReactiveName
                             return
 
                         if oldWatcherDoc?
@@ -434,14 +415,14 @@ J.denorm =
                                     #{numWatchersReset} watchers reset"
                                 # console.log "selector: #{JSON.stringify selector, null, 4}"
 
-                            lockRelease()
+                            lockRelease watcherModelName, watcherReactiveName
                 )
 
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
                     if watcherReactiveSpec.denorm
-                        lockAcquire()
+                        lockAcquire watcherModelName, watcherReactiveName
                         resetOneWatcherDoc watcherModelName, watcherReactiveName
 
             if lockSema is 0 then semaRelease()
