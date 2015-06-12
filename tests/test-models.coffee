@@ -162,7 +162,6 @@ J.dm 'ModelB', 'bs',
 J.dm 'ModelC', 'cs',
     _id: $$.str
 
-    immutable: true
     fields:
         bId:
             type: $$.str

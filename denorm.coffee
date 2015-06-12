@@ -196,13 +196,35 @@ J.denorm =
                     $elemMatch: $in: []
 
                 for value in possibleValues
-                    equalityClause[selectorKey].$in.push value
-                    inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
-                    if _.isArray value then for elem in value
-                        equalityClause[selectorKey].$in.push elem
-                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+                    # NOTE: We don't support equality matching on objects
+                    continue if J.util.isPlainObject value
 
-                termMatcher = $or: [equalityClause, inClause]
+                    allOk = true
+
+                    if _.isArray value
+                        for elem in value
+                            # NOTE: We don't support equality matching on nested arrays
+                            # or objects in arrays
+
+                            if _.isArray(elem) or J.util.isPlainObject(elem)
+                                allOk = false
+                            else
+                                equalityClause[selectorKey].$in.push elem
+                                inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+
+                    if allOk
+                        equalityClause[selectorKey].$in.push value
+                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
+
+                termMatcher = $or: []
+                if equalityClause[selectorKey].$in.length
+                    termMatcher.$or.push equalityClause
+                if inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.length
+                    termMatcher.$or.push inClause
+
+                # Selector is meaningless for unmatchable values
+                return null if not termMatcher.$or.length
+
                 if not mustExist
                     doesntExistClause = {}
                     doesntExistClause[selectorKey] = $exists: false
@@ -259,10 +281,12 @@ J.denorm =
                         if newValue isnt undefined and changed
                             possibleValues.push newValue
 
-                        subfieldSelectorMatcher.push makeTermMatcher selectorKey, false, possibleValues
+                        termMatcher = makeTermMatcher selectorKey, false, possibleValues
+                        if termMatcher? then subfieldSelectorMatcher.push termMatcher
 
                         if changed
-                            changedSubfieldSelectorMatcher.push makeTermMatcher selectorKey, true, possibleValues
+                            termMatcher = makeTermMatcher selectorKey, true, possibleValues
+                            if termMatcher? then changedSubfieldSelectorMatcher.push termMatcher
 
                             term = {}
                             term[sortSpecKey] = $exists: true
@@ -342,19 +366,27 @@ J.denorm =
 
             mutableOldValues = {}
             mutableNewValues = {}
-            if not modelClass.immutable
-                for fieldName, fieldSpec of modelClass.fieldSpecs
-                    continue if fieldSpec.immutable
-                    mutableOldValues[fieldName] = oldDoc[fieldName]
-                    mutableNewValues[fieldName] = newDoc[fieldName]
+            for fieldName, fieldSpec of modelClass.fieldSpecs
+                continue if not (fieldSpec.watchable ? modelClass.watchable)
+                mutableOldValues[fieldName] = oldDoc[fieldName]
+                mutableNewValues[fieldName] = newDoc[fieldName]
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 continue if not reactiveSpec.denorm
+                continue if not (reactiveSpec.watchable ? modelClass.watchable)
                 mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
                 mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
+
             if _.all(v is undefined for k, v of mutableOldValues) and _.all(v is undefined for k, v of mutableNewValues)
+                semaRelease()
                 return null
 
             watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
+
+            watcherMatcherLength = JSON.stringify(watcherMatcher).length
+            if watcherMatcherLength > 10000
+                console.warn "***watcherMatcher for <#{modelName} #{JSON.stringify instanceId}>
+                    #{JSON.stringify _.keys mutableOldValues} is #{watcherMatcherLength} chars long"
+                console.log JSON.stringify watcherMatcher
 
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
@@ -425,7 +457,7 @@ J.denorm =
                         lockAcquire watcherModelName, watcherReactiveName
                         resetOneWatcherDoc watcherModelName, watcherReactiveName
 
-            if lockSema is 0 then semaRelease()
+            if _.all(_.values lockSema) then semaRelease()
 
             null
 

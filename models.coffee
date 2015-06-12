@@ -169,7 +169,8 @@ class J.Model
             delete options.collection
             delete options.denormCallback
 
-        Meteor.call '_jSave', @modelClass.name, doc, upsert, options, callback
+        Meteor.call '_jSave', @modelClass.name, doc, upsert, options, =>
+            callback? doc._id
 
         # Returns @_id
         @_id ?= doc._id
@@ -230,22 +231,23 @@ class J.Model
 
         if isReactive
             reactiveName = fieldOrReactiveName
-            reactiveSpec = @modelClass.reactiveSpecs[fieldOrReactiveName]
+            reactiveSpec = @modelClass.reactiveSpecs[reactiveName]
 
             if Meteor.isServer
                 if reactiveSpec.denorm
                     J.assert @_id?
 
                     if J._watchedQuerySpecSet.get()?
-                        projection = _: false
-                        projection[reactiveName] = true
-                        dummyQuerySpec =
-                            modelName: @modelClass.name
-                            selector: @_id
-                            fields: projection
-                            limit: 1
-                        dummyQsString = J.fetching.stringifyQs dummyQuerySpec
-                        J._watchedQuerySpecSet.get()[dummyQsString] = true
+                        if reactiveSpec.watchable ? @modelClass.watchable
+                            projection = _: false
+                            projection[reactiveName] = true
+                            dummyQuerySpec =
+                                modelName: @modelClass.name
+                                selector: @_id
+                                fields: projection
+                                limit: 1
+                            dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                            J._watchedQuerySpecSet.get()[dummyQsString] = true
 
                     reactiveValue = @reactives.tryGet reactiveName
                     if reactiveValue isnt undefined and J._watchedQuerySpecSet.get()?
@@ -300,12 +302,13 @@ class J.Model
 
         else
             fieldName = fieldOrReactiveName
+            fieldSpec = @modelClass.fieldSpecs[fieldName]
 
             if Meteor.isServer and J._watchedQuerySpecSet.get()?
                 J.assert @_id?
 
                 # Treat an own-field access the same as any query
-                if not @modelClass.immutable
+                if fieldSpec.watchable ? @modelClass.watchable
                     projection = _: false
                     projection[fieldName] = true
                     dummyQuerySpec =
@@ -664,8 +667,8 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     memberSpecs = _.clone members
     modelClass.idSpec = memberSpecs._id
     delete memberSpecs._id
-    modelClass.immutable = memberSpecs.immutable ? false
-    delete memberSpecs.immutable
+    modelClass.watchable = memberSpecs.watchable ? true
+    delete memberSpecs.watchable
     modelClass.fieldSpecs = memberSpecs.fields ? {}
     delete memberSpecs.fields
     modelClass.reactiveSpecs = memberSpecs.reactives ? {}
@@ -842,8 +845,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
-                        if not modelClass.immutable
-                            J._watchedQuerySpecSet.get()[qsString] = true
+                        J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
@@ -960,15 +962,7 @@ Meteor.methods
 
             setter = {}
             for fieldName, newValue of fields
-                fieldSpec = modelClass.fieldSpecs[fieldName]
-
                 if newValue isnt undefined
-                    oldValue = oldDoc[fieldName]
-                    if oldValue isnt undefined and newValue isnt oldValue
-                        if modelClass.immutable or fieldSpec.immutable
-                            throw new Meteor.Error "Can't save <#{modelName} #{JSON.stringify doc._id}>:
-                                Field #{fieldName} is immutable"
-
                     setter[fieldName] = newValue
 
             modelClass.collection.upsert doc._id,
