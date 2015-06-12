@@ -845,6 +845,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     qsString = J.fetching.stringifyQs querySpec
 
                     if J._watchedQuerySpecSet.get()?
+                        for selectorKey, value of selector
+                            if J.util.isPlainObject(value) and not _.any(k[0] is '$' for k of value)
+                                console.warn "***Dependencies for object-valued selector keys are untracked.
+                                    Use a combination of individual dot-paths instead."
+                                console.warn "    #{JSON.stringify querySpec, null, 4}"
+
                         J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
