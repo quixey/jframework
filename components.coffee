@@ -34,6 +34,7 @@ _getDebugPrefix = (component = null, tabWidth = 4) ->
     "#{(' 'for i in [0...numSpaces]).join('')}#{if component? and _debugDepth is 0 then component.toString() else ''}"
 
 componentDebugTagging = Meteor.settings?.public?.jframework?.debug?.componentsTagging ? false
+# Set public.jframework.debug.componentsTagging to true in settings.json to show tooltip-like tags for all components.
 
 
 J.dc = J.defineComponent = (componentName, componentSpec) ->
@@ -678,6 +679,7 @@ J._defineComponent = (componentName, componentSpec) ->
 
 componentDebugTaggingFlag = true
 $$ = (elemType, props, children...) ->
+    # If componentsTagging is on, we want to wrap each component in a div to include the tooltip-like tags.
     if componentDebugTagging and elemType[0] != '_' and elemType of J.components and (not props or 'data-component-tag' not of props)
         if componentDebugTaggingFlag
             componentDebugTaggingFlag = false
