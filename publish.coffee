@@ -297,14 +297,23 @@ updateObservers = (dataSessionId) ->
                                 break
 
                     if needsRecalc
-                        # Keep publishing the previous value of reactivesObj[reactiveName]
+                        if reactivesObj[reactiveName] is undefined
+                            # We know this value is dirty, but publish it anyway.
+                            reactivesObj[reactiveName] =
+                                val: reactiveValue
+                                ts: reactiveTs
+                                dirty: reactiveDirty
+
+                        # Else keep publishing the previous value of reactivesObj[reactiveName]
                         # until the recalc task gets popped off the queue asynchronously.
+
                         J._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
                         reactivesObj[reactiveName] =
                             val: reactiveValue
                             ts: reactiveTs
+                            dirty: reactiveDirty
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}

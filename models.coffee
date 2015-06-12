@@ -181,19 +181,18 @@ class J.Model
         #     filtered down to only the denormed reactives
         #     we cared to fetch.
 
+        @_reactives = reactivesObj
+
         reactivesSetter = {}
 
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
-            if reactiveSpec.denorm
-                if reactiveName of reactivesObj and (
-                    Meteor.isClient or reactivesObj[reactiveName].dirty is false
-                )
-                    reactivesSetter[reactiveName] =
-                        @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+            if reactiveSpec.denorm and reactiveName of reactivesObj
+                reactiveValue = @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                reactivesSetter[reactiveName] = reactiveValue
                 if reactivesSetter[reactiveName] is undefined
                     reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
 
-        @_reactives._forceSet reactivesSetter
+        @reactives._forceSet reactivesSetter
 
 
     # ## clone
@@ -248,7 +247,12 @@ class J.Model
                         dummyQsString = J.fetching.stringifyQs dummyQuerySpec
                         J._watchedQuerySpecSet.get()[dummyQsString] = true
 
-                    reactiveValue = @_reactives.tryGet reactiveName
+                    reactiveValue = @reactives.tryGet reactiveName
+                    if reactiveValue isnt undefined and J._watchedQuerySpecSet.get()?
+                        if @_reactives[reactiveName].dirty isnt false
+                            # Normally we can use dirty values of reactives, but not when
+                            # we're in the process of recalculating a different reactive.
+                            reactiveValue = undefined
 
                     # NOTE: Will recompute either if the reactive value doesn't exist,
                     # or if the fetch query that brought up this instance happened to
@@ -274,7 +278,7 @@ class J.Model
                         # pulled away.
                         # While we do want to stop watching this field when the current computation
                         # invalidates, we might *not* need to invalidate the current computation when
-                        # the new field data arrives. The reactivity is handled by the @_reactives dict.
+                        # the new field data arrives. The reactivity is handled by the @reactives dict.
                         # Therefore a child J.AutoVar is the perfect place to do the bookkeeping.
                         J.AutoVar(
                             "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
@@ -284,7 +288,7 @@ class J.Model
                             true
                         )
 
-                    @_reactives.get reactiveName
+                    @reactives.get reactiveName
 
                 else
                     # On unattached instances, denormed reactives behave like
@@ -628,12 +632,15 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             if fieldName not of nonIdInitFields
                 @_fields.setOrAdd fieldName, null # TODO: Support default values for fields of new model instances
 
-        # The @_reactives dict stores the published values of reactives
+        # The @reactives dict stores the published values of reactives
         # with denorm:true (i.e. server handles all their reactivity).
-        @_reactives = J.Dict() # denormedReactiveName: value
+        @reactives = J.Dict() # denormedReactiveName: value
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
             if reactiveSpec.denorm
-                @_reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+                @reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+
+        # @_reactives is a faithful copy of (a subset of keys of) the Mongo doc field
+        @_reactives = undefined
 
         null
 
@@ -941,8 +948,6 @@ Meteor.methods
             oldDoc = modelClass.findOne(
                 doc._id
             ,
-                fields:
-                    _reactives: 0
                 transform: false
             )
 

@@ -129,9 +129,13 @@ J.denorm =
         value
 
 
-    resetWatchers: (modelName, instanceId, oldValues, newValues, timestamp = new Date(), callback) ->
-        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>
-            #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
+    resetWatchers: (modelName, instanceId, oldDoc, newDoc, timestamp = new Date(), callback) ->
+        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>",
+            JSON.stringify
+                oldDoc: _.keys(oldDoc)
+                oldReactives: _.keys(oldDoc._reactives ? {})
+                newDoc: _.keys(newDoc)
+                newReactives: _.keys(newDoc._reactives ? {})
 
         # Total number of running calls to resetWatchersHelper
         semaphore = 0
@@ -145,7 +149,7 @@ J.denorm =
             if semaphore is 0 then callback?()
 
 
-        resetWatchersHelper = (modelName, instanceId, oldValues, newValues, timestamp) ->
+        resetWatchersHelper = (modelName, instanceId, oldDoc, newDoc, timestamp) ->
             semaAcquire()
 
             lockSema = 0
@@ -161,7 +165,7 @@ J.denorm =
             modelClass = J.models[modelName]
 
             # console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
-                #{JSON.stringify (oldValues: _.keys(oldValues), newValues: _.keys(newValues))}"
+                #{JSON.stringify (oldDoc: _.keys(oldDoc), newDoc: _.keys(newDoc))}"
 
 
             makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
@@ -209,11 +213,9 @@ J.denorm =
                 changedSubfieldOverrideProjectionMatcher = []
 
                 addSelectorClauses = (fieldSpecPrefix, oldSubValues, newSubValues) =>
-                    # 1. Append clauses to subfieldSelectorMatcher so it restricts the
-                    #    set of matched watchers to ones that ever returned this doc.
-                    #
-                    # 2. Mutate changedSubFieldNameSet for later
-                    # FIXME
+                    # Append clauses to subfieldSelectorMatcher so it restricts the
+                    # set of matched watchers to ones that ever returned this doc.
+                    # Also append clauses to the other changedSubfield*Matcher lists.
 
                     # TODO: Handle more selectors besides just default (equality) and $in
                     # e.g. $gt, $gte, $lt, $lte
@@ -326,16 +328,12 @@ J.denorm =
             if not modelClass.immutable
                 for fieldName, fieldSpec of modelClass.fieldSpecs
                     continue if fieldSpec.immutable
-                    if fieldName of oldValues
-                        mutableOldValues[fieldName] = oldValues[fieldName]
-                    if fieldName of newValues
-                        mutableNewValues[fieldName] = newValues[fieldName]
+                    mutableOldValues[fieldName] = oldDoc[fieldName]
+                    mutableNewValues[fieldName] = newDoc[fieldName]
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 continue if not reactiveSpec.denorm
-                if reactiveName of oldValues
-                    mutableOldValues[reactiveName] = oldValues[reactiveName]
-                if reactiveName of newValues
-                    mutableNewValues[reactiveName] = newValues[reactiveName]
+                mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
+                mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
             if _.isEmpty(mutableOldValues) and _.isEmpty(mutableNewValues)
                 return null
 
@@ -365,7 +363,7 @@ J.denorm =
                 ,
                     $set: setter
                 ,
-                    Meteor.bindEnvironment (err, doc) ->
+                    Meteor.bindEnvironment (err, oldWatcherDoc) ->
                         if err
                             console.error "Error while resetting #{watcherModelName}.#{watcherReactiveName}
                                 watchers of #{modelName}.#{JSON.stringify instanceId}:"
@@ -373,23 +371,22 @@ J.denorm =
                             lockRelease()
                             return
 
-                        if doc?
+                        if oldWatcherDoc?
                             resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
 
                             if watcherReactiveSpec.selectable
                                 # Selectable reactives must stay updated
                                 priority = (watcherReactiveSpec.priority ? 0.5) / 10
-                                J._enqueueReactiveCalc watcherModelName, doc._id, watcherReactiveName, priority
+                                J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
 
                             # Continue to reset one doc at a time until there are no more docs to reset
                             resetOneWatcherDoc watcherModelName, watcherReactiveName
 
                             # Also branch into resetting all docs watching this watching-reactive in this doc
-                            watcherOldValues = {}
-                            watcherOldValues[watcherReactiveName] = doc._reactives?[watcherReactiveName]?.val
-                            watcherNewValues = {}
-                            watcherNewValues[watcherReactiveName] = undefined
-                            resetWatchersHelper watcherModelName, doc._id, watcherOldValues, watcherNewValues, timestamp
+                            newWatcherDoc = _.clone oldWatcherDoc
+                            newWatcherDoc._reactives = _.clone oldWatcherDoc._reactives
+                            delete newWatcherDoc._reactives[watcherReactiveName]
+                            resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
 
                         else
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
@@ -413,7 +410,7 @@ J.denorm =
             null
 
 
-        resetWatchersHelper modelName, instanceId, oldValues, newValues, timestamp
+        resetWatchersHelper modelName, instanceId, oldDoc, newDoc, timestamp
 
 
 Meteor.startup ->
