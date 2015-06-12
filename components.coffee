@@ -33,6 +33,8 @@ _getDebugPrefix = (component = null, tabWidth = 4) ->
     numSpaces = Math.max 0, tabWidth * (_debugDepth + 1) - 1
     "#{(' 'for i in [0...numSpaces]).join('')}#{if component? and _debugDepth is 0 then component.toString() else ''}"
 
+componentDebugTagging = Meteor.settings?.public?.jframework?.debug?.componentsTagging ? false
+
 
 J.dc = J.defineComponent = (componentName, componentSpec) ->
     componentDefinitionQueue.push
@@ -674,7 +676,39 @@ J._defineComponent = (componentName, componentSpec) ->
     J.components[componentName] = React.createClass reactSpec
 
 
+componentDebugTaggingFlag = true
 $$ = (elemType, props, children...) ->
+    if componentDebugTagging and elemType[0] != '_' and elemType of J.components and (not props or 'data-component-tag' not of props)
+        if componentDebugTaggingFlag
+            componentDebugTaggingFlag = false
+            return $$ ('div'),
+                style:
+                    position: 'relative'
+                    marginTop: if elemType == 'TableRow' then 0 else '1rem'
+                    border: '1px solid #ddd'
+                    borderRadius: '3px'
+                'data-component': elemType,
+                $$ ('div'),
+                    style:
+                        position: 'absolute'
+                        top: '-1rem'
+                        backgroundColor: 'aliceblue'
+                        border: '1px solid #ddd'
+                        borderRadius: '3px'
+                        padding: '2px'
+                        pointerEvents: 'none'
+                        cursor: 'default'
+                        color: '#222'
+                        fontFamily: 'monospace'
+                        fontSize: '0.5em'
+                        opacity: if elemType == 'TableRow' then 0 else 1
+                        zIndex: 1000
+                    'data-component-tag': 1,
+                    (elemType)
+                $$(elemType, props, children...)
+        else
+            componentDebugTaggingFlag = true
+
     args = Array.prototype.slice.call arguments
 
     if typeof elemType[0] is 'string' and elemType[0].toUpperCase() is elemType[0]
