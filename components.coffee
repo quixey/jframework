@@ -680,6 +680,8 @@ J._defineComponent = (componentName, componentSpec) ->
 componentDebugTaggingFlag = true
 $$ = (elemType, props, children...) ->
     # If componentsTagging is on, we want to wrap each component in a div to include the tooltip-like tags.
+    # If the component is a TableRow, we hide the tag and only show a border around it. We do this since
+    # TableRow seems to be a very commonly used component.
     if componentDebugTagging and elemType[0] != '_' and elemType of J.components and (not props or 'data-component-tag' not of props)
         if componentDebugTaggingFlag
             componentDebugTaggingFlag = false
