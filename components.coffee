@@ -689,16 +689,18 @@ $$ = (elemType, props, children...) ->
                 style:
                     position: 'relative'
                     marginTop: if elemType == 'TableRow' then 0 else '1rem'
+                    padding: '1px'
                     border: '1px solid #ddd'
-                    borderRadius: '3px'
+                    borderRadius: '0 3px 3px'
                 'data-component': elemType,
                 $$ ('div'),
                     style:
                         position: 'absolute'
                         top: '-1rem'
+                        left: '-1px'
                         backgroundColor: 'aliceblue'
                         border: '1px solid #ddd'
-                        borderRadius: '3px'
+                        borderRadius: '3px 3px 0 0'
                         padding: '2px'
                         pointerEvents: 'none'
                         cursor: 'default'
