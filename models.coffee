@@ -20,6 +20,8 @@
 # 6. The field selector in a query should be more like GraphQL, so you can make the
 #    server follow foreign keys for you without making an extra round trip.
 
+if Meteor.isServer
+    Future = Npm.require 'fibers/future'
 
 class J.Model
     @_getEscapedSubdoc: (subDoc) ->
@@ -987,8 +989,10 @@ Meteor.methods
         instance = modelClass.fromDoc doc
 
         if not _reserved
-            timestamp = new Date()
-            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, timestamp, options.denormCallback
+            Future.task(
+                ->
+                    J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
+            ).detach()
 
             if isNew
                 # Initialize all the selectable reactives

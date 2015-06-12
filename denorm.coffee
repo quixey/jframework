@@ -181,8 +181,12 @@ J.denorm =
 
             modelClass = J.models[modelName]
 
-            # console.log "resetWatchersHelper <#{modelName} #{JSON.stringify(instanceId)}>
-                #{JSON.stringify (oldDoc: _.keys(oldDoc), newDoc: _.keys(newDoc))}"
+            console.log "helper RWatchers <#{modelName} #{JSON.stringify(instanceId)}>",
+                JSON.stringify
+                    oldDoc: _.keys(oldDoc)
+                    oldReactives: _.keys(oldDoc._reactives ? {})
+                    newDoc: _.keys(newDoc)
+                    newReactives: _.keys(newDoc._reactives ? {})
 
 
             makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
@@ -275,22 +279,35 @@ J.denorm =
                         projectionKey = "fields.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
                         sortSpecKey = "sort.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
 
+                        #if changed
+                        #    console.log "***changed: #{JSON.stringify fieldSpec}
+                        #        #{JSON.stringify oldValue: oldValue, newValue: newValue}"
+
+                        selectable =
+                            if fieldSpec[0] of modelClass.fieldSpecs
+                                modelClass.fieldSpecs[fieldSpec[0]].selectable ? true
+                            else
+                                modelClass.reactiveSpecs[fieldSpec[0]].selectable ? false
+
                         possibleValues = []
                         if oldValue isnt undefined
                             possibleValues.push oldValue
                         if newValue isnt undefined and changed
                             possibleValues.push newValue
 
-                        termMatcher = makeTermMatcher selectorKey, false, possibleValues
-                        if termMatcher? then subfieldSelectorMatcher.push termMatcher
+                        if selectable
+                            termMatcher = makeTermMatcher selectorKey, false, possibleValues
+                            if termMatcher? then subfieldSelectorMatcher.push termMatcher
 
                         if changed
-                            termMatcher = makeTermMatcher selectorKey, true, possibleValues
-                            if termMatcher? then changedSubfieldSelectorMatcher.push termMatcher
+                            if selectable
+                                termMatcher = makeTermMatcher selectorKey, true, possibleValues
+                                if termMatcher? then changedSubfieldSelectorMatcher.push termMatcher
 
-                            term = {}
-                            term[sortSpecKey] = $exists: true
-                            changedSubfieldSortSpecMatcher.push term
+                            if selectable
+                                term = {}
+                                term[sortSpecKey] = $exists: true
+                                changedSubfieldSortSpecMatcher.push term
 
                             term = {}
                             term[projectionKey] = true
@@ -426,19 +443,49 @@ J.denorm =
                         if oldWatcherDoc?
                             resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
 
+                            priority = undefined
+                            for dataSessionId, fieldsByModelIdQuery of J._dataSessionFieldsByModelIdQuery
+                                for qsString, reactivesObj of fieldsByModelIdQuery[watcherModelName]?[oldWatcherDoc._id]?._reactives ? {}
+                                    if watcherReactiveName of reactivesObj
+                                        priority = (watcherReactiveSpec.priority ? 0.5)
+                                        break
+                                break if priority?
+                            if priority?
+                                console.log "YES currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
+                            else
+                                console.log "NOT currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
                             if watcherReactiveSpec.selectable
                                 # Selectable reactives must stay updated
-                                priority = (watcherReactiveSpec.priority ? 0.5) / 10
-                                J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
+                                priority ?= (watcherReactiveSpec.priority ? 0.5) / 10
 
-                            # Continue to reset one doc at a time until there are no more docs to reset
-                            resetOneWatcherDoc watcherModelName, watcherReactiveName
-
-                            # Also branch into resetting all docs watching this watching-reactive in this doc
                             newWatcherDoc = _.clone oldWatcherDoc
                             newWatcherDoc._reactives = _.clone oldWatcherDoc._reactives
                             delete newWatcherDoc._reactives[watcherReactiveName]
-                            resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
+
+                            if priority?
+                                reactiveCalcObj = J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
+                                reactiveCalcObj.future.resolve (err, value) ->
+                                    unwrappedValue = J.Model._getEscapedSubdoc(
+                                        if value instanceof J.List
+                                            value.toArr()
+                                        else if value instanceof J.Dict
+                                            value.toObj()
+                                        else
+                                            value
+                                    )
+                                    newWatcherDoc._reactives[watcherReactiveName] =
+                                        val: unwrappedValue
+                                    resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
+
+                            else
+                                # Also branch into resetting all docs watching this watching-reactive in this doc
+                                Future.task(
+                                    ->
+                                        resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
+                                ).detach()
+
+                            # Continue to reset one doc at a time until there are no more docs to reset
+                            resetOneWatcherDoc watcherModelName, watcherReactiveName
 
                         else
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
