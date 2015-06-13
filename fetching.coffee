@@ -144,28 +144,27 @@ _.extend J.fetching,
 
 
     _getCanonicalSelector: (selector) ->
-        # 1. selector:"x" and selector:_id:"x" both turn into selector:_id:$in:["x"]
-        # 2. Order keys in parts like $in
+        # 1. selector:"x" turns into selector:_id:"x"
+        # 2. f:$in:["singleton"] becomes f:"singleton"
+        # 3. Order keys in parts like $in
 
         if _.isString selector
-            return _id: $in: [selector]
+            return _id: selector
         else if selector is undefined or _.isEmpty selector
             return undefined
 
-        if _.isString selector._id
-            selector = _.clone selector
-            selector._id = $in: [selector._id]
-
-        orderSpecialKeys = (subSel, levelIsSpecial) =>
+        getTransformed = (subSel, levelIsSpecial) =>
             # levelIsSpecial:
             #   E.g. the top-level and a level after $in are special
             #   and can be reordered, but values to match which happen
             #   to be objects or arrays are non-special
+            # 1. Sort objects and arrays if levelIsSpecial
+            # 2. Transform singleton $in, $and and $or expressions into non-arrays
 
             if _.isArray subSel
                 ret = []
                 for v in subSel
-                    ret.push orderSpecialKeys(
+                    ret.push getTransformed(
                         v
                         J.util.isPlainObject(v) and _.any(
                             subSelKey[0] is '$' for subSelKey of v
@@ -187,7 +186,7 @@ _.extend J.fetching,
                 if levelIsSpecial then keys.sort()
                 ret = {}
                 for k in keys
-                    ret[k] = orderSpecialKeys(
+                    ret[k] = getTransformed(
                         subSel[k]
                         _.any [
                             k[0] is '$' and k not in ['$eq', '$gt', '$gte', '$lt', '$lte']
@@ -197,12 +196,17 @@ _.extend J.fetching,
                             )
                         ]
                     )
+                    if J.util.isPlainObject(ret[k])
+                        for operator in ['$in', '$and', '$or']
+                            if ret[k][operator]?.length is 1
+                                ret[k] = ret[k][operator][0]
+                                break
                 ret
 
             else
                 subSel
 
-        orderSpecialKeys selector, true
+        getTransformed selector, true
 
 
     _projectionToInclusionSet: (modelClass, projection) ->

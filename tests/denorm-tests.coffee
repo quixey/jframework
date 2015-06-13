@@ -778,7 +778,7 @@ Tinytest.add 'QuerySpec canonicalization', (test) ->
     testEqual c(_id: 'abc'), _id: 'abc'
     testEqual c(_id: $in: ['abc']), _id: 'abc'
     testEqual c(_id: $in: ['abc', 'def']), _id: $in: ['abc', 'def']
-    testEqual c(_id: $in: ['def', 'abc']), _id: $in: ['def', 'abc']
+    testEqual c(_id: $in: ['def', 'abc']), _id: $in: ['abc', 'def']
     testEqual c(_id: $in: ['z', 'a', 'Z']), _id: $in: ['Z', 'a', 'z']
 
     testEqual(
