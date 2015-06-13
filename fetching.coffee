@@ -79,24 +79,59 @@ _.extend J.fetching,
         Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
 
-    _getCanonical: (x) ->
-        # Like EJSON.stringify but reorders object keys and
-        # array elements to make "the same objects" yield
-        # the same strings.
+    _getCanonicalSelector: (selector) ->
+        # 1. selector:"x" and selector:_id:"x" both turn into selector:_id:$in:["x"]
+        # 2. Order keys in parts like $in
 
-        if _.isArray x
-            J.util.sortByKey(
-                @_getCanonical y for y in x
-                (y) => EJSON.stringify @_getCanonical y
-            )
-        else if J.util.isPlainObject x
-            sortedKeys = J.util.sortByKey _.keys x
-            ret = {}
-            for k in sortedKeys
-                ret[k] = @_getCanonical x[k]
-            ret
-        else
-            x
+        if _.isString selector
+            return _id: $in: [selector]
+        else if selector is undefined or _.isEmpty selector
+            return undefined
+
+        if _.isString selector._id
+            selector = _.clone selector
+            selector._id = $in: [selector._id]
+
+        orderSpecialKeys = (subSel, levelIsSpecial) ->
+            # levelIsSpecial:
+            #   E.g. the top-level and a level after $in are special
+            #   and can be reordered, but values to match which happen
+            #   to be objects or arrays are non-special
+
+            if _.isArray subSel
+                ret = []
+                for v in subSel
+                    ret.push orderSpecialKeys(
+                        v
+                        J.util.isPlainObject(v) and _.any(
+                            subSelKey[0] is '$' for subSelKey of v
+                        )
+                    )
+                if levelIsSpecial
+                    J.util.sortByKey ret, EJSON.stringify
+                ret
+
+            else if J.util.isPlainObject subSel
+                keys = _.keys subSel
+                if levelIsSpecial then J.util.sortByKey keys
+                ret = {}
+                for k in keys
+                    ret[k] = orderSpecialKeys(
+                        subSel[k]
+                        _.any [
+                            k[0] is '$'
+                        ,
+                            J.util.isPlainObject(subSel[k]) and _.any(
+                                subSelKey[0] is '$' for subSelKey of subSel[k]
+                            )
+                        ]
+                    )
+                ret
+
+            else
+                subSel
+
+        orderSpecialKeys selector, true
 
 
     _projectionToInclusionSet: (modelClass, projection) ->
@@ -241,7 +276,7 @@ _.extend J.fetching,
         for modelName, inclusionSetById of inclusionSetByModelInstance
             idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
             for instanceId, inclusionSet of inclusionSetById
-                inclusionSetString = EJSON.stringify @_getCanonical inclusionSet
+                inclusionSetString = EJSON.stringify J.util.sortByKey _.keys inclusionSet
                 idsByInclusionSetString[inclusionSetString] ?= []
                 idsByInclusionSetString[inclusionSetString].push instanceId
 
@@ -288,6 +323,42 @@ _.extend J.fetching,
 
 
         mergedQuerySpecs
+
+
+    getQsCanonicalForm: (qs) ->
+        # Returns an equivalent querySpec but in "canonical form"
+        # so two querySpecs written with minor differences can
+        # be fingerprinted by their J.fetching.stringifyQs value
+
+        qs = _.clone qs
+
+        qs.selector = @_getCanonicalSelector qs.selector
+
+        if qs.fields is undefined or _.isEmpty qs.fields
+            qs.fields = undefined
+        else
+            projection = {}
+            for projectionKey in J.util.sortByKey _.keys qs.fields
+                projection[projectionKey] = qs.fields[projectionKey]
+            qs.fields = projection
+
+        if qs.sort is undefined or _.isEmpty qs.sort
+            qs.sort = undefined
+
+        if qs.limit is 0 or not qs.limit?
+            qs.limit = undefined
+
+        if qs.skip is 0 or not qs.skip?
+            qs.skip = undefined
+
+        # This establishes the canonical order of the QS fields
+        J.util.withoutUndefined
+            modelName: qs.modelName
+            selector: qs.selector
+            fields: qs.fields
+            sort: qs.sort
+            limit: qs.limit
+            skip: qs.skip
 
 
     isQueryReady: (qs) ->
@@ -595,26 +666,11 @@ _.extend J.fetching,
 
 
     stringifyQs: (qs) ->
-        qs = _.clone qs
-        if qs.fields is undefined or _.isEmpty qs.fields
-            delete qs.fields
-        if qs.sort is undefined or _.isEmpty qs.sort
-            delete qs.sort
-        if not qs.limit
-            delete qs.limit
-        if not qs.skip
-            delete qs.skip
-
-        EJSON.stringify
-            modelName: qs.modelName
-            selector: @_getCanonical qs.selector
-            fields: @_getCanonical qs.fields
-            sort: @_getCanonical qs.sort
-            limit: qs.limit
-            skip: qs.skip
+        EJSON.stringify @getQsCanonicalForm qs
 
 
     tryQsPairwiseMerge: (a, b) ->
         return null if a.modelName isnt b.modelName
+        return null if not EJSON.equals a.sort, b.sort
 
         null
