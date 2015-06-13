@@ -4,6 +4,36 @@
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
 
+
+
+Tinytest.add 'escapeSubDoc', (test) ->
+    d = "a.b":
+        c:
+            "d*DOT*e*DOT*f.g":
+                "h.i.j": "k*DOT*.m.n"
+        d: [
+            "p"
+        ,
+            q: "r.s"
+        ,
+            "t.u**DOT**v": "v.w": "x*DOT*y"
+        ]
+    d2 = "a*DOT*b":
+        c:
+            "d**DOT**e**DOT**f*DOT*g":
+                "h*DOT*i*DOT*j": "k*DOT*.m.n"
+        d: [
+            "p"
+        ,
+            q: "r.s"
+        ,
+            "t*DOT*u***DOT***v": "v*DOT*w": "x*DOT*y"
+        ]
+
+    test.equal J.Model._getEscapedSubdoc(d), d2
+    test.equal J.Model._getUnescapedSubdoc(d2), d
+
+
 if Meteor.isServer then Tinytest.add "resetWatchers 1", (test) ->
     $$.ModelA.remove {}
     $$.ModelB.remove {}

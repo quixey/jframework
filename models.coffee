@@ -57,7 +57,19 @@ class J.Model
     #     # "func://www*DOT*example*DOT*.com/func"
     # - - -
     @escapeDot: (key) ->
-        key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
+        key.replace(
+            /(\*+)DOT\1/g
+            (x) -> "*#{x}*"
+        ).replace(
+            /\./g
+            '*DOT*'
+        ).replace(
+            /(\*+)DOLLAR\1/g
+            (x) -> "*#{x}*"
+        ).replace(
+            /\$/g
+            '*DOLLAR*'
+        )
 
 
     # ## @fromJSONValue
@@ -142,7 +154,21 @@ class J.Model
     #     # "func://www.example.com/func"
     # - - -
     @unescapeDot: (key) =>
-        key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
+        key.replace(
+            /(\*+)DOT\1/g
+            (x, stars) ->
+                if stars.length is 1
+                    '.'
+                else
+                    x.substring(1, x.length - 1)
+        ).replace(
+            /(\*+)DOLLAR\1/g
+            (x, stars) ->
+                if stars.length is 1
+                    '$'
+                else
+                    x.substring(1, x.length - 1)
+        )
 
 
     _save: (upsert, options, callback) ->
