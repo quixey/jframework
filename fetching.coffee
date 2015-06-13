@@ -207,15 +207,15 @@ _.extend J.fetching,
 
     _projectionToInclusionSet: (modelClass, projection) ->
         # See the projection semantics documentation at the top of this file.
+        # Returns {includeSpec: true}
 
-        # Returns {includedFieldOrReactiveName: true}
-
+        if projection is undefined then projection = {}
         inclusionSet = {}
 
         if projection._ is false
-            for fieldOrReactiveName, include of projection
-                continue if fieldOrReactiveName is '_'
-                if include then inclusionSet[fieldOrReactiveName] = true
+            for includeSpec, include of projection
+                continue if includeSpec is '_'
+                if include then inclusionSet[includeSpec] = true
 
         else
             for fieldName, fieldSpec of modelClass.fieldSpecs
@@ -226,12 +226,12 @@ _.extend J.fetching,
                 if reactiveSpec.include ? false
                     inclusionSet[reactiveName] = true
 
-            for fieldOrReactiveName, include of projection
-                continue if fieldOrReactiveName is '_'
+            for includeSpec, include of projection
+                continue if includeSpec is '_'
                 if include
-                    inclusionSet[fieldOrReactiveName] = true
+                    inclusionSet[includeSpec] = true
                 else
-                    delete inclusionSet[fieldOrReactiveName]
+                    delete inclusionSet[includeSpec]
 
         inclusionSet
 
@@ -461,9 +461,30 @@ _.extend J.fetching,
         # Returns whether the results from the querySpecs in superQsArr
         # are sufficient to provide accurate results to qs
 
-        return false if superQs.modelName isnt qs.modelName
+        qs = @makeCanonicalQs qs
+        superQs = @makeCanonicalQs superQs
 
-        false
+        return false if qs.modelName isnt superQs.modelName
+        modelClass = J.models[qs.modelName]
+
+        # Make sure the selector is covered
+        return false if not @isSelectorCovered qs, superQs
+
+        # And make sure the projection is covered
+        inclusionSet = @_projectionToInclusionSet modelClass, qs.fields
+        superInclusionSet = @_projectionToInclusionSet modelClass, superQs.fields
+        inclusionDiff = J.util.diffStrings _.keys(inclusionSet), _.keys(superInclusionSet)
+        for missingInclusionSpec in inclusionDiff.deleted
+            # Check for a situation like "w.x.y.z" being covered by "w.x"
+            ok = false
+            missingInclusionSpecParts = missingInclusionSpec.split('.')
+            for i in [0...missingInclusionSpecParts.length - 1]
+                if missingInclusionSpecParts[0..i].join('.') of superInclusionSet
+                    ok = true
+                    break
+            return false if not ok
+
+        true
 
 
     isSelectorCovered: (qs, superQs) ->
