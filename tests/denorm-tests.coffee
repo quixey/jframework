@@ -46,6 +46,41 @@ Tinytest.add 'QuerySpec merging', (test) ->
         J.fetching.tryQsPairwiseMerge(
             modelName: 'Foo'
             selector:
+                a: 6
+                b: 7
+                c: 8
+        ,
+            modelName: 'Foo'
+            selector:
+                a: 5
+                b: 7
+                c: 8
+        )
+        (
+            modelName: 'Foo'
+            selector:
+                a: $in: [5, 6]
+                b: 7
+                c: 8
+        )
+    )
+    test.isNull J.fetching.tryQsPairwiseMerge(
+        modelName: 'Foo'
+        selector:
+            a: 6
+            b: 7
+            c: 8
+    ,
+        modelName: 'Foo'
+        selector:
+            a: 5
+            b: 7
+            c: 9
+    )
+    testEqual(
+        J.fetching.tryQsPairwiseMerge(
+            modelName: 'Foo'
+            selector:
                 'a.x': $in: [4, 8]
         ,
             modelName: 'Foo'
@@ -57,6 +92,17 @@ Tinytest.add 'QuerySpec merging', (test) ->
             selector:
                 'a.x': $in: [4, 5, 7, 8]
         )
+    )
+    test.isNull J.fetching.tryQsPairwiseMerge(
+        modelName: 'Foo'
+        selector:
+            a: 5
+            b: 10
+    ,
+        modelName: 'Foo'
+        selector:
+            a: 6
+            b: $in: [10, 11]
     )
     test.isNull J.fetching.tryQsPairwiseMerge(
         modelName: 'Foo'
