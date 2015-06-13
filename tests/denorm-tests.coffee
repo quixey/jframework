@@ -6,6 +6,145 @@
 
 
 
+Tinytest.add 'QuerySpec canonicalization', (test) ->
+    c = (selector) -> J.fetching._getCanonicalSelector selector
+    testEqual = (a, b) ->
+        test.equal EJSON.stringify(a), EJSON.stringify(b)
+
+    testEqual c(undefined), undefined
+    testEqual c('123x'), _id: $in: ['123x']
+    testEqual c(_id: 'abc'), _id: $in: ['abc']
+
+    testEqual(
+        c(
+            b: $in: [6, 4, 3, 10]
+            _id: $in: [6, 4, 3, 10]
+            a: [6, 4, 3, 10]
+        )
+        (
+            _id: $in: [3, 4, 6, 10]
+            a: [6, 4, 3, 10]
+            b: $in: [3, 4, 6, 10]
+        )
+    )
+
+    testEqual(
+        c(
+            b: [
+                c:
+                    e: 5
+                    d: 6
+            ]
+            $or: [
+                'a.b':
+                    e: 5
+                    d: 6
+            ,
+                C:
+                    $elemMatch:
+                        h: 6
+                        g: 5
+            ]
+        )
+        (
+            $or: [
+                C:
+                    $elemMatch:
+                        g: 5
+                        h: 6
+            ,
+                'a.b':
+                    e: 5
+                    d: 6
+            ]
+            b: [
+                c:
+                    e: 5
+                    d: 6
+            ]
+        )
+    )
+
+    testEqual(
+        c(
+            b:
+                $eq:
+                    c: 6
+                    b: 5
+            a:
+                $elemMatch:
+                    c: 6
+                    b: 5
+        )
+        (
+            a:
+                $elemMatch:
+                    b: 5
+                    c: 6
+            b:
+                $eq:
+                    c: 6
+                    b: 5
+        )
+    )
+
+
+Tinytest.add 'QuerySpec merging', (test) ->
+    test.isNull J.fetching.tryQsPairwiseMerge(
+        modelName: 'Foo'
+        selector: {}
+    ,
+        modelName: 'Bar'
+        selector: {}
+    )
+
+
+
+if Meteor.isClient then Tinytest.addAsync 'Subfield selector bookkeeping', (test, onComplete) ->
+    c = new $$.ModelC
+        d:
+            f:
+                "g.h*DOT*i":
+                    j: 5
+                    k: 6
+            m:
+                n: 7
+                'p.q':
+                    'r**DOT**s': 8
+                    t: 9
+
+    c.insert ->
+        a = J.AutoVar(
+            'a'
+            ->
+                $$.ModelC.fetchOne(
+                    c._id
+                    fields:
+                        _: false
+                        'd.m': true
+                ).d()
+            (__, d) ->
+                console.log 'onChange', __, d
+
+                test.isUndefined d.get('f')
+                test.equal d.get('m')?.toObj(),
+                    n: 7
+                    'p.q':
+                        'r**DOT**s': 8
+                        t: 9
+
+                a.stop()
+                onComplete()
+        )
+
+###
+    1. Make general cursor merging
+    2. For models field-getters, the current logic is to always book-keep
+       the query. Instead, test if bookkeeping the query would change the
+       merged set for that computation, and only then bookkeep it.
+###
+
+
 Tinytest.add 'escapeSubDoc', (test) ->
     d = "a.b":
         c:

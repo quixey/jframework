@@ -181,14 +181,6 @@ J.denorm =
 
             modelClass = J.models[modelName]
 
-            console.log "helper RWatchers <#{modelName} #{JSON.stringify(instanceId)}>",
-                JSON.stringify
-                    oldDoc: _.keys(oldDoc)
-                    oldReactives: _.keys(oldDoc._reactives ? {})
-                    newDoc: _.keys(newDoc)
-                    newReactives: _.keys(newDoc._reactives ? {})
-
-
             makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
                 equalityClause = {}
                 equalityClause[selectorKey] =

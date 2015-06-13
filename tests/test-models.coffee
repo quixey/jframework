@@ -165,11 +165,14 @@ J.dm 'ModelC', 'cs',
     fields:
         bId:
             type: $$.str
+        d:
+            type: $$.dict
 
     reactives:
         cr1:
             denorm: true
             val: ->
+                return null if @bId() is null
                 $$.ModelB.fetchOne(
                     @bId()
                 ,

@@ -108,18 +108,25 @@ _.extend J.fetching,
                         )
                     )
                 if levelIsSpecial
-                    J.util.sortByKey ret, EJSON.stringify
+                    J.util.sortByKey(
+                        ret
+                        if _.any(_.isArray(x) or J.util.isPlainObject(x) for x in ret)
+                            EJSON.stringify
+                        else
+                            _.identity
+                        transform: false
+                    )
                 ret
 
             else if J.util.isPlainObject subSel
                 keys = _.keys subSel
-                if levelIsSpecial then J.util.sortByKey keys
+                if levelIsSpecial then keys.sort()
                 ret = {}
                 for k in keys
                     ret[k] = orderSpecialKeys(
                         subSel[k]
                         _.any [
-                            k[0] is '$'
+                            k[0] is '$' and k not in ['$eq', '$gt', '$gte', '$lt', '$lte']
                         ,
                             J.util.isPlainObject(subSel[k]) and _.any(
                                 subSelKey[0] is '$' for subSelKey of subSel[k]
@@ -222,21 +229,17 @@ _.extend J.fetching,
         nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
-        _getSelectorIds = (qs) =>
-            qs = J.util.deepClone qs
-            if _.isString(qs.selector)
-                qs.selector = _id: qs.selector
+        querySpecs = (@makeCanonicalQs qs for qs in querySpecs)
 
-            if qs.selector._id?
+        _getSelectorIds = (qs) =>
+            if qs.selector?._id?
                 # Note that if the selector has keys other than "_id" that may drop
                 # the result count from 1 to 0, we'll just ignore that and send a
                 # dumber merged query to the server.
 
-                if _.isString qs.selector._id
-                    [qs.selector._id]
-                else if (
+                if (
                     _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-                    qs.selector._id.$in? and not qs.limit? and not qs.skip
+                    qs.selector._id.$in? and not qs.limit? and not qs.skip?
                 )
                     qs.selector._id.$in
 
@@ -276,7 +279,10 @@ _.extend J.fetching,
         for modelName, inclusionSetById of inclusionSetByModelInstance
             idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
             for instanceId, inclusionSet of inclusionSetById
-                inclusionSetString = EJSON.stringify J.util.sortByKey _.keys inclusionSet
+                sortedInclusionSet = {}
+                for key in _.keys(inclusionSet).sort()
+                    sortedInclusionSet[key] = inclusionSet[key]
+                inclusionSetString = EJSON.stringify sortedInclusionSet
                 idsByInclusionSetString[inclusionSetString] ?= []
                 idsByInclusionSetString[inclusionSetString].push instanceId
 
@@ -285,7 +291,7 @@ _.extend J.fetching,
                     _: false
                     EJSON.parse inclusionSetString
                 )
-                mergedQuerySpecs.push
+                mergedQuerySpecs.push J.fetching.makeCanonicalQs
                     modelName: modelName
                     selector: _id: $in: instanceIds
                     fields: mergedProjection
@@ -325,7 +331,69 @@ _.extend J.fetching,
         mergedQuerySpecs
 
 
-    getQsCanonicalForm: (qs) ->
+    isQueryReady: (qs) ->
+        # A query is considered ready if:
+        # (1) It was bundled into the set of merged queries that the server
+        #     has come back and said are ready.
+        # (2) It has an _id selector, and all of the first-level doc values
+        #     in its projection aren't undefined.
+        #     (Note that we can't infer anything about first-level objects
+        #     in the doc, because they may or may not be partial subdocs.)
+
+        qs = @makeCanonicalQs qs
+        qsString = @stringifyQs qs
+        modelClass = J.models[qs.modelName]
+
+        testId = (instanceId) =>
+            return false if instanceId not of modelClass.collection._attachedInstances
+
+            options = @_qsToMongoOptions(qs)
+            options.transform = false
+            options.reactive = false
+            doc = modelClass.findOne(instanceId, options)
+            return false if not doc?
+
+            for fieldSpec of options.fields ? {}
+                fieldSpecParts = fieldSpec.split('.')
+                if fieldSpecParts[0] is '_id'
+                    continue
+                else if fieldSpecParts[0] is '_reactives'
+                    reactiveName = fieldSpecParts[1]?
+                    value = doc._reactives?[reactiveName]?.val
+                else
+                    fieldName = fieldSpecParts[0]
+                    value = doc[fieldName]
+
+                return false if value is undefined
+
+                # This value might be ready, but there's a risk that
+                # it's actually a partial subdoc, so we can only
+                # trust it after qsString appears in @_unmergedQsSet.
+                # FIXME:
+                # It's possible to do smarter bookkeeping to return true
+                # when the full (sub)object being requested is already
+                # on the client.
+                return false if J.util.isPlainObject value
+
+            true
+
+        helper = =>
+            return true if qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
+
+            # For queries with an _id filter, say it's ready as long as minimongo
+            # has an attached entry with that _id and no other parts of the selector
+            # rule out that one doc.
+            if _.isArray(qs.selector?._id?.$in) and _.all(testId(id) for id in qs.selector._id.$in)
+                return true
+
+            false
+
+        ret = helper()
+        # console.debug 'isQueryReady', ret, qsString
+        ret
+
+
+    makeCanonicalQs: (qs) ->
         # Returns an equivalent querySpec but in "canonical form"
         # so two querySpecs written with minor differences can
         # be fingerprinted by their J.fetching.stringifyQs value
@@ -338,7 +406,7 @@ _.extend J.fetching,
             qs.fields = undefined
         else
             projection = {}
-            for projectionKey in J.util.sortByKey _.keys qs.fields
+            for projectionKey in _.keys(qs.fields).sort()
                 projection[projectionKey] = qs.fields[projectionKey]
             qs.fields = projection
 
@@ -359,66 +427,6 @@ _.extend J.fetching,
             sort: qs.sort
             limit: qs.limit
             skip: qs.skip
-
-
-    isQueryReady: (qs) ->
-        # A query is considered ready if:
-        # (1) It was bundled into the set of merged queries that the server
-        #     has come back and said are ready.
-        # (2) It has an _id selector, and all of the first-level doc values
-        #     in its projection aren't undefined.
-        #     (Note that we can't infer anything about first-level objects
-        #     in the doc, because they may or may not be partial subdocs.)
-
-        qsString = J.fetching.stringifyQs qs
-        modelClass = J.models[qs.modelName]
-
-        qs = J.util.deepClone qs
-        if not J.util.isPlainObject qs.selector
-            # Note that this makes qs inconsistent with qsString
-            qs.selector = _id: qs.selector
-
-        helper = =>
-            return true if qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
-
-            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
-                # For queries with an _id filter, say it's ready as long as minimongo
-                # has an attached entry with that _id and no other parts of the selector
-                # rule out the one possible match.
-                options = @_qsToMongoOptions(qs)
-                options.transform = false
-                options.reactive = false
-                doc = modelClass.findOne(qs.selector, options)
-                if doc?
-                    for fieldSpec of options.fields
-                        fieldSpecParts = fieldSpec.split('.')
-                        if fieldSpecParts[0] is '_id'
-                            continue
-                        else if fieldSpecParts[0] is '_reactives'
-                            reactiveName = fieldSpecParts[1]?
-                            value = doc._reactives?[reactiveName]?.val
-                        else
-                            fieldName = fieldSpecParts[0]
-                            value = doc[fieldName]
-
-                        return false if value is undefined
-
-                        # This value might be ready, but there's a risk that
-                        # it's actually a partial subdoc, so we can only
-                        # trust it after qsString appears in @_unmergedQsSet.
-                        # FIXME:
-                        # It's possible to do smarter bookkeeping to return true
-                        # when the full (sub)object being requested is already
-                        # on the client.
-                        return false if J.util.isPlainObject value
-
-                    return true
-
-            false
-
-        ret = helper()
-        # console.debug 'isQueryReady', ret, qsString
-        ret
 
 
     parseQs: (qsString) ->
@@ -445,7 +453,7 @@ _.extend J.fetching,
                 fieldOrReactiveName of modelClass.fieldSpecs or
                 fieldOrReactiveName of modelClass.reactiveSpecs
             )
-                throw new Meteor.Error "Invalid fieldOrReactiveName in
+                throw new Error "Invalid fieldOrReactiveName in
                     #{modelClass.name} inclusion set: #{includeSpec}"
 
             if fieldOrReactiveName of modelClass.reactiveSpecs
@@ -605,7 +613,7 @@ _.extend J.fetching,
         #     The corresponding Mongo-style selector that we can pass to
         #     MongoCollection.find
 
-        if not _.isObject selector
+        if not J.util.isPlainObject selector
             return selector
 
         mongoSelector = {}
@@ -666,7 +674,7 @@ _.extend J.fetching,
 
 
     stringifyQs: (qs) ->
-        EJSON.stringify @getQsCanonicalForm qs
+        EJSON.stringify @makeCanonicalQs qs
 
 
     tryQsPairwiseMerge: (a, b) ->
