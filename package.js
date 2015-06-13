@@ -133,6 +133,7 @@ Package.onTest(function(api) {
         "tests/list-tests.coffee",
         "tests/dict-tests.coffee",
         "tests/jframework-tests.coffee",
+        "tests/queryspec-tests.coffee",
         "tests/denorm-tests.coffee"
     ]);
 

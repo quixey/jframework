@@ -448,7 +448,9 @@ _.extend J.fetching,
             # For queries with an _id filter, say it's ready as long as minimongo
             # has an attached entry with that _id and no other parts of the selector
             # rule out that one doc.
-            if _.isArray(qs.selector?._id?.$in) and _.all(testId(id) for id in qs.selector._id.$in)
+            if _.isString(qs.selector?._id) and testId(qs.selector._id)
+                return true
+            else if _.isArray(qs.selector?._id?.$in) and _.all(testId(id) for id in qs.selector._id.$in)
                 return true
 
             false

@@ -830,54 +830,6 @@ Tinytest.add 'isQsCovered', (test, onComplete) ->
     )
 
 
-
-
-if Meteor.isClient then Tinytest.addAsync 'Subfield selector bookkeeping', (test, onComplete) ->
-    c = new $$.ModelC
-        d:
-            f:
-                "g.h*DOT*i":
-                    j: 5
-                    k: 6
-            m:
-                n: 7
-                'p.q':
-                    'r**DOT**s': 8
-                    t: 9
-
-    c.insert ->
-        a = J.AutoVar(
-            'a'
-
-            ->
-                $$.ModelC.fetchOne(
-                    c._id
-                    fields:
-                        _: false
-                        'd.m': true
-                ).d()
-
-            (__, d) ->
-                console.log 'onChange', __, d?.toObj()
-
-                test.isUndefined d.get('f')
-                test.equal d.m().toObj(),
-                    n: 7
-                    'p.q':
-                        'r**DOT**s': 8
-                        t: 9
-
-                # Delay to make sure that accessing .d() didn't
-                # register a new dependency on the whole d object
-                Meteor.setTimeout(
-                    ->
-                        a.stop()
-                        onComplete()
-                    500
-                )
-        )
-
-
 Tinytest.add 'QuerySpec canonicalization', (test) ->
     c = (selector) -> J.fetching._getCanonicalSelector selector
     testEqual = (a, b) ->

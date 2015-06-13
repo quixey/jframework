@@ -18,6 +18,55 @@ log = ->
         console.log.apply console, arguments
 
 
+
+addTest 'Subfield selector bookkeeping', (test, onComplete) ->
+    c = new $$.ModelC
+        d:
+            f:
+                "g.h*DOT*i":
+                    j: 5
+                    k: 6
+            m:
+                n: 7
+                'p.q':
+                    'r**DOT**s': 8
+                    t: 9
+
+    c.insert ->
+        a = J.AutoVar(
+            'a'
+
+            ->
+                $$.ModelC.fetchOne(
+                    c._id
+                    fields:
+                        _: false
+                        'd.m': true
+                ).d()
+
+            (__, d) ->
+                console.log 'onChange', __, d?.toObj()
+
+                test.isUndefined d.get('f')
+                test.equal d.m().toObj(),
+                    n: 7
+                    'p.q':
+                        'r**DOT**s': 8
+                        t: 9
+
+                # Delay to make sure that accessing .d() didn't
+                # register a new dependency on the whole d object
+                Meteor.setTimeout(
+                    ->
+                        a.stop()
+                        onComplete()
+                    500
+                )
+        )
+
+
+
+
 addTest "Fetching - Nested computation reactivity", (test, onComplete) ->
     a = J.AutoVar 'a',
         (newA) ->
@@ -70,12 +119,14 @@ addTest "AutoVar - AutoList fetching inside", (test, onComplete) ->
 
     fetcher = J.AutoVar 'fetcher',
         ->
+            console.log 'fetch with randomId2: ', randomId2.get()
             $$.Foo.fetchOne randomId2.get()
             ['a', 'b', randomId2.get()]
 
 
     av = J.AutoVar 'av',
         ->
+            console.log 'fetch with randomId1: ', randomId1.get()
             $$.Foo.fetch randomId1.get()
 
             al = fetcher.get().map (x) ->
@@ -343,33 +394,6 @@ addTest "Fetching - Don't call AutoVar.onChange until data is ready", (test, onC
             b.stop()
             completeCount += 1
             if completeCount is 2 then onComplete()
-    )
-
-addTest "Fetching - unsubscribe from data when no computation needs it anymore", (test, onComplete) ->
-    a = J.AutoVar(
-        ->
-            $$.Foo.fetch()
-            test.isTrue $$.Foo.findOne()?
-            b = J.AutoVar(
-                ->
-                    $$.Foo.fetch()
-                    test.isTrue $$.Foo.findOne()?
-                    b.stop()
-                    Tracker.afterFlush ->
-                        test.isTrue $$.Foo.findOne()?
-                        a.stop()
-                        Tracker.afterFlush ->
-                            setTimeout(
-                                ->
-                                    test.isFalse $$.Foo.findOne()?
-                                    onComplete()
-                                1000
-                            )
-                    null
-                true
-            )
-            null
-        true
     )
 
 addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
