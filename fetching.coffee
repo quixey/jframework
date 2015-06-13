@@ -209,6 +209,70 @@ _.extend J.fetching,
         getTransformed selector, true
 
 
+    _getCanonicalProjection: (modelClass, projection) ->
+        return undefined if projection is undefined or _.isEmpty projection
+
+        inclusionSet = @_projectionToInclusionSet modelClass, projection
+
+        # Handle cases like {'a.x':true, 'a.x.y.z':true} -> {'a.x': true}
+        if not _.isEmpty(inclusionSet) then while true
+            mergedSomething = false
+            includeSpecs = _.keys inclusionSet
+            for i in [0...includeSpecs.length - 1]
+                iSpec = includeSpecs[i]
+                iSpecParts = iSpec.split('.')
+                for j in [i + 1...includeSpecs.length]
+                    jSpec = includeSpecs[j]
+                    jSpecParts = jSpec.split('.')
+
+                    shortSpecParts = null
+                    longSpec = null
+                    longSpecParts = null
+                    if iSpecParts.length < jSpecParts.length
+                        shortSpecParts = iSpecParts
+                        longSpec = jSpec
+                        longSpecParts = jSpecParts
+                    else if jSpecParts.length < iSpecParts.length
+                        shortSpecParts = jSpecParts
+                        longSpec = iSpec
+                        longSpecParts = iSpecParts
+                    continue if not longSpec?
+
+                    if EJSON.equals shortSpecParts, longSpecParts[0...shortSpecParts.length]
+                        delete inclusionSet[longSpec]
+                        mergedSomething = true
+                        break
+
+                break if mergedSomething
+            break if not mergedSomething
+
+        defaultIncludeSpecSet = {}
+        for fieldName, fieldSpec of modelClass.fieldSpecs
+            if (fieldSpec.include ? true)
+                defaultIncludeSpecSet[fieldName] = true
+        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+            if (reactiveSpec.include ? false)
+                defaultIncludeSpecSet[reactiveName] = true
+
+        includesAllDefaults = _.all (
+            inclusionSet[includeSpec] for includeSpec of defaultIncludeSpecSet
+        )
+
+        canonicalProjection = {}
+        if not includesAllDefaults
+            canonicalProjection._ = false
+        for includeSpec of inclusionSet
+            unless includesAllDefaults and includeSpec of defaultIncludeSpecSet
+                canonicalProjection[includeSpec] = true
+
+        return undefined if _.isEmpty canonicalProjection
+
+        sortedCanonicalProjection = {}
+        for projectionKey in _.keys(canonicalProjection).sort()
+            sortedCanonicalProjection[projectionKey] = canonicalProjection[projectionKey]
+        sortedCanonicalProjection
+
+
     _projectionToInclusionSet: (modelClass, projection) ->
         # See the projection semantics documentation at the top of this file.
         # Returns {includeSpec: true}
@@ -329,8 +393,6 @@ _.extend J.fetching,
             for qsString of qsStringSet
                 mergedQuerySpecs.push @parseQs qsString
 
-        console.log 'getMerged ', querySpecs
-        console.log 'returning ', mergedQuerySpecs
         mergedQuerySpecs
 
 
@@ -485,13 +547,7 @@ _.extend J.fetching,
 
         qs.selector = @_getCanonicalSelector qs.selector
 
-        if qs.fields is undefined or _.isEmpty qs.fields
-            qs.fields = undefined
-        else
-            projection = {}
-            for projectionKey in _.keys(qs.fields).sort()
-                projection[projectionKey] = qs.fields[projectionKey]
-            qs.fields = projection
+        qs.fields = @_getCanonicalProjection J.models[qs.modelName], qs.fields
 
         if qs.sort is undefined or _.isEmpty qs.sort
             qs.sort = undefined
@@ -756,86 +812,84 @@ _.extend J.fetching,
         a = @makeCanonicalQs a
         b = @makeCanonicalQs b
         return null if a.modelName isnt b.modelName
+        modelClass = J.models[a.modelName]
 
+        # 1.
         return b if @isQsCovered a, b
         return a if @isQsCovered b, a
 
-        # 2. a and b must have the exact same selectorKeys except
+        # 2.
+        #    a and b must have the exact same selectorKeys except
         #    the value differs at one point
-        return null unless a.selector? and b.selector?
-        aSelectorKeys = _.keys a.selector
-        bSelectorKeys = _.keys b.selector
-        return null if not EJSON.equals aSelectorKeys, bSelectorKeys
+        tryMergingSelectors = =>
+            return null unless a.selector? and b.selector?
+            aSelectorKeys = _.keys a.selector
+            bSelectorKeys = _.keys b.selector
+            return null if not EJSON.equals aSelectorKeys, bSelectorKeys
 
-        diffKeys = []
-        for selectorKey of a.selector
-            if not EJSON.equals a.selector[selectorKey], b.selector[selectorKey]
-                diffKeys.push selectorKey
-        return null unless diffKeys.length is 1
-        diffKey = diffKeys[0]
+            diffKeys = []
+            for selectorKey of a.selector
+                if not EJSON.equals a.selector[selectorKey], b.selector[selectorKey]
+                    diffKeys.push selectorKey
+            return null unless diffKeys.length is 1
+            diffKey = diffKeys[0]
 
-        # TODO: Merge projections
+            getPossibleValues = (selectorValue) =>
+                if J.util.isPlainObject selectorValue
+                    if _.size(selectorValue) is 1 and selectorValue.$in?
+                        selectorValue.$in
+                    else if _.any(k[0] is '$' for k of selectorValue)
+                        null
+                    else
+                        [selectorValue]
+                else
+                    [selectorValue]
+
+            aSelectorValues = getPossibleValues a.selector[diffKey]
+            bSelectorValues = getPossibleValues b.selector[diffKey]
+            return null unless aSelectorValues? and bSelectorValues?
+
+            selectorValuesSet = {} # stringifiedValue: true
+            for aValue in aSelectorValues
+                selectorValuesSet[EJSON.stringify aValue] = true
+            for bValue in bSelectorValues
+                selectorValuesSet[EJSON.stringify bValue] = true
+            mergedSelectorValues = (EJSON.parse x for x of selectorValuesSet)
+
+            mergedSelector = _.clone a.selector
+            mergedSelector[diffKey] = $in: mergedSelectorValues
+            mergedQs = _.clone a
+            mergedQs.selector = @_getCanonicalSelector mergedSelector
+            mergedQs
+
+        selectorMergedQs = tryMergingSelectors()
+        if selectorMergedQs? and @isQsCovered(a, selectorMergedQs) and @isQsCovered(b, selectorMergedQs)
+            return selectorMergedQs
+
+        # 3.
+        tryMergingProjections = =>
+            aDummy = _.clone a
+            delete aDummy.fields
+            bDummy = _.clone b
+            delete bDummy.fields
+            return null unless EJSON.equals aDummy, bDummy
+
+            aInclusionSet = @_projectionToInclusionSet modelClass, a.fields
+            bInclusionSet = @_projectionToInclusionSet modelClass, b.fields
+            mergedInclusionSet = _.extend(
+                _.clone aInclusionSet
+                bInclusionSet
+            )
+
+            mergedQs = _.clone a
+            mergedQs.fields = @_getCanonicalProjection modelClass, _.extend(
+                _: false
+                mergedInclusionSet
+            )
+            mergedQs
+
+        projectionMergedQs = tryMergingProjections()
+        if projectionMergedQs?
+            return projectionMergedQs
 
         null
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
