@@ -56,8 +56,16 @@ if Meteor.isClient then _.extend J.fetching,
 
     _requestInProgress: false
 
-    # Latest client-side state and whether it's changed since we
-    # last called the server's update method
+    ###
+        Latest client-side state and whether it's changed since we
+        last called the server's update method
+
+    ###
+
+    # Each computation maintains its own constantly-merged set of querySpecs
+    # which union into the global _unmergedQsSet, and that gets merged into the
+    # global _mergedQsSet.
+    _qsByRequester: {} # computationId: querySpecString: true
     _requestersByQs: {} # querySpecString: {computationId: computation}
     _requestsChanged: false
 
@@ -69,14 +77,70 @@ if Meteor.isClient then _.extend J.fetching,
     _unmergedQsSet: {} # mergedQuerySpecString: true
     _mergedQsSet: {} # mergedQuerySpecString: true
 
+
 _.extend J.fetching,
+    _addComputationQsRequest: (computation, qs) ->
+        qsString = @stringifyQs qs
+
+        @_qsByRequester[computation._id] ?= {}
+        if qsString of @_qsByRequester[computation._id]
+            # Special case of _qsByRequester[computation._id]
+            # being unchanged after remerging
+            return
+
+        oldQsStrings = _.keys @_qsByRequester[computation._id]
+        @_qsByRequester[computation._id][qsString] = true
+        @_qsByRequester[computation._id] = J.util.makeSet(
+            @getMerged (@parseQs qss for qss of @_qsByRequester[computation._id])
+            (qs) => @stringifyQs qs
+        )
+        newQsStrings = _.keys @_qsByRequester[computation._id]
+        qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
+        unless qsStringsDiff.added.length or qsStringsDiff.deleted.length
+            # General case of _qsByRequester[computation._id]
+            # being unchanged after remerging
+            return
+
+        requestsChanged = false
+
+        for addedQss in qsStringsDiff.added
+            if addedQss not of @_requestersByQs
+                @_requestersByQs[addedQss] = {}
+                requestsChanged = true
+            @_requestersByQs[addedQss][computation._id] = computation
+
+        for deletedQss in qsStringsDiff.deleted
+            delete @_requestersByQs[deletedQss][computation._id]
+            if _.isEmpty @_requestersByQs[deletedQss]
+                delete @_requestersByQs[deletedQss]
+                requestsChanged = true
+
+        if requestsChanged and not @_requestsChanged
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+
     _deleteComputationQsRequests: (computation) ->
-        return if not computation._requestingData
-        for qsString in _.keys @_requestersByQs
-            delete @_requestersByQs[qsString][computation._id]
-        computation._requestingData = false
-        @_requestsChanged = true
-        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+        # Note:
+        # AutoVar handles logic to call @_deleteComputationQsRequests
+        # because it involves complicated sequencing with React component
+        # rendering.
+
+        return if computation._id not of @_qsByRequester
+
+        requestsChanged = false
+
+        for deletedQss of @_qsByRequester[computation._id]
+            delete @_requestersByQs[deletedQss][computation._id]
+            if _.isEmpty @_requestersByQs[deletedQss]
+                delete @_requestersByQs[deletedQss]
+                requestsChanged = true
+
+        delete @_qsByRequester[computation._id]
+
+        if requestsChanged and not @_requestsChanged
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
 
 
     _getCanonicalSelector: (selector) ->
@@ -92,7 +156,7 @@ _.extend J.fetching,
             selector = _.clone selector
             selector._id = $in: [selector._id]
 
-        orderSpecialKeys = (subSel, levelIsSpecial) ->
+        orderSpecialKeys = (subSel, levelIsSpecial) =>
             # levelIsSpecial:
             #   E.g. the top-level and a level after $in are special
             #   and can be reordered, but values to match which happen
@@ -291,7 +355,7 @@ _.extend J.fetching,
                     _: false
                     EJSON.parse inclusionSetString
                 )
-                mergedQuerySpecs.push J.fetching.makeCanonicalQs
+                mergedQuerySpecs.push @makeCanonicalQs
                     modelName: modelName
                     selector: _id: $in: instanceIds
                     fields: mergedProjection
@@ -301,7 +365,7 @@ _.extend J.fetching,
         for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
             qsStringSet = {} # qsString: true
             for qs in nonIdQuerySpecs
-                qsStringSet[J.fetching.stringifyQs qs] = true
+                qsStringSet[@stringifyQs qs] = true
 
             # Iterate until no pair of qsStrings in qsStringSet
             # can be pairwise merged.
@@ -325,7 +389,7 @@ _.extend J.fetching,
 
             # Dump qsStringSet into mergedQuerySpecs
             for qsString of qsStringSet
-                mergedQuerySpecs.push J.fetching.parseQs qsString
+                mergedQuerySpecs.push @parseQs qsString
 
 
         mergedQuerySpecs
@@ -396,7 +460,7 @@ _.extend J.fetching,
     makeCanonicalQs: (qs) ->
         # Returns an equivalent querySpec but in "canonical form"
         # so two querySpecs written with minor differences can
-        # be fingerprinted by their J.fetching.stringifyQs value
+        # be fingerprinted by their @stringifyQs value
 
         qs = _.clone qs
 
@@ -478,27 +542,20 @@ _.extend J.fetching,
         return if @_requestInProgress or not @_requestsChanged
         @_requestsChanged = false
 
-        # Clean the empty objects out of @_requestersByQs.
-        # It would have been nice to do this in @_deleteComputationQsRequests, but that
-        # turns out to be a significant performance hit compared to doing it here.
-        for qsString in _.keys @_requestersByQs
-            if _.isEmpty @_requestersByQs[qsString]
-                delete @_requestersByQs[qsString]
-
         newUnmergedQsStrings = _.keys @_requestersByQs
-        newUnmergedQuerySpecs = (J.fetching.parseQs qsString for qsString in newUnmergedQsStrings)
+        newUnmergedQuerySpecs = (@parseQs qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
         unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
         newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
-        newMergedQsStrings = (J.fetching.stringifyQs querySpec for querySpec in newMergedQuerySpecs)
+        newMergedQsStrings = (@stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
         mergedQsStringsDiff = J.util.diffStrings _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
-        addedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.added)
-        deletedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.deleted)
+        addedQuerySpecs = (@parseQs qsString for qsString in mergedQsStringsDiff.added)
+        deletedQuerySpecs = (@parseQs qsString for qsString in mergedQsStringsDiff.deleted)
 
         doAfterUpdatingUnmergedQsSet = =>
             for addedUnmergedQsString in unmergedQsStringsDiff.added
@@ -519,7 +576,7 @@ _.extend J.fetching,
 
         debug = true
         if debug
-            consolify = (querySpec) ->
+            consolify = (querySpec) =>
                 obj = _.clone querySpec
                 for x in ['selector', 'fields', 'sort']
                     if x of obj then obj[x] = J.util.stringify obj[x]
@@ -556,21 +613,10 @@ _.extend J.fetching,
 
     requestQuery: (querySpec) ->
         J.assert Tracker.active
-
         @checkQuerySpec querySpec
 
-        qsString = J.fetching.stringifyQs querySpec
         computation = Tracker.currentComputation
-
-        @_requestersByQs[qsString] ?= {}
-        if computation._id not of @_requestersByQs[qsString]
-            @_requestersByQs[qsString][computation._id] = computation
-            computation._requestingData = true
-            # Note: AutoVar handles logic to remove from @_requestersByQueue
-            # because it involves complicated sequencing with React component
-            # rendering.
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+        @_addComputationQsRequest computation, querySpec
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
