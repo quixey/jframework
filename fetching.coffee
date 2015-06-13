@@ -457,6 +457,64 @@ _.extend J.fetching,
         ret
 
 
+    isQsCovered: (qs, superQs) ->
+        # Returns whether the results from the querySpecs in superQsArr
+        # are sufficient to provide accurate results to qs
+
+        return false if superQs.modelName isnt qs.modelName
+
+        false
+
+
+    isSelectorCovered: (qs, superQs) ->
+        # Returns true if (modelName, selector, sort, limit, skip)
+        # cause superQs to have a superset of the returned _ids
+        # that qs has, ignoring qs.fields and superQs.fields
+
+        qs = @makeCanonicalQs qs
+        delete qs.fields
+        superQs = @makeCanonicalQs superQs
+        delete superQs.fields
+
+        return true if EJSON.equals qs, superQs
+        return false if qs.modelName isnt superQs.modelName
+
+        isValueSpecCovered = (valueSpec, superValueSpec) ->
+            possibleValues = [valueSpec]
+            if J.util.isPlainObject(valueSpec) and _.keys(valueSpec).length is 1 and valueSpec.$in?
+                possibleValues = valueSpec.$in
+            superPossibleValues = [superValueSpec]
+            if J.util.isPlainObject(superValueSpec) and _.keys(superValueSpec).length is 1 and superValueSpec.$in?
+                superPossibleValues = superValueSpec.$in
+
+            for possibleValue in possibleValues
+                return false if not _.any(
+                    EJSON.equals possibleValue, v for v in superPossibleValues
+                )
+            true
+
+        # Return false if superQs.selector might filter too much
+        for superSelectorKey, superSelectorValue of superQs.selector
+            if not isValueSpecCovered qs.selector[superSelectorKey], superSelectorValue
+                return false
+
+        if qs.skip? or superQs.skip?
+            # Can't handle skip yet
+            return false
+
+        if superQs.limit?
+            # If superQs has a limit, then qs has to be identical
+            # except with a possibly smaller limit
+            if qs.limit? and qs.limit <= superQs.limit
+                dummyQs = _.clone qs
+                dummyQs.limit = superQs.limit
+                return EJSON.equals dummyQs, superQs
+            else
+                return false
+
+        true
+
+
     makeCanonicalQs: (qs) ->
         # Returns an equivalent querySpec but in "canonical form"
         # so two querySpecs written with minor differences can
