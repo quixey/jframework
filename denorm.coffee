@@ -106,7 +106,7 @@ J.denorm =
         if J._reactiveCalcQueue.length > 0
             console.log "    (#{J._reactiveCalcQueue.length} more in queue)"
 
-        watchedQuerySpecSet = null
+        watchedQuerySpecSet = null # watchedQsString: true
         wrappedValue = undefined
         J._watchedQuerySpecSet.withValue {}, =>
             J.assert not instance._watcherReactiveName?
@@ -128,11 +128,12 @@ J.denorm =
         watchedQuerySpecs = (
             J.fetching.parseQs qsString for qsString in watchedQsStrings
         )
+        mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
             val: J.Model._getEscapedSubdoc value
-            watching: J.Model._getEscapedSubdoc watchedQuerySpecs
+            watching: J.Model._getEscapedSubdoc mergedWatchedQuerySpecs
             ts: timestamp
             dirty: false
         instance.modelClass.update(
@@ -236,8 +237,6 @@ J.denorm =
                 # Makes sure every fieldSpec in the watching-selector is consistent
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
-                    selector: $type: 3 # object
-                ,
                     $or: [
                         'selector._id': $in: [null, instanceId]
                     ,
@@ -270,9 +269,9 @@ J.denorm =
                         changed = not EJSON.equals oldValue, newValue
 
                         fieldSpec = fieldSpecPrefix.concat [subfieldName]
-                        selectorKey = "selector.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
-                        projectionKey = "fields.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
-                        sortSpecKey = "sort.#{fieldSpec.map(J.Model.escapeDot).join('*DOT*')}"
+                        selectorKey = "selector.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
+                        projectionKey = "fields.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
+                        sortSpecKey = "sort.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
 
                         #if changed
                         #    console.log "***changed: #{JSON.stringify fieldSpec}
@@ -363,7 +362,8 @@ J.denorm =
                         # The watcher's selector has a shot at ever matching
                         # the old or new document
                         $or: [
-                            selector: $in: [null, instanceId]
+                            selector: $exists: false
+                            $and: subfieldSelectorMatcher
                         ]
                     ]
                 if subfieldSelectorMatcher.length

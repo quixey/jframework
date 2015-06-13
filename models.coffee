@@ -291,7 +291,9 @@ class J.Model
                     if reactiveValue is undefined
                         priority = 10 * (reactiveSpec.priority ? 0.5)
                         reactiveCalcObj = J._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
-                        Meteor.defer => J._dequeueReactiveCalc()
+                        Future.task(
+                            => J._dequeueReactiveCalc()
+                        ).detach()
                         reactiveValue = reactiveCalcObj.future.wait()
 
                     reactiveValue
@@ -886,7 +888,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                     Use a combination of individual dot-paths instead."
                                 console.warn "    #{JSON.stringify querySpec, null, 4}"
 
-                        console.log "Adding to watchedQuerySpecSet: ", qsString
                         J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
