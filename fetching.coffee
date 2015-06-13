@@ -282,89 +282,20 @@ _.extend J.fetching,
 
 
     getMerged: (querySpecs) ->
-        # 1.
-        #     Merge all the querySpecs that select on _id using
-        #     inclusionSetByModelInstance.
-        # 2.
-        #     Attempt to pairwise merge all the querySpecs that
-        #     don't select on _id.
+        # Attempt to pairwise merge all the querySpecs.
 
-        inclusionSetByModelInstance = {} # modelName: id: fieldOrReactiveSpec: true
-        nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
+        querySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
         querySpecs = (@makeCanonicalQs qs for qs in querySpecs)
 
-        _getSelectorIds = (qs) =>
-            if qs.selector?._id?
-                # Note that if the selector has keys other than "_id" that may drop
-                # the result count from 1 to 0, we'll just ignore that and send a
-                # dumber merged query to the server.
-
-                if (
-                    _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-                    qs.selector._id.$in? and not qs.limit? and not qs.skip?
-                )
-                    qs.selector._id.$in
-
-
         for qs in querySpecs
-            modelClass = J.models[qs.modelName]
-            selectorIds = _getSelectorIds qs
-            if selectorIds?.length
-                # (1) Merge this QS into inclusionSetByModelInstance
+            querySpecsByModel[qs.modelName] ?= []
+            querySpecsByModel[qs.modelName].push qs
 
-                for selectorId in selectorIds
-                    existingIncludes = J.util.getField(
-                        inclusionSetByModelInstance
-                        [qs.modelName, '?.', selectorId]
-                    ) ? J.util.setField(
-                        inclusionSetByModelInstance
-                        [qs.modelName, selectorId]
-                        {}
-                        true
-                    )
-
-                    inclusionSet = @_projectionToInclusionSet modelClass, qs.fields ? {}
-                    for fieldSpec, include of inclusionSet
-                        existingIncludes[fieldSpec] = Boolean(
-                            existingIncludes[fieldSpec] or include
-                        )
-
-            else
-                # (2) Add this to the list of non-ID-selecting querySpecs
-                # to be pairwise merged.
-
-                nonIdQuerySpecsByModel[qs.modelName] ?= []
-                nonIdQuerySpecsByModel[qs.modelName].push qs
-
-
-        # (1) Dump inclusionSetByModelInstance into mergedQuerySpecs
-        for modelName, inclusionSetById of inclusionSetByModelInstance
-            idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
-            for instanceId, inclusionSet of inclusionSetById
-                sortedInclusionSet = {}
-                for key in _.keys(inclusionSet).sort()
-                    sortedInclusionSet[key] = inclusionSet[key]
-                inclusionSetString = EJSON.stringify sortedInclusionSet
-                idsByInclusionSetString[inclusionSetString] ?= []
-                idsByInclusionSetString[inclusionSetString].push instanceId
-
-            for inclusionSetString, instanceIds of idsByInclusionSetString
-                mergedProjection = _.extend(
-                    _: false
-                    EJSON.parse inclusionSetString
-                )
-                mergedQuerySpecs.push @makeCanonicalQs
-                    modelName: modelName
-                    selector: _id: $in: instanceIds
-                    fields: mergedProjection
-
-
-        # (2) Pairwise merge the nonIdQuerySpecs
-        for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
+        for modelName, querySpecs of querySpecsByModel
             qsStringSet = {} # qsString: true
-            for qs in nonIdQuerySpecs
+            for qs in querySpecs
                 qsStringSet[@stringifyQs qs] = true
 
             # Iterate until no pair of qsStrings in qsStringSet
@@ -373,10 +304,13 @@ _.extend J.fetching,
                 mergedSomething = false
 
                 qsStrings = _.keys qsStringSet
-                for qsString, i in qsStrings[qsStrings.length - 1]
+                for qsString, i in qsStrings[...qsStrings.length - 1]
+                    querySpec = @parseQs qsString
                     for qss in qsStrings[i + 1...]
-                        pairwiseMergedQsString = @tryQsPairwiseMerge qsString, qss
-                        if pairwiseMergedQsString?
+                        qs = @parseQs qss
+                        pairwiseMergedQs = @tryQsPairwiseMerge querySpec, qs
+                        if pairwiseMergedQs?
+                            pairwiseMergedQsString = @stringifyQs pairwiseMergedQs
                             delete qsStringSet[qsString]
                             delete qsStringSet[qss]
                             qsStringSet[pairwiseMergedQsString] = true
@@ -391,7 +325,8 @@ _.extend J.fetching,
             for qsString of qsStringSet
                 mergedQuerySpecs.push @parseQs qsString
 
-
+        console.log 'getMerged ', querySpecs
+        console.log 'returning ', mergedQuerySpecs
         mergedQuerySpecs
 
 
@@ -515,9 +450,10 @@ _.extend J.fetching,
             true
 
         # Return false if superQs.selector might filter too much
-        for superSelectorKey, superSelectorValue of superQs.selector
-            if not isValueSpecCovered qs.selector[superSelectorKey], superSelectorValue
-                return false
+        for superSelectorKey, superSelectorValue of superQs.selector ? {}
+            return false unless qs.selector? and superSelectorKey of qs.selector and isValueSpecCovered(
+                qs.selector[superSelectorKey], superSelectorValue
+            )
 
         if qs.skip? or superQs.skip?
             # Can't handle skip yet
@@ -803,7 +739,99 @@ _.extend J.fetching,
 
 
     tryQsPairwiseMerge: (a, b) ->
+        # Return a new querySpec that covers both a and b, or null
+        # if pairwise merging failed.
+        #
+        # Strategy:
+        # 1. If one qs covers the other, return the superQs.
+        # 2. If everything is identical except the value of a single
+        #    selectorKey, return a new qs with a merged selectorKey.
+        # 3. If everything is identical except the projection,
+        #    return a new qs with a merged projection.
+
+        a = @makeCanonicalQs a
+        b = @makeCanonicalQs b
         return null if a.modelName isnt b.modelName
-        return null if not EJSON.equals a.sort, b.sort
+
+        return b if @isQsCovered a, b
+        return a if @isQsCovered b, a
+
+        # 2. a and b must have the exact same selectorKeys except
+        #    the value differs at one point
+        return null unless a.selector? and b.selector?
+        aSelectorKeys = _.keys a.selector
+        bSelectorKeys = _.keys b.selector
+        return null if not EJSON.equals aSelectorKeys, bSelectorKeys
+
+        diffKeys = []
+        for selectorKey of a.selector
+            if not EJSON.equals a.selector[selectorKey], b.selector[selectorKey]
+                diffKeys.push selectorKey
+        return null unless diffKeys.length is 1
+        diffKey = diffKeys[0]
+
+        # TODO: Merge projections
 
         null
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

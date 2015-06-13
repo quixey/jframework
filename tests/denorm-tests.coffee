@@ -774,8 +774,12 @@ Tinytest.add 'QuerySpec canonicalization', (test) ->
         test.equal EJSON.stringify(a), EJSON.stringify(b)
 
     testEqual c(undefined), undefined
-    testEqual c('123x'), _id: $in: ['123x']
-    testEqual c(_id: 'abc'), _id: $in: ['abc']
+    testEqual c('123x'), _id: '123x'
+    testEqual c(_id: 'abc'), _id: 'abc'
+    testEqual c(_id: $in: ['abc']), _id: 'abc'
+    testEqual c(_id: $in: ['abc', 'def']), _id: $in: ['abc', 'def']
+    testEqual c(_id: $in: ['def', 'abc']), _id: $in: ['def', 'abc']
+    testEqual c(_id: $in: ['z', 'a', 'Z']), _id: $in: ['Z', 'a', 'z']
 
     testEqual(
         c(

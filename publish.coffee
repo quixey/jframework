@@ -82,7 +82,7 @@ Meteor.methods
         for querySpec in addedQuerySpecs
             unless querySpec.modelName of J.models
                 throw new Meteor.Error "Invalid modelName in querySpec:
-                    #{J.util.toString querySpec}"
+                    #{J.util.stringify querySpec}"
 
         # Apply the diff to session.querySpecSet()
         actualAdded = []
