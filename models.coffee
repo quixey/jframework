@@ -265,11 +265,12 @@ class J.Model
                 if reactiveSpec.denorm
                     J.assert @_id?
 
-                    if J._watchedQuerySpecSet.get()?
+                    if @_watcherReactiveName?
+                        # Treat an own-reactive access the same as any query
                         if reactiveSpec.watchable ? @modelClass.watchable
                             projection = _: false
                             projection[reactiveName] = true
-                            dummyQuerySpec =
+                            dummyQuerySpec = J.fetching.makeCanonicalQs
                                 modelName: @modelClass.name
                                 selector: @_id
                                 fields: projection
@@ -313,6 +314,11 @@ class J.Model
                         # invalidates, we might *not* need to invalidate the current computation when
                         # the new field data arrives. The reactivity is handled by the @reactives dict.
                         # Therefore a child J.AutoVar is the perfect place to do the bookkeeping.
+                        # FIXME:
+                        # This is a bad solution. For one thing, we don't even stop a new AutoVar
+                        # from being created every time a field/reactive is accessed.
+                        # Also, we clearly need better tracking of which _ids (and fields) are
+                        # coming from which cursor.
                         J.AutoVar(
                             "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
                             =>
@@ -335,17 +341,18 @@ class J.Model
             if Meteor.isServer and J._watchedQuerySpecSet.get()?
                 J.assert @_id?
 
-                # Treat an own-field access the same as any query
-                if fieldSpec.watchable ? @modelClass.watchable
-                    projection = _: false
-                    projection[fieldName] = true
-                    dummyQuerySpec =
-                        modelName: @modelClass.name
-                        selector: @_id
-                        fields: projection
-                        limit: 1
-                    dummyQsString = J.fetching.stringifyQs dummyQuerySpec
-                    J._watchedQuerySpecSet.get()[dummyQsString] = true
+                if @_watcherReactiveName?
+                    # Treat an own-field access the same as any query
+                    if fieldSpec.watchable ? @modelClass.watchable
+                        projection = _: false
+                        projection[fieldName] = true
+                        dummyQuerySpec = J.fetching.makeCanonicalQs
+                            modelName: @modelClass.name
+                            selector: @_id
+                            fields: projection
+                            limit: 1
+                        dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                        J._watchedQuerySpecSet.get()[dummyQsString] = true
 
                 if @_fields.tryGet(fieldName) is undefined
                     console.warn "Field <#{@modelClass.name} #{JSON.stringify @_id}>.#{fieldName}
@@ -858,7 +865,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     selector = J.Dict(selector).toObj()
                 options = J.Dict(options).toObj()
 
-                querySpec =
+                querySpec = J.fetching.makeCanonicalQs
                     modelName: modelName
                     selector: selector
                     fields: options.fields
@@ -879,6 +886,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                     Use a combination of individual dot-paths instead."
                                 console.warn "    #{JSON.stringify querySpec, null, 4}"
 
+                        console.log "Adding to watchedQuerySpecSet: ", qsString
                         J._watchedQuerySpecSet.get()[qsString] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}

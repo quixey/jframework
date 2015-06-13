@@ -301,6 +301,7 @@ updateObservers = (dataSessionId) ->
         mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
         mongoOptions = J.fetching._qsToMongoOptions querySpec
 
+        # log 'mongoSelector: ', JSON.stringify mongoSelector
         # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
         cursor = modelClass.collection.find mongoSelector, mongoOptions

@@ -355,8 +355,6 @@ _.extend J.fetching,
         querySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
-        querySpecs = (@makeCanonicalQs qs for qs in querySpecs)
-
         for qs in querySpecs
             querySpecsByModel[qs.modelName] ?= []
             querySpecsByModel[qs.modelName].push qs
@@ -405,7 +403,6 @@ _.extend J.fetching,
         #     (Note that we can't infer anything about first-level objects
         #     in the doc, because they may or may not be partial subdocs.)
 
-        qs = @makeCanonicalQs qs
         qsString = @stringifyQs qs
         modelClass = J.models[qs.modelName]
 
@@ -464,9 +461,6 @@ _.extend J.fetching,
         # Returns whether the results from the querySpecs in superQsArr
         # are sufficient to provide accurate results to qs
 
-        qs = @makeCanonicalQs qs
-        superQs = @makeCanonicalQs superQs
-
         return false if qs.modelName isnt superQs.modelName
         modelClass = J.models[qs.modelName]
 
@@ -495,9 +489,9 @@ _.extend J.fetching,
         # cause superQs to have a superset of the returned _ids
         # that qs has, ignoring qs.fields and superQs.fields
 
-        qs = @makeCanonicalQs qs
+        qs = _.clone qs
         delete qs.fields
-        superQs = @makeCanonicalQs superQs
+        superQs = _.clone superQs
         delete superQs.fields
 
         return true if EJSON.equals qs, superQs
@@ -555,6 +549,9 @@ _.extend J.fetching,
             qs.sort = undefined
 
         if qs.limit is 0 or not qs.limit?
+            qs.limit = undefined
+        else if _.isString qs.selector?._id
+            # Optimization: If _id is a singleton then limit is irrelevant
             qs.limit = undefined
 
         if qs.skip is 0 or not qs.skip?
@@ -625,7 +622,11 @@ _.extend J.fetching,
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
         unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
-        newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
+        newUnmergedQuerySpecsByModelName = J.util.groupByKey newUnmergedQuerySpecs, 'modelName'
+        newMergedQuerySpecs = []
+        for modelName, newUnmergedModelQuerySpecs of newUnmergedQuerySpecsByModelName
+            newMergedQuerySpecs.push.apply newMergedQuerySpecs, @getMerged newUnmergedModelQuerySpecs
+
         newMergedQsStrings = (@stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
@@ -736,8 +737,10 @@ _.extend J.fetching,
         #     The corresponding Mongo-style selector that we can pass to
         #     MongoCollection.find
 
-        if not J.util.isPlainObject selector
-            return selector
+        if selector is undefined
+            return {}
+        else if _.isString selector
+            return _id: selector
 
         mongoSelector = {}
         for selectorKey, selectorValue of selector
@@ -797,7 +800,7 @@ _.extend J.fetching,
 
 
     stringifyQs: (qs) ->
-        EJSON.stringify @makeCanonicalQs qs
+        EJSON.stringify qs
 
 
     tryQsPairwiseMerge: (a, b) ->
@@ -811,8 +814,6 @@ _.extend J.fetching,
         # 3. If everything is identical except the projection,
         #    return a new qs with a merged projection.
 
-        a = @makeCanonicalQs a
-        b = @makeCanonicalQs b
         return null if a.modelName isnt b.modelName
         modelClass = J.models[a.modelName]
 

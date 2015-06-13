@@ -109,8 +109,11 @@ J.denorm =
         watchedQuerySpecSet = null
         wrappedValue = undefined
         J._watchedQuerySpecSet.withValue {}, =>
+            J.assert not instance._watcherReactiveName?
+            instance._watcherReactiveName = reactiveName
             wrappedValue = J.Var(reactiveSpec.val.call instance).get()
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
+            delete instance._watcherReactiveName
 
         if wrappedValue instanceof J.List
             value = wrappedValue.toArr()
