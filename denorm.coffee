@@ -55,7 +55,12 @@ J._dequeueReactiveCalc = ->
     reactiveKey = "#{reactiveCalcObj.modelName}.#{JSON.stringify reactiveCalcObj.instanceId}.#{reactiveCalcObj.reactiveName}"
 
     modelClass = J.models[reactiveCalcObj.modelName]
-    instance = modelClass.fetchOne reactiveCalcObj.instanceId
+    projection = {}
+    projection[reactiveCalcObj.reactiveName] = true
+    instance = modelClass.fetchOne(
+        reactiveCalcObj.instanceId
+        fields: projection
+    )
 
     # While this is recalculating, J._reactiveCalcsInProgress still contains reactiveKey
     # or else a different fiber could redundantly start the same recalc
@@ -106,21 +111,22 @@ J.denorm =
         if J._reactiveCalcQueue.length > 0
             console.log "    (#{J._reactiveCalcQueue.length} more in queue)"
 
-        watchedQuerySpecSet = null # watchedQsString: true
-        wrappedValue = undefined
-        J._watchedQuerySpecSet.withValue {}, =>
-            J.assert not instance._watcherReactiveName?
-            instance._watcherReactiveName = reactiveName
-            wrappedValue = J.Var(reactiveSpec.val.call instance).get()
-            watchedQuerySpecSet = J._watchedQuerySpecSet.get()
-            delete instance._watcherReactiveName
+        oldDoc = instance.toDoc()
+        oldDoc._reactives = instance._reactives
 
-        if wrappedValue instanceof J.List
-            value = wrappedValue.toArr()
-        else if wrappedValue instanceof J.Dict
-            value = wrappedValue.toObj()
-        else
-            value = wrappedValue
+        watchedQuerySpecSet = null # watchedQsString: true
+        unwrappedValue = undefined
+        J._watchedQuerySpecSet.withValue {}, =>
+            unwrappedValue = J.Var.deepUnwrap reactiveSpec.val.call instance
+            watchedQuerySpecSet = J._watchedQuerySpecSet.get()
+
+        escapedSubdoc = J.Model._getEscapedSubdoc unwrappedValue
+        if not EJSON.equals escapedSubdoc, oldDoc._reactives[reactiveName]?.val
+            newDoc = _.clone oldDoc
+            newDoc._reactives = _.clone oldDoc._reactives
+            newDoc._reactives[reactiveName] =
+                val: escapedSubdoc
+            J.denorm.resetWatchers instance.modelClass.name, instance._id, oldDoc, newDoc, timestamp
 
         # console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
@@ -132,7 +138,7 @@ J.denorm =
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
-            val: J.Model._getEscapedSubdoc value
+            val: escapedSubdoc
             watching: J.Model._getEscapedSubdoc mergedWatchedQuerySpecs
             ts: timestamp
             dirty: false
@@ -141,17 +147,10 @@ J.denorm =
             $set: setter
         )
 
-        wrappedValue
+        J.Var.wrap unwrappedValue
 
 
     resetWatchers: (modelName, instanceId, oldDoc, newDoc, timestamp = new Date(), callback) ->
-        console.log "resetWatchers <#{modelName} #{JSON.stringify(instanceId)}>",
-            JSON.stringify
-                oldDoc: _.keys(oldDoc)
-                oldReactives: _.keys(oldDoc._reactives ? {})
-                newDoc: _.keys(newDoc)
-                newReactives: _.keys(newDoc._reactives ? {})
-
         # Total number of running calls to resetWatchersHelper
         semaphore = 0
 
@@ -233,6 +232,8 @@ J.denorm =
                 termMatcher
 
 
+            changedFieldSpecs = []
+
             makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
                 # Makes sure every fieldSpec in the watching-selector is consistent
                 # with either oldValues or newValues
@@ -275,15 +276,16 @@ J.denorm =
                         projectionKey = "fields.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
                         sortSpecKey = "sort.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
 
-                        #if changed
-                        #    console.log "***changed: #{JSON.stringify fieldSpec}
-                        #        #{JSON.stringify oldValue: oldValue, newValue: newValue}"
+                        if changed and fieldSpec.length is 1
+                            # Debugging
+                            changedFieldSpecs.push fieldSpec.map(J.Model.escapeDot).join('.')
 
-                        selectable =
-                            if fieldSpec[0] of modelClass.fieldSpecs
-                                modelClass.fieldSpecs[fieldSpec[0]].selectable ? true
-                            else
-                                modelClass.reactiveSpecs[fieldSpec[0]].selectable ? false
+                        if fieldSpec[0] of modelClass.fieldSpecs
+                            selectable = modelClass.fieldSpecs[fieldSpec[0]].selectable ? true
+                            watchable = modelClass.fieldSpecs[fieldSpec[0]].watchable ? modelClass.watchable
+                        else
+                            selectable = modelClass.reactiveSpecs[fieldSpec[0]].selectable ? false
+                            watchable = modelClass.reactiveSpecs[fieldSpec[0]].watchable ? modelClass.watchable
 
                         possibleValues = []
                         if oldValue isnt undefined
@@ -305,21 +307,22 @@ J.denorm =
                                 term[sortSpecKey] = $exists: true
                                 changedSubfieldSortSpecMatcher.push term
 
-                            term = {}
-                            term[projectionKey] = true
-                            changedSubfieldAlacarteProjectionMatcher.push term
+                            if watchable
+                                term = {}
+                                term[projectionKey] = true
+                                changedSubfieldAlacarteProjectionMatcher.push term
 
-                            term = {}
-                            term[projectionKey] = true
-                            if fieldSpecPrefix.length is 0
-                                J.assert subfieldName of modelClass.fieldSpecs or subfieldName of modelClass.reactiveSpecs
-                                if subfieldName of modelClass.fieldSpecs
-                                    if modelClass.fieldSpecs[subfieldName].include ? true
-                                        term[projectionKey] = $in: [null, true]
-                                else
-                                    if modelClass.reactiveSpecs[subfieldName].include ? false
-                                        term[projectionKey] = $in: [null, true]
-                            changedSubfieldOverrideProjectionMatcher.push term
+                                term = {}
+                                term[projectionKey] = true
+                                if fieldSpecPrefix.length is 0
+                                    J.assert subfieldName of modelClass.fieldSpecs or subfieldName of modelClass.reactiveSpecs
+                                    if subfieldName of modelClass.fieldSpecs
+                                        if modelClass.fieldSpecs[subfieldName].include ? true
+                                            term[projectionKey] = $in: [null, true]
+                                    else
+                                        if modelClass.reactiveSpecs[subfieldName].include ? false
+                                            term[projectionKey] = $in: [null, true]
+                                changedSubfieldOverrideProjectionMatcher.push term
 
                         if J.util.isPlainObject(oldValue) or J.util.isPlainObject(newValue)
                             addSelectorClauses(
@@ -383,12 +386,10 @@ J.denorm =
             mutableOldValues = {}
             mutableNewValues = {}
             for fieldName, fieldSpec of modelClass.fieldSpecs
-                continue if not (fieldSpec.watchable ? modelClass.watchable)
                 mutableOldValues[fieldName] = oldDoc[fieldName]
                 mutableNewValues[fieldName] = newDoc[fieldName]
             for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                 continue if not reactiveSpec.denorm
-                continue if not (reactiveSpec.watchable ? modelClass.watchable)
                 mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
                 mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
 
@@ -396,7 +397,11 @@ J.denorm =
                 semaRelease()
                 return null
 
+            changedFieldSpecs = []
             watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
+
+            console.log "ResetWatchersHelper: <#{modelName} #{JSON.stringify instanceId}> with changes to
+                #{JSON.stringify changedFieldSpecs}"
 
             watcherMatcherLength = JSON.stringify(watcherMatcher).length
             if watcherMatcherLength > 10000
@@ -405,6 +410,7 @@ J.denorm =
                 console.log JSON.stringify watcherMatcher
 
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
+            resetDebugsByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": [debugStrings]
             resetOneWatcherDoc = (watcherModelName, watcherReactiveName) ->
                 lockKey = "#{watcherModelName}.#{watcherReactiveName}"
                 return if lockSema[lockKey]
@@ -424,6 +430,7 @@ J.denorm =
                 setter["_reactives.#{watcherReactiveName}.dirty"] = true
 
                 resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
+                resetDebugsByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= []
                 watcherModelClass.collection.rawCollection().findAndModify(
                     selector
                 ,
@@ -441,6 +448,7 @@ J.denorm =
 
                         if oldWatcherDoc?
                             resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
+                            resetDebugsByModelReactive["#{watcherModelName}.#{watcherReactiveName}"].push oldWatcherDoc._id
 
                             priority = undefined
                             for dataSessionId, fieldsByModelIdQuery of J._dataSessionFieldsByModelIdQuery
@@ -469,28 +477,19 @@ J.denorm =
 
                             # Also branch into resetting all docs watching this watching-reactive in this doc
                             if priority?
-                                reactiveCalcObj = J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
-                                reactiveCalcObj.future.resolve (err, value) ->
-                                    unwrappedValue = J.Model._getEscapedSubdoc(
-                                        if value instanceof J.List
-                                            value.toArr()
-                                        else if value instanceof J.Dict
-                                            value.toObj()
-                                        else
-                                            value
-                                    )
-                                    if not EJSON.equals unwrappedValue, oldWatcherDoc._reactives?[watcherReactiveName]?.val
-                                        newWatcherDoc._reactives[watcherReactiveName] =
-                                            val: unwrappedValue
-                                        resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
+                                # Recalc will take care of invalidation propagation and call resetWatchers
+                                J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
                             else
+                                # Aggressively propagate the reset so that other recalcs won't use the potentially-about-
+                                # to-change value, even though the value might not actually change once it recalculates
                                 resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
 
                         else
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
+                            resetDebugs = resetDebugsByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
                             if numWatchersReset
                                 console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                                    #{numWatchersReset} watchers reset by saving <#{modelName} #{JSON.stringify instanceId}>"
+                                    #{numWatchersReset} watchers reset by saving <#{modelName} #{JSON.stringify instanceId}>: #{JSON.stringify resetDebugs}"
                                 # console.log "selector: #{JSON.stringify selector, null, 4}"
 
                             lockRelease watcherModelName, watcherReactiveName
