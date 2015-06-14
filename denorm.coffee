@@ -461,6 +461,13 @@ J.denorm =
                             newWatcherDoc._reactives = _.clone oldWatcherDoc._reactives
                             delete newWatcherDoc._reactives[watcherReactiveName]
 
+                            Future.task(
+                                ->
+                                    # Continue to reset one doc at a time until there are no more docs to reset
+                                    resetOneWatcherDoc watcherModelName, watcherReactiveName
+                            ).detach()
+
+                            # Also branch into resetting all docs watching this watching-reactive in this doc
                             if priority?
                                 reactiveCalcObj = J._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
                                 reactiveCalcObj.future.resolve (err, value) ->
@@ -476,16 +483,8 @@ J.denorm =
                                         newWatcherDoc._reactives[watcherReactiveName] =
                                             val: unwrappedValue
                                         resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
-
                             else
-                                # Also branch into resetting all docs watching this watching-reactive in this doc
-                                Future.task(
-                                    ->
-                                        resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
-                                ).detach()
-
-                            # Continue to reset one doc at a time until there are no more docs to reset
-                            resetOneWatcherDoc watcherModelName, watcherReactiveName
+                                resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
 
                         else
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]

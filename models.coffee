@@ -81,11 +81,11 @@ class J.Model
     @fromJSONValue: (jsonValue) ->
 
         unless J.util.isPlainObject jsonValue
-            throw new Meteor.Error 'Must override J.Model.fromJSONValue to decode non-object values'
+            throw new Error 'Must override J.Model.fromJSONValue to decode non-object values'
 
         for fieldName, value of jsonValue
             if fieldName[0] is '$'
-                throw new Meteor.Error "Bad jsonValue for #{@name}: #{jsonValue}"
+                throw new Error "Bad jsonValue for #{@name}: #{jsonValue}"
 
         @fromDoc jsonValue
 
@@ -123,7 +123,7 @@ class J.Model
                 helper value.getFields()
             else if value instanceof J.List
                 helper value.getValues()
-            if _.isArray(value)
+            else if _.isArray(value)
                 (helper v for v in value)
             else if J.util.isPlainObject(value)
                 ret = {}
@@ -139,7 +139,7 @@ class J.Model
             )
                 value
             else
-                throw new Meteor.Error "Unsupported value type: #{value}"
+                throw new Error "Unsupported value type: #{value}"
 
         helper x
 
@@ -174,13 +174,13 @@ class J.Model
     _save: (upsert, options, callback) ->
         collection = options.collection ? @collection
         unless collection instanceof Mongo.Collection
-            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
+            throw new Error "Invalid collection to #{@modelClass.name}.save"
 
         if @attached and @collection is collection
-            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
+            throw new Error "Can't save #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
+            throw new Error "Can't save dead #{@modelClass.name} instance"
 
         doc = Tracker.nonreactive => @toDoc()
 
@@ -253,7 +253,7 @@ class J.Model
     # - - -
     get: (fieldOrReactiveSpec) ->
         if not @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         specParts = fieldOrReactiveSpec.split('.').map (specPart) => J.Model.unescapeDot specPart
 
@@ -429,7 +429,7 @@ class J.Model
     # - - -
     remove: (callback) ->
         unless @alive
-            throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
+            throw new Error "Can't remove dead #{@modelClass.name} instance."
 
         Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
@@ -472,13 +472,13 @@ class J.Model
     # - - -
     set: (fields) ->
         unless J.util.isPlainObject fields
-            throw new Meteor.Error "Invalid fields setter: #{fields}"
+            throw new Error "Invalid fields setter: #{fields}"
 
         unless @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
         if @attached
-            throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
+            throw new Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
                 to collection #{J.util.stringify @collection._name}"
 
         for fieldName, value of fields
@@ -497,11 +497,19 @@ class J.Model
     # types in the form of J.Model instances.)
     # - - -
     toDoc: ->
-
         unless @alive
-            throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
+            throw new Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        doc = J.Model.toSubdoc @_fields.tryToObj()
+        fields = {}
+        for fieldName, fieldSpec of @modelClass.fieldSpecs
+            if Meteor.isServer
+                # Denorm reactivity bookkeeping and extra fetching
+                fields[fieldName] = @tryGet fieldName
+            else
+                # We still want Dict-style reactivity but don't want
+                # to trigger fetching extra fields
+                fields[fieldName] = @_fields.tryGet fieldName
+        doc = @modelClass.toSubdoc fields
         doc._id = @_id
         doc
 
@@ -559,10 +567,10 @@ class J.Model
     # - - -
     update: (args...) ->
         unless @alive
-            throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
+            throw new Error "Can't call update on dead #{@modelClass.name} instance"
 
         unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
-            throw new Meteor.Error "Must use a $ operation for #{@modelClass.name}.update"
+            throw new Error "Must use a $ operation for #{@modelClass.name}.update"
 
         @collection.update.bind(@collection, @_id).apply null, args
 
@@ -648,7 +656,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         for fieldName, value of nonIdInitFields
             if fieldName not of @modelClass.fieldSpecs
-                throw new Meteor.Error "Invalid field #{JSON.stringify fieldName} passed
+                throw new Error "Invalid field #{JSON.stringify fieldName} passed
                     to #{modelClass.name} constructor"
 
         @_fields = J.Dict()
@@ -731,12 +739,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     _.extend modelClass.prototype, memberSpecs
     modelClass.prototype.modelClass = modelClass
 
-    throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
+    throw new Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
     fieldAndReactiveSet = {} # fieldOrReactiveName: true
     for fieldName of modelClass.fieldSpecs
         if fieldName is '_id'
-            throw new Meteor.Error "_id is not a valid field name for #{modelName}"
+            throw new Error "_id is not a valid field name for #{modelName}"
 
         fieldAndReactiveSet[fieldName] = true
 
@@ -745,7 +753,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             throw new Error "Can't have same name for #{modelName} field and reactive:
                 #{JSON.stringify reactiveName}"
         if not reactiveSpec.val?
-            throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
+            throw new Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         fieldAndReactiveSet[reactiveName] = true
 
@@ -966,7 +974,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             findOne: collection.findOne.bind collection
             insert: (instance, callback) ->
                 unless instance instanceof modelClass
-                    throw new Meteor.Error "#{@name}.insert requires #{@name} instance."
+                    throw new Error "#{@name}.insert requires #{@name} instance."
                 instance.insert collection, callback
 
             update: collection.update.bind collection

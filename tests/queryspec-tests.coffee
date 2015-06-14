@@ -71,25 +71,29 @@ Tinytest.add 'QuerySpec merging', (test) ->
     )
     testEqual(
         J.fetching.tryQsPairwiseMerge(
-            modelName: 'Foo'
-            selector:
-                a: 6
-                b: 7
-                c: 8
-            fields:
-                a: true
-                d: false
-                e: true
+            J.fetching.makeCanonicalQs(
+                modelName: 'Foo'
+                selector:
+                    a: 6
+                    b: 7
+                    c: 8
+                fields:
+                    a: true
+                    d: false
+                    e: true
+            )
         ,
-            modelName: 'Foo'
-            selector:
-                a: 5
-                b: 7
-                c: 8
-            fields:
-                _: true
-                b: false
-                d: false
+            J.fetching.makeCanonicalQs(
+                modelName: 'Foo'
+                selector:
+                    a: 5
+                    b: 7
+                    c: 8
+                fields:
+                    _: true
+                    b: false
+                    d: false
+            )
         )
         (
             modelName: 'Foo'

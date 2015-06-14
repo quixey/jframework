@@ -187,6 +187,25 @@ class J.Var
 
         J.Var.wrap value, withFieldFuncs
 
+    @deepUnwrap: (value) ->
+        if value instanceof J.List
+            value.toArr()
+        else if _.isArray(value)
+            J.List(value).toArr()
+        else if value instanceof J.Dict
+            value.toObj()
+        else if J.util.isPlainObject value
+            J.Dict(value).toObj()
+        else
+            value
+
+    @unwrap: (value) ->
+        if value instanceof J.List or _.isArray value
+            J.List.unwrap value
+        else if value instanceof J.Dict or J.util.isPlainObject value
+            J.Dict.unwrap value
+        else
+            value
 
     @wrap: (value, withFieldFuncs = true) ->
         if value is undefined

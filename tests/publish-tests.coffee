@@ -416,7 +416,6 @@ addTest "AutoVar behavior when losing and regaining data", (test, onComplete) ->
                     test.isUndefined oldFoo
                     test.equal newFoo._id, foo._id
                     selector.setOrAdd 'a', -1234321
-                    test.throws -> a.get()
                 else
                     test.equal oldFoo._id, foo._id, "should have continuity since before a was undefined"
                     test.equal newFoo, null, "newFoo should be null after fetching nothing"

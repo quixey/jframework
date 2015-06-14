@@ -406,7 +406,7 @@ _.extend J.fetching,
         mergedQuerySpecs
 
 
-    isQueryReady: (qs) ->
+    isQueryReady: (querySpec) ->
         # A query is considered ready if:
         # (1) It was bundled into the set of merged queries that the server
         #     has come back and said are ready.
@@ -415,13 +415,13 @@ _.extend J.fetching,
         #     (Note that we can't infer anything about first-level objects
         #     in the doc, because they may or may not be partial subdocs.)
 
-        qsString = @stringifyQs qs
-        modelClass = J.models[qs.modelName]
+        qsString = @stringifyQs querySpec
+        modelClass = J.models[querySpec.modelName]
 
         testId = (instanceId) =>
             return false if instanceId not of modelClass.collection._attachedInstances
 
-            options = @_qsToMongoOptions(qs)
+            options = @_qsToMongoOptions(querySpec)
             options.transform = false
             options.reactive = false
             doc = modelClass.findOne(instanceId, options)
@@ -457,11 +457,16 @@ _.extend J.fetching,
             # For queries with an _id filter, say it's ready as long as minimongo
             # has an attached entry with that _id and no other parts of the selector
             # rule out that one doc.
-            if _.isString(qs.selector?._id) and testId(qs.selector._id)
+            if _.isString(querySpec.selector?._id) and testId(querySpec.selector._id)
                 return true
-            else if _.isArray(qs.selector?._id?.$in) and _.all(testId(id) for id in qs.selector._id.$in)
+            else if _.isArray(querySpec.selector?._id?.$in) and _.all(testId(id) for id in querySpec.selector._id.$in)
                 return true
 
+            for qss of @_mergedQsSet
+                return if qss not of @_nextMergedQsSet
+                qs = @parseQs qss
+                return true if @isQsCovered querySpec, qs
+                
             false
 
         ret = helper()

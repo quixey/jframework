@@ -3,7 +3,7 @@
 #
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
-
+#
 
 if Meteor.isServer then Tinytest.add "resetWatchers 1", (test) ->
     $$.ModelA.remove {}
@@ -105,21 +105,25 @@ if Meteor.isClient then Tinytest.addAsync "Field inclusion", (test, onComplete) 
                 console.log 'fooDoc: ', fooDoc.toObj()
                 switch x
                     when 0
+                        console.log 0
                         test.equal fooDoc.a(), 1
                         test.isUndefined fooDoc.get('b')
                         test.equal fooDoc.c(), 3
                         foo.c 4
                         foo.save()
                     when 1
+                        console.log 1
                         test.equal fooDoc.a(), 1
                         test.equal fooDoc.b(), 2 # Latency compensation
                         test.equal fooDoc.c(), 4
+                        console.log 1.5
                     when 2
+                        console.log 2
                         test.equal fooDoc.a(), 1
-                        test.isUndefined fooDoc.get('b')
                         test.equal fooDoc.c(), 4
                         projection.setOrAdd 'b', true
                     when 3
+                        console.log 3
                         test.equal fooDoc.a(), 1
                         test.equal fooDoc.b(), 2
                         test.equal fooDoc.c(), 4
@@ -147,7 +151,7 @@ if Meteor.isClient then Tinytest.addAsync "isQueryReady", (test, onComplete) ->
                 attachedFoo = $$.Foo.fetchOne foo._id, fields: projection
 
                 isReady = (projection) ->
-                    J.fetching.isQueryReady
+                    J.fetching.isQueryReady J.fetching.makeCanonicalQs
                         modelName: 'Foo'
                         selector: foo._id
                         fields: projection
@@ -209,7 +213,7 @@ if Meteor.isClient then Tinytest.addAsync "isQueryReady 2", (test, onComplete) -
                 attachedFoo = $$.Foo.fetchOne foo._id, fields: projection
 
                 isReady = (projection) ->
-                    J.fetching.isQueryReady
+                    J.fetching.isQueryReady J.fetching.makeCanonicalQs
                         modelName: 'Foo'
                         selector: foo._id
                         fields: projection
@@ -300,6 +304,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     #        # `foo`s with `foo.c in [100, 101]`:
     #        'selectC'                  # gets the `foo.a` and `foo.c` fields.
     checkFooWatcherReset = (fw, reset) ->
+        console.log 'gonna check if fw reset', fw._id
         for reactiveName of $$.FooWatcher.reactiveSpecs
             if reactiveName in reset
                 test.isTrue _wasReset('FooWatcher', fw._id, reactiveName),
@@ -308,6 +313,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
                 test.isFalse _wasReset('FooWatcher', fw._id, reactiveName),
                     "Should NOT have reset <FooWatcher ##{fw._id}>.#{reactiveName}"
 
+    $$.Foo.remove({})
 
     foo = new $$.Foo
     foo.insert()
@@ -334,7 +340,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     # We set `foo.a(1)`. This should
     # reset all `selectA` watchers on `fooWatcher`.
     checkFooWatcherReset fooWatcher, [
-        'selectA',
+        'selectA_projectAC',
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
@@ -345,7 +351,8 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     foo.saveAndDenorm()
     # `foo.b` is not a default fetched field,
     # so it should not affect `fooWatcher`.
-    checkFooWatcherReset fooWatcher, []
+    checkFooWatcherReset fooWatcher, [
+    ]
 
     foo.c(17)
     foo.saveAndDenorm()
@@ -353,7 +360,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     # so both `selectA` and `selectA_projectC`
     # should reset.
     checkFooWatcherReset fooWatcher, [
-        'selectA',
+        'selectA_projectAC',
         'selectA_projectC'
     ]
     touchFooWatcher fooWatcher
@@ -365,7 +372,7 @@ if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections
     # watching `foo`, it should reset all selectA
     # watchers to stop watching.
     checkFooWatcherReset fooWatcher, [
-        'selectA',
+        'selectA_projectAC',
         'selectA_projectA',
         'selectA_projectC',
         'selectA_projectNothing'
@@ -424,7 +431,8 @@ _wasReset = (modelName, instanceId, reactiveName) ->
     J.assert doc?
     reactiveObj = doc._reactives?[reactiveName]
 
-    console.log 'reactiveObj', reactiveObj, 'wasReset', reactiveObj?.val is undefined and reactiveObj?.ts?
+    # console.log 'reactiveObj', "<#{modelName} #{JSON.stringify instanceId}>.#{reactiveName}
+    #    wasReset", reactiveObj?.dirty isnt false, reactiveObj
 
     reactiveObj?.dirty isnt false
 
