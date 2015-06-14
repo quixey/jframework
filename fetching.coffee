@@ -68,6 +68,7 @@ if Meteor.isClient then _.extend J.fetching,
     _qsByRequester: {} # computationId: querySpecString: true
     _requestersByQs: {} # querySpecString: {computationId: computation}
     _requestsChanged: false
+    _changesByModelQs: {} # modelName: querySpecString: netNumComputationsAdded
 
     # Snapshot of what the cursors will be after the next _updateDataQueries returns
     _nextUnmergedQsSet: {} # querySpecString: true
@@ -79,6 +80,14 @@ if Meteor.isClient then _.extend J.fetching,
 
 
 _.extend J.fetching,
+    _incChanges: (modelName, qss, inc) ->
+        @_changesByModelQs[modelName] ?= {}
+        newValue = (@_changesByModelQs[modelName][qss] ? 0) + inc
+        if newValue is 0
+            delete @_changesByModelQs[modelName][qss]
+        else
+            @_changesByModelQs[modelName][qss] = newValue
+
     _addComputationQsRequest: (computation, qs) ->
         qsString = @stringifyQs qs
 
@@ -106,6 +115,7 @@ _.extend J.fetching,
         for addedQss in qsStringsDiff.added
             if addedQss not of @_requestersByQs
                 @_requestersByQs[addedQss] = {}
+                @_incChanges @parseQs(addedQss).modelName, addedQss, 1
                 requestsChanged = true
             @_requestersByQs[addedQss][computation._id] = computation
 
@@ -113,6 +123,7 @@ _.extend J.fetching,
             delete @_requestersByQs[deletedQss][computation._id]
             if _.isEmpty @_requestersByQs[deletedQss]
                 delete @_requestersByQs[deletedQss]
+                @_incChanges @parseQs(deletedQss).modelName, deletedQss, -1
                 requestsChanged = true
 
         if requestsChanged and not @_requestsChanged
@@ -134,6 +145,7 @@ _.extend J.fetching,
             delete @_requestersByQs[deletedQss][computation._id]
             if _.isEmpty @_requestersByQs[deletedQss]
                 delete @_requestersByQs[deletedQss]
+                @_incChanges @parseQs(deletedQss).modelName, deletedQss, -1
                 requestsChanged = true
 
         delete @_qsByRequester[computation._id]
@@ -625,7 +637,13 @@ _.extend J.fetching,
         newUnmergedQuerySpecsByModelName = J.util.groupByKey newUnmergedQuerySpecs, 'modelName'
         newMergedQuerySpecs = []
         for modelName, newUnmergedModelQuerySpecs of newUnmergedQuerySpecsByModelName
-            newMergedQuerySpecs.push.apply newMergedQuerySpecs, @getMerged newUnmergedModelQuerySpecs
+            if _.isEmpty(@_changesByModelQs[modelName] ? {})
+                # console.log "Skipping #{modelName} which has #{newUnmergedModelQuerySpecs.length} querySpecs"
+                newMergedQuerySpecs.push.apply newMergedQuerySpecs, newUnmergedModelQuerySpecs
+            else
+                # console.log "Merging #{modelName} which has #{newUnmergedModelQuerySpecs.length} querySpecs"
+                newMergedQuerySpecs.push.apply newMergedQuerySpecs, @getMerged newUnmergedModelQuerySpecs
+        @_changesByModelQs = {}
 
         newMergedQsStrings = (@stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
