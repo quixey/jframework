@@ -268,8 +268,7 @@ class J.Model
                 if reactiveSpec.denorm
                     J.assert @_id?
 
-                    if @_watcherReactiveName?
-                        # Treat an own-reactive access the same as any query
+                    if J._watchedQuerySpecSet.get()?
                         if reactiveSpec.watchable ? @modelClass.watchable
                             projection = _: false
                             projection[fieldOrReactiveSpec] = true
@@ -358,19 +357,16 @@ class J.Model
             if Meteor.isServer and J._watchedQuerySpecSet.get()?
                 J.assert @_id?
 
-                if @_watcherReactiveName?
-                    # Treat an own-field access the same as any query
-                    if fieldSpec.watchable ? @modelClass.watchable
-                        projection = _: false
-                        projection[fieldOrReactiveSpec] = true
-                        dummyQuerySpec = J.fetching.makeCanonicalQs
-                            modelName: @modelClass.name
-                            selector: @_id
-                            fields: projection
-                            limit: 1
-                        dummyQsString = J.fetching.stringifyQs dummyQuerySpec
-                        if @modelClass.name is 'Check' then console.log "adding dummy: ", dummyQsString
-                        J._watchedQuerySpecSet.get()[dummyQsString] = true
+                if fieldSpec.watchable ? @modelClass.watchable
+                    projection = _: false
+                    projection[fieldOrReactiveSpec] = true
+                    dummyQuerySpec = J.fetching.makeCanonicalQs
+                        modelName: @modelClass.name
+                        selector: @_id
+                        fields: projection
+                        limit: 1
+                    dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                    J._watchedQuerySpecSet.get()[dummyQsString] = true
 
                 if @_fields.tryGet(fieldName) is undefined
                     console.warn "Field <#{@modelClass.name} #{JSON.stringify @_id}>.#{fieldName}
@@ -904,29 +900,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                     Use a combination of individual dot-paths instead."
                                 console.warn "    #{JSON.stringify querySpec, null, 4}"
 
-                        inclusionSet = J.fetching._projectionToInclusionSet @, querySpec.fields
-                        watchableInclusionSet = {}
-                        for includeSpec, include of inclusionSet
-                            fieldOrReactiveName = includeSpec.split('.')[0]
-                            watchable =
-                                if fieldOrReactiveName of @fieldSpecs
-                                    @fieldSpecs[fieldOrReactiveName].watchable ? @watchable
-                                else if fieldOrReactiveName of @reactiveSpecs
-                                    @reactiveSpecs[fieldOrReactiveName].watchable ? @watchable
-                                else
-                                    throw new Error "Unrecognized includeSpec for #{@name}.fetch: #{JSON.stringify includeSpec}"
-                            if watchable
-                                watchableInclusionSet[includeSpec] = true
+                        # Track that we're doing a query for a set of _ids. We'll let the actual
+                        # field accessors build up the tracked projection.
+                        idOnlyQuerySpec = _.clone querySpec
+                        idOnlyQuerySpec.fields = _: false
 
-                        watchableProjection = _.extend(
-                            _: false
-                            watchableInclusionSet
-                        )
-                        watchableQuerySpec = _.clone querySpec
-                        watchableQuerySpec.fields = J.fetching._getCanonicalProjection @, watchableProjection
-
-                        if modelName is 'Check' then console.log "fetch operation adding: #{JSON.stringify watchableQuerySpec}"
-                        J._watchedQuerySpecSet.get()[J.fetching.stringifyQs watchableQuerySpec] = true
+                        J._watchedQuerySpecSet.get()[J.fetching.stringifyQs idOnlyQuerySpec] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
