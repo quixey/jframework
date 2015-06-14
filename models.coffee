@@ -292,9 +292,9 @@ class J.Model
                     # exclude reactiveName.
                     if reactiveValue is undefined
                         priority = 10 * (reactiveSpec.priority ? 0.5)
-                        reactiveCalcObj = J._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
+                        reactiveCalcObj = J.denorm._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
                         Future.task(
-                            => J._dequeueReactiveCalc()
+                            => J.denorm._dequeueReactiveCalc()
                         ).detach()
                         reactiveValue = reactiveCalcObj.future.wait()
 
@@ -1045,20 +1045,21 @@ Meteor.methods
         for fieldName, newValue of fields
             if newValue isnt undefined
                 newDoc[fieldName] = newValue
+        newDoc._reactives = _.clone oldDoc._reactives ? {}
 
         instance = modelClass.fromDoc doc
 
         if not _reserved
-            Future.task(
-                ->
-                    J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
-            ).detach()
-
             if isNew
-                # Initialize all the selectable reactives
+                # Initialize all the reactives
                 for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                    if reactiveSpec.selectable
-                        J._enqueueReactiveCalc modelName, instance._id, reactiveName
+                    if reactiveSpec.denorm
+                        reactiveCalcObj = J.denorm._enqueueReactiveCalc modelName, instance._id, reactiveName, null, false
+                        reactiveValue = reactiveCalcObj.future.wait()
+                        newDoc._reactives[reactiveName] =
+                            val: J.Model._getEscapedSubdoc J.Var.deepUnwrap reactiveValue
+
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
 
         instance.onSave?()
 

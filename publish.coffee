@@ -279,7 +279,7 @@ updateObservers = (dataSessionId) ->
                         # until the recalc task gets popped off the queue asynchronously.
 
                         console.log "Publisher enqueuing <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
-                        J._enqueueReactiveCalc modelName, id, reactiveName
+                        J.denorm._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
                         reactivesObj[reactiveName] =

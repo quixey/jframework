@@ -584,6 +584,17 @@ _.extend J.fetching,
             skip: qs.skip
 
 
+    makeFullProjection: (modelClass) ->
+        projection = {}
+        for fieldName, fieldSpec of modelClass.fieldSpecs
+            if not (fieldSpec.include ? true)
+                projection[fieldName] = true
+        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+            if not (reactiveSpec.include ? false)
+                projection[reactiveName] = true
+        projection
+
+
     parseQs: (qsString) ->
         EJSON.parse qsString
 
