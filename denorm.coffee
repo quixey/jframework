@@ -238,9 +238,9 @@ J.denorm =
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
                     $or: [
-                        'selector._id': $in: [null, instanceId]
+                        'selector._id': instanceId
                     ,
-                        'selector._id.*DOLLAR*in': $in: [instanceId]
+                        'selector._id.*DOLLAR*in': instanceId
                     ]
                 ]
 
@@ -363,15 +363,18 @@ J.denorm =
                         # the old or new document
                         $or: [
                             selector: $exists: false
+                        ,
                             $and: subfieldSelectorMatcher
                         ]
                     ]
-                if subfieldSelectorMatcher.length
-                    watcherMatcher.$and[0].$or.push
-                        $and: subfieldSelectorMatcher
-                if changeConditions.length
-                    watcherMatcher.$and.push
-                        $or: changeConditions
+
+                if changeConditions.length is 0
+                    console.log "CRAP"
+                    throw new Error "Nothing changed for makeWatcherMatcher <#{modelName} #{JSON.stringify instanceId}>
+                        old: #{EJSON.stringify mutableOldValues}, new: #{EJSON.stringify mutableNewValues}"
+
+                watcherMatcher.$and.push
+                    $or: changeConditions
 
                 watcherMatcher
 
@@ -448,7 +451,7 @@ J.denorm =
                             if priority?
                                 console.log "YES currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
                             else
-                                console.log "NOT currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
+                                console.log "#{if watcherReactiveSpec.selectable then '~' else ''}NOT currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
                             if watcherReactiveSpec.selectable
                                 # Selectable reactives must stay updated
                                 priority ?= (watcherReactiveSpec.priority ? 0.5) / 10
@@ -468,9 +471,10 @@ J.denorm =
                                         else
                                             value
                                     )
-                                    newWatcherDoc._reactives[watcherReactiveName] =
-                                        val: unwrappedValue
-                                    resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
+                                    if not EJSON.equals unwrappedValue, oldWatcherDoc._reactives?[watcherReactiveName]?.val
+                                        newWatcherDoc._reactives[watcherReactiveName] =
+                                            val: unwrappedValue
+                                        resetWatchersHelper watcherModelName, oldWatcherDoc._id, oldWatcherDoc, newWatcherDoc, timestamp
 
                             else
                                 # Also branch into resetting all docs watching this watching-reactive in this doc
@@ -486,7 +490,7 @@ J.denorm =
                             numWatchersReset = resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"]
                             if numWatchersReset
                                 console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
-                                    #{numWatchersReset} watchers reset"
+                                    #{numWatchersReset} watchers reset by saving <#{modelName} #{JSON.stringify instanceId}>"
                                 # console.log "selector: #{JSON.stringify selector, null, 4}"
 
                             lockRelease watcherModelName, watcherReactiveName

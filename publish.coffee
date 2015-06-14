@@ -278,6 +278,7 @@ updateObservers = (dataSessionId) ->
                         # Else keep publishing the previous value of reactivesObj[reactiveName]
                         # until the recalc task gets popped off the queue asynchronously.
 
+                        console.log "Publisher enqueuing <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
                         J._enqueueReactiveCalc modelName, id, reactiveName
 
                     else

@@ -251,10 +251,13 @@ class J.Model
     # - - -
     # Get the value of a field or reactive of a model instance.
     # - - -
-    get: (fieldOrReactiveName) ->
+    get: (fieldOrReactiveSpec) ->
         if not @alive
             throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
 
+        specParts = fieldOrReactiveSpec.split('.').map (specPart) => J.Model.unescapeDot specPart
+
+        fieldOrReactiveName = specParts[0]
         isReactive = fieldOrReactiveName of @modelClass.reactiveSpecs
 
         if isReactive
@@ -269,7 +272,7 @@ class J.Model
                         # Treat an own-reactive access the same as any query
                         if reactiveSpec.watchable ? @modelClass.watchable
                             projection = _: false
-                            projection[reactiveName] = true
+                            projection[fieldOrReactiveSpec] = true
                             dummyQuerySpec = J.fetching.makeCanonicalQs
                                 modelName: @modelClass.name
                                 selector: @_id
@@ -296,17 +299,23 @@ class J.Model
                         ).detach()
                         reactiveValue = reactiveCalcObj.future.wait()
 
-                    reactiveValue
+                    ret = reactiveValue
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
                 else
-                    J.Var(reactiveSpec.val.call @).get()
+                    ret = J.Var(reactiveSpec.val.call @).get()
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
             else
                 if reactiveSpec.denorm and @attached
                     # Record that the current computation uses this denormed reactive
 
                     projection = _: false
-                    projection[reactiveName] = true
+                    projection[fieldOrReactiveSpec] = true
                     if Tracker.active
                         # We might be temporarily bumming this field off some other cursor owned
                         # by some other computation, so we need to run fetchOne to update
@@ -329,12 +338,18 @@ class J.Model
                             true
                         )
 
-                    @reactives.get reactiveName
+                    ret = @reactives.get reactiveName
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
                 else
                     # On unattached instances, denormed reactives behave like
                     # non-denormed reactives.
-                    J.Var(reactiveSpec.val.call @).get()
+                    ret = J.Var(reactiveSpec.val.call @).get()
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
         else
             fieldName = fieldOrReactiveName
@@ -347,7 +362,7 @@ class J.Model
                     # Treat an own-field access the same as any query
                     if fieldSpec.watchable ? @modelClass.watchable
                         projection = _: false
-                        projection[fieldName] = true
+                        projection[fieldOrReactiveSpec] = true
                         dummyQuerySpec = J.fetching.makeCanonicalQs
                             modelName: @modelClass.name
                             selector: @_id
@@ -358,19 +373,18 @@ class J.Model
 
                 if @_fields.tryGet(fieldName) is undefined
                     console.warn "Field <#{@modelClass.name} #{JSON.stringify @_id}>.#{fieldName}
-                        missing from projection"
+                        missing from projection for fieldSpec #{JSON.stringify fieldOrReactiveSpec}"
 
-                    mongoFieldsArg = {}
-                    mongoFieldsArg[fieldName] = 1
-                    doc = @modelClass.collection.findOne(
+                    projection = _: false
+                    projection[fieldOrReactiveSpec] = true
+                    instance = @modelClass.fetchOne(
                         @_id
-                    ,
-                        fields: mongoFieldsArg
-                        transform: false
+                        fields: projection
                     )
-                    value = undefined
-                    if doc? then value = doc[fieldName]
-                    if value isnt undefined then @_fields.set fieldName, value
+                    if instance? then value = instance.get fieldOrReactiveSpec
+
+                    if value isnt undefined
+                        @_fields.set fieldName, value
 
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
@@ -382,7 +396,7 @@ class J.Model
                 if @attached
                     # Record that the current computation uses the current field
                     projection = _: false
-                    projection[fieldName] = true
+                    projection[fieldOrReactiveSpec] = true
                     if Tracker.active
                         # See the comment for the J.AutoVar in the above if-branch. In this case,
                         # the reactivity for the caller computation is handled by the @_fields dict.
@@ -394,7 +408,10 @@ class J.Model
                             true
                         )
 
-            @_fields.forceGet fieldName
+            ret = @_fields.forceGet fieldName
+            for fieldSpecPart in specParts[1...]
+                ret = ret?.get fieldSpecPart
+            ret
 
 
     # ## insert
@@ -879,8 +896,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     J.fetching.requestQuery querySpec
 
                 else
-                    qsString = J.fetching.stringifyQs querySpec
-
                     if J._watchedQuerySpecSet.get()?
                         for selectorKey, value of selector
                             if J.util.isPlainObject(value) and not _.any(k[0] is '$' for k of value)
@@ -888,7 +903,28 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                     Use a combination of individual dot-paths instead."
                                 console.warn "    #{JSON.stringify querySpec, null, 4}"
 
-                        J._watchedQuerySpecSet.get()[qsString] = true
+                        inclusionSet = J.fetching._projectionToInclusionSet @, querySpec.fields
+                        watchableInclusionSet = {}
+                        for includeSpec, include of inclusionSet
+                            fieldOrReactiveName = includeSpec.split('.')[0]
+                            watchable =
+                                if fieldOrReactiveName of @fieldSpecs
+                                    @fieldSpecs[fieldOrReactiveName].watchable ? @watchable
+                                else if fieldOrReactiveName of @reactiveSpecs
+                                    @reactiveSpecs[fieldOrReactiveName].watchable ? @watchable
+                                else
+                                    throw new Error "Unrecognized includeSpec for #{@name}.fetch: #{JSON.stringify includeSpec}"
+                            if watchable
+                                watchableInclusionSet[includeSpec] = true
+
+                        watchableProjection = _.extend(
+                            _: false
+                            watchableInclusionSet
+                        )
+                        watchableQuerySpec = _.clone querySpec
+                        watchableQuerySpec.fields = J.fetching._getCanonicalProjection @, watchableProjection
+
+                        J._watchedQuerySpecSet.get()[J.fetching.stringifyQs watchableQuerySpec] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
