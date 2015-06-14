@@ -238,6 +238,8 @@ J.denorm =
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
                     $or: [
+                        'selector._id': $exists: false
+                    ,
                         'selector._id': instanceId
                     ,
                         'selector._id.*DOLLAR*in': instanceId
@@ -369,7 +371,6 @@ J.denorm =
                     ]
 
                 if changeConditions.length is 0
-                    console.log "CRAP"
                     throw new Error "Nothing changed for makeWatcherMatcher <#{modelName} #{JSON.stringify instanceId}>
                         old: #{EJSON.stringify mutableOldValues}, new: #{EJSON.stringify mutableNewValues}"
 

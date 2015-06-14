@@ -331,7 +331,7 @@ class J.Model
                         # Also, we clearly need better tracking of which _ids (and fields) are
                         # coming from which cursor.
                         J.AutoVar(
-                            "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
+                            "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveSpec}"
                             =>
                                 @modelClass.fetchOne @_id,
                                     fields: projection
@@ -369,6 +369,7 @@ class J.Model
                             fields: projection
                             limit: 1
                         dummyQsString = J.fetching.stringifyQs dummyQuerySpec
+                        if @modelClass.name is 'Check' then console.log "adding dummy: ", dummyQsString
                         J._watchedQuerySpecSet.get()[dummyQsString] = true
 
                 if @_fields.tryGet(fieldName) is undefined
@@ -401,7 +402,7 @@ class J.Model
                         # See the comment for the J.AutoVar in the above if-branch. In this case,
                         # the reactivity for the caller computation is handled by the @_fields dict.
                         J.AutoVar(
-                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveName}"
+                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveSpec}"
                             =>
                                 @modelClass.fetchOne @_id,
                                     fields: projection
@@ -410,7 +411,7 @@ class J.Model
 
             ret = @_fields.forceGet fieldName
             for fieldSpecPart in specParts[1...]
-                ret = ret?.get fieldSpecPart
+                ret = ret?.get? fieldSpecPart
             ret
 
 
@@ -924,6 +925,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                         watchableQuerySpec = _.clone querySpec
                         watchableQuerySpec.fields = J.fetching._getCanonicalProjection @, watchableProjection
 
+                        if modelName is 'Check' then console.log "fetch operation adding: #{JSON.stringify watchableQuerySpec}"
                         J._watchedQuerySpecSet.get()[J.fetching.stringifyQs watchableQuerySpec] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
