@@ -253,7 +253,7 @@ class J.Model
     # - - -
     get: (fieldOrReactiveSpec) ->
         if not @alive
-            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection._name} is dead"
 
         specParts = fieldOrReactiveSpec.split('.').map (specPart) => J.Model.unescapeDot specPart
 
@@ -475,7 +475,7 @@ class J.Model
             throw new Error "Invalid fields setter: #{fields}"
 
         unless @alive
-            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection._name} is dead"
 
         if @attached
             throw new Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
