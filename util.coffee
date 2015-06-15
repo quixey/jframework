@@ -249,6 +249,22 @@ J.util =
 
         value
 
+    getNextHour: ->
+        nextHour = new Date()
+        nextHour.set
+            hour:
+                if (
+                    nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
+                        nextHour.getMilliseconds() is 0
+                )
+                    nextHour.getHours()
+                else
+                    (nextHour.getHours() + 1) % 24
+            minute: 0
+            second: 0
+            millisecond: 0
+        nextHour
+
     getUrlWithExtraParams: (url, extraParams) ->
         # >>> getUrlWithExtraParams("http://test.com/abc/def", {key1: "value1", key2: 5});
         # "http://test.com/abc/def?key1=value1&key2=5"

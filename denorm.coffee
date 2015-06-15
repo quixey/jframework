@@ -506,6 +506,8 @@ Meteor.startup ->
                 instances = modelClass.find(
                     selector
                 ,
+                    fields:
+                        J.fetching.makeFullProjection modelClass
                     limit: 100
                 ).fetch()
                 break if instances.length is 0
