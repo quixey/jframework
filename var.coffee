@@ -62,7 +62,7 @@ class J.Var
         else if options.creator instanceof Tracker.Computation or not options.creator?
             @creator = options.creator
         else
-            throw new Meteor.Error "Invalid Var creator: #{options.creator}"
+            throw new Error "Invalid Var creator: #{options.creator}"
         @creator?.onInvalidate => delete @creator
 
         @equalsFunc = options?.equalsFunc ? null
@@ -71,7 +71,7 @@ class J.Var
         if _.isFunction options?.onChange
             @onChange = options.onChange
         else if options?.onChange?
-            throw new Meteor.Error "Invalid Var onChange: #{options.onChange}"
+            throw new Error "Invalid Var onChange: #{options.onChange}"
         else
             @onChange = null
         @wrap = options?.wrap ? true
@@ -93,7 +93,7 @@ class J.Var
         getter = Tracker.currentComputation
 
         if not @isActive()
-            throw new Meteor.Error "Can't get value of inactive Var: #{@}"
+            throw new Error "Can't get value of inactive Var: #{@}"
 
         if getter?
             if getter not in @_getters
@@ -121,7 +121,7 @@ class J.Var
 
     set: (value) ->
         if not @isActive()
-            throw new Meteor.Error "Can't set value of inactive Var: #{@}"
+            throw new Error "Can't set value of inactive Var: #{@}"
 
         setter = Tracker.currentComputation
 
@@ -176,10 +176,10 @@ class J.Var
 
     maybeWrap: (value, withFieldFuncs = true) ->
         if value is undefined
-            throw new Meteor.Error "Can't set #{@toString()} value to undefined.
+            throw new Error "Can't set #{@toString()} value to undefined.
                 Use null or new J.VALUE_NOT_READY instead."
         else if value instanceof J.AutoVar
-            throw new Meteor.Error "Can't put an AutoVar inside #{@toString()}:
+            throw new Error "Can't put an AutoVar inside #{@toString()}:
                 #{value}. Get its value with .get() first."
 
         if not @wrap and (_.isArray(value) or J.util.isPlainObject(value))
@@ -210,12 +210,12 @@ class J.Var
     @wrap: (value, withFieldFuncs = true) ->
         if value is undefined
             if Tracker.active
-                throw new Meteor.Error "Undefined is an invalid value.
+                throw new Error "Undefined is an invalid value.
                     Use null or new J.VALUE_NOT_READY instead."
             else
                 J.makeValueNotReadyObject()
         else if value instanceof J.AutoVar
-            throw new Meteor.Error "A whole AutoVar is not a valid:
+            throw new Error "A whole AutoVar is not a valid:
                 value: #{value}. Get its value with .get() first."
         if value instanceof J.VALUE_NOT_READY
             value
