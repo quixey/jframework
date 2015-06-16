@@ -251,18 +251,15 @@ J.util =
 
     getNextHour: ->
         nextHour = new Date()
-        nextHour.set
-            hour:
-                if (
-                    nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
-                        nextHour.getMilliseconds() is 0
-                )
-                    nextHour.getHours()
-                else
-                    (nextHour.getHours() + 1) % 24
-            minute: 0
-            second: 0
-            millisecond: 0
+        unless (
+            nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
+            nextHour.getMilliseconds() is 0
+        )
+            nextHour.set
+                minute: 0
+                second: 0
+                millisecond: 0
+            nextHour.addHours 1
         nextHour
 
     getUrlWithExtraParams: (url, extraParams) ->
