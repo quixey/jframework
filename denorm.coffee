@@ -270,10 +270,6 @@ J.denorm =
                         projectionKey = "fields.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
                         sortSpecKey = "sort.#{J.Model.escapeDot fieldSpec.map(J.Model.escapeDot).join('.')}"
 
-                        if changed and fieldSpec.length is 1
-                            # Debugging
-                            changedFieldSpecs.push fieldSpec.map(J.Model.escapeDot).join('.')
-
                         if fieldSpec[0] of modelClass.fieldSpecs
                             selectable = modelClass.fieldSpecs[fieldSpec[0]].selectable ? true
                             watchable = modelClass.fieldSpecs[fieldSpec[0]].watchable ? modelClass.watchable
@@ -368,8 +364,7 @@ J.denorm =
                     ]
 
                 if changeConditions.length is 0
-                    throw new Error "Nothing changed for makeWatcherMatcher <#{modelName} #{JSON.stringify instanceId}>
-                        old: #{EJSON.stringify mutableOldValues}, new: #{EJSON.stringify mutableNewValues}"
+                    return null
 
                 watcherMatcher.$and.push
                     $or: changeConditions
@@ -387,15 +382,18 @@ J.denorm =
                 mutableOldValues[reactiveName] = oldDoc._reactives?[reactiveName]?.val
                 mutableNewValues[reactiveName] = newDoc._reactives?[reactiveName]?.val
 
-            if _.all(v is undefined for k, v of mutableOldValues) and _.all(v is undefined for k, v of mutableNewValues)
-                semaRelease()
-                return null
-
             changedFieldSpecs = []
-            watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
+            for fieldOrReactiveName of mutableOldValues
+                if not EJSON.equals mutableOldValues[fieldOrReactiveName], mutableNewValues[fieldOrReactiveName]
+                    changedFieldSpecs.push fieldOrReactiveName
 
+            watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
             console.log "ResetWatchersHelper: <#{modelName} #{JSON.stringify instanceId}> with changes to
                 #{JSON.stringify changedFieldSpecs}"
+
+            if not watcherMatcher?
+                semaRelease()
+                return null
 
             watcherMatcherLength = JSON.stringify(watcherMatcher).length
             if watcherMatcherLength > 10000
@@ -408,7 +406,7 @@ J.denorm =
             resetWatcherDocs = (watcherModelName, watcherReactiveName) ->
                 watcherModelClass = J.models[watcherModelName]
                 watcherReactiveSpec = watcherModelClass.reactiveSpecs[watcherReactiveName]
-                # console.log "resetWatcherDocs: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
+                console.log "resetWatcherDocs: <#{watcherModelName}>.#{watcherReactiveName} watching <#{modelName}
                     #{JSON.stringify instanceId}>"
 
                 selector = {}
@@ -437,29 +435,29 @@ J.denorm =
                     resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
                     resetDebugsByModelReactive["#{watcherModelName}.#{watcherReactiveName}"].push oldWatcherDoc._id
 
-                    priority = undefined
+                    shouldRecalc = false
                     for dataSessionId, fieldsByModelIdQuery of J._dataSessionFieldsByModelIdQuery
                         for qsString, reactivesObj of fieldsByModelIdQuery[watcherModelName]?[oldWatcherDoc._id]?._reactives ? {}
                             if watcherReactiveName of reactivesObj
-                                priority = (watcherReactiveSpec.priority ? 0.5)
+                                shouldRecalc = true
                                 break
-                        break if priority?
-                    if priority?
+                        break if shouldRecalc
+                    if shouldRecalc
                         console.log "YES currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
                     else
                         console.log "#{if watcherReactiveSpec.selectable then '~' else ''}NOT currently being published: <#{watcherModelName} #{JSON.stringify oldWatcherDoc._id}>.#{watcherReactiveName}"
                     if watcherReactiveSpec.selectable
                         # Selectable reactives must stay updated
-                        priority ?= (watcherReactiveSpec.priority ? 0.5) / 10
+                        shouldRecalc = true
 
                     newWatcherDoc = _.clone oldWatcherDoc
                     newWatcherDoc._reactives = _.clone oldWatcherDoc._reactives
                     delete newWatcherDoc._reactives[watcherReactiveName]
 
                     # Also branch into resetting all docs watching this watching-reactive in this doc
-                    if priority?
+                    if shouldRecalc
                         # Recalc will take care of invalidation propagation and call resetWatchers
-                        J.denorm._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName, priority
+                        J.denorm._enqueueReactiveCalc watcherModelName, oldWatcherDoc._id, watcherReactiveName
                     else
                         # Aggressively propagate the reset so that other recalcs won't use the potentially-about-
                         # to-change value, even though the value might not actually change once it recalculates
@@ -477,7 +475,13 @@ J.denorm =
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
-                    if watcherReactiveSpec.denorm
+                    if watcherReactiveSpec.denorm and watcherReactiveSpec.autoDirty? and _.any(
+                        for fieldOrReactiveName in changedFieldSpecs
+                            (
+                                "#{modelName}.#{fieldOrReactiveName}" in watcherReactiveSpec.autoDirty or
+                                modelName in watcherReactiveSpec.autoDirty
+                            )
+                    )
                         resetWatcherDocs watcherModelName, watcherReactiveName
 
             semaRelease()

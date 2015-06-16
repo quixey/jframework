@@ -291,8 +291,7 @@ class J.Model
                     # or if the fetch query that brought up this instance happened to
                     # exclude reactiveName.
                     if reactiveValue is undefined
-                        priority = 10 * (reactiveSpec.priority ? 0.5)
-                        reactiveCalcObj = J.denorm._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
+                        reactiveCalcObj = J.denorm._enqueueReactiveCalc @modelClass.name, @_id, reactiveName
                         Future.task(
                             => J.denorm._dequeueReactiveCalc()
                         ).detach()
