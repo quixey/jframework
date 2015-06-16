@@ -282,7 +282,7 @@ class J.Model
 
                     reactiveValue = @reactives.tryGet reactiveName
                     if reactiveValue isnt undefined and J._watchedQuerySpecSet.get()?
-                        if @_reactives[reactiveName].dirty isnt false
+                        if @_reactives[reactiveName].expire isnt false and @_reactives[reactiveName].expire <= new Date()
                             # Normally we can use dirty values of reactives, but not when
                             # we're in the process of recalculating a different reactive.
                             reactiveValue = undefined
@@ -342,8 +342,11 @@ class J.Model
                     ret
 
                 else
-                    # On unattached instances, denormed reactives behave like
-                    # non-denormed reactives.
+                    if reactiveSpec.denorm
+                        # On unattached instances, denormed reactives behave like
+                        # non-denormed reactives. But it's frowned upon.
+                        console.warn "Calculating denormed reactive on unattached instance:
+                            <#{@modelClass.name}.#{JSON.stringify @_id}>.#{reactiveName}"
                     ret = J.Var(reactiveSpec.val.call @).get()
                     for reactiveSpecPart in specParts[1...]
                         ret = ret?.get reactiveSpecPart

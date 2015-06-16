@@ -296,7 +296,7 @@ class J.Dict
 
     forEach: (f) ->
         # Returns an array
-        i = 0
+        i = -1
         for key, value of @getFields()
             i += 1
             f key, value, i

@@ -21,6 +21,19 @@ Meteor.setInterval(
 )
 
 
+
+class J.ExpirableValue
+    constructor: (@expiryTime, @value) ->
+
+
+J.expireAtTime = (expiryTime, value) ->
+    if _.isNumber(expiryTime)
+        expiryTime = new Date(1000 * (new Date().getTime() / 1000 + expiryTime))
+    unless expiryTime instanceof Date
+        throw new Error "Invalid expiryTime: #{expiryTime}"
+    new J.ExpirableValue expiryTime, value
+
+
 J.denorm =
     _enqueueReactiveCalc: (modelName, instanceId, reactiveName, priority, denormCallback) ->
         modelClass = J.models[modelName]
@@ -86,7 +99,7 @@ J.denorm =
                 continue if not reactiveSpec.denorm
 
                 indexFieldsSpec = {}
-                indexFieldsSpec["_reactives.#{reactiveName}.dirty"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.expire"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.*DOLLAR*in"] = 1
 
@@ -115,11 +128,21 @@ J.denorm =
 
         watchedQuerySpecSet = null # watchedQsString: true
         unwrappedValue = undefined
+        expiryTime = undefined
         J._watchedQuerySpecSet.withValue {}, =>
-            unwrappedValue = J.Var.deepUnwrap reactiveSpec.val.call instance
+            rawValue = reactiveSpec.val.call instance
+            if rawValue instanceof J.ExpirableValue
+                unwrappedValue = J.Var.deepUnwrap rawValue.value
+                expiryTime = rawValue.expiryTime
+            else
+                unwrappedValue = J.Var.deepUnwrap rawValue
+                expiryTime = false # never
+
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
         escapedSubdoc = J.Model._getEscapedSubdoc unwrappedValue
+
+        console.log "...done with meat of recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         # denormCallback=false means the caller will worry about doing resetWatchers later
         # Otherwise denormCallback=null or denormCallback=<function>
@@ -142,18 +165,23 @@ J.denorm =
         watchedQuerySpecs = (
             J.fetching.parseQs qsString for qsString in watchedQsStrings
         )
-        mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
+
+        mergedWatchedQuerySpecs = watchedQuerySpecs # J.fetching.getMerged watchedQuerySpecs too slow
+        # FIXME: Merging optimizations
+        # console.log '...got merged', mergedWatchedQuerySpecs.length
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
             val: escapedSubdoc
             watching: J.Model._getEscapedSubdoc mergedWatchedQuerySpecs
             ts: timestamp
-            dirty: false
+            expire: expiryTime
         instance.modelClass.update(
             instance._id
             $set: setter
         )
+
+        console.log "...done with all of recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         J.Var.wrap unwrappedValue
 
@@ -206,8 +234,12 @@ J.denorm =
                                 inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
 
                     if allOk
-                        equalityClause[selectorKey].$in.push value
-                        inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
+                        if _.isArray value
+                            # Actually let's not support equality matching on entire arrays;
+                            # only the elements within them.
+                        else
+                            equalityClause[selectorKey].$in.push value
+                            inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
 
                 termMatcher = $or: []
                 if equalityClause[selectorKey].$in.length
@@ -410,13 +442,15 @@ J.denorm =
                     #{JSON.stringify instanceId}>"
 
                 selector = {}
-                selector["_reactives.#{watcherReactiveName}.dirty"] = false
+                selector.$or = [{}, {}]
+                selector.$or[0]["_reactives.#{watcherReactiveName}.expire"] = false
+                selector.$or[1]["_reactives.#{watcherReactiveName}.expire"] = $gt: timestamp
                 selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
                 selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
 
                 setter = {}
                 setter["_reactives.#{watcherReactiveName}.ts"] = timestamp
-                setter["_reactives.#{watcherReactiveName}.dirty"] = true
+                setter["_reactives.#{watcherReactiveName}.expire"] = timestamp
 
                 resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= 0
                 resetDebugsByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] ?= []
@@ -505,7 +539,10 @@ Meteor.startup ->
         fixMissingReactives: (modelName, reactiveName) ->
             modelClass = J.models[modelName]
             selector = {}
-            selector["_reactives.#{reactiveName}.dirty"] = $ne: false
+            selector["_reactives.#{reactiveName}.expire"] =
+                $exists: true
+                $lt: new Date()
+
             while true
                 instances = modelClass.find(
                     selector
