@@ -32,11 +32,14 @@ J.util =
                 obj[key] = x
         obj
 
-    compare: (a, b) ->
+    compare: (a, b, transform) ->
         # All this function does is:
         # 1. undefined < null < anything else
         # 2. compare arrays using lexicographic ordering
         # 3. reject weird cases like comparing plain objects
+
+        if transform is undefined
+            transform = J.util.sortKeyFunc
 
         if a instanceof J.List
             a = a.getValues()
@@ -68,8 +71,12 @@ J.util =
             lastResult
 
         else
-            aKey = J.util.sortKeyFunc(a)
-            bKey = J.util.sortKeyFunc(b)
+            if transform?
+                aKey = transform a
+                bKey = transform b
+            else
+                aKey = a
+                bKey = b
             if aKey < bKey then -1
             else if aKey > bKey then 1
             else 0
@@ -242,6 +249,22 @@ J.util =
 
         value
 
+    getNextHour: ->
+        nextHour = new Date()
+        nextHour.set
+            hour:
+                if (
+                    nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
+                        nextHour.getMilliseconds() is 0
+                )
+                    nextHour.getHours()
+                else
+                    (nextHour.getHours() + 1) % 24
+            minute: 0
+            second: 0
+            millisecond: 0
+        nextHour
+
     getUrlWithExtraParams: (url, extraParams) ->
         # >>> getUrlWithExtraParams("http://test.com/abc/def", {key1: "value1", key2: 5});
         # "http://test.com/abc/def?key1=value1&key2=5"
@@ -382,9 +405,15 @@ J.util =
         else
             throw new Meteor.Error "Invalid keySpec: #{keySpec}"
 
-    sortByKey: (arr, keySpec = J.util.sortKeyFunc) ->
+    sortByKey: (arr, keySpec = J.util.sortKeyFunc, options = {}) ->
+        transform = null
+        if options.transform is undefined and keySpec isnt J.util.sortKeyFunc
+            transform = J.util.sortKeyFunc
+        else if options.transform
+            transform = options.transform
+
         keyFunc = @_makeKeyFunc keySpec
-        arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b)
+        arr.sort (a, b) -> J.util.compare keyFunc(a), keyFunc(b), transform
 
     sortKeyFunc: (x) ->
         if _.isString(x)

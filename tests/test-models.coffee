@@ -32,65 +32,76 @@ J.dm 'Foo', 'foos',
 J.dm 'FooWatcher', 'foowatchers',
     _id: $$.str
     reactives:
-        selectA:
+        selectA_projectAC:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(a: 1)
+                foo = $$.Foo.fetchOne(
+                    a: 1
+                )
+                foo?.a()
+                foo?.c()
                 null
+
         selectA_projectA:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(
+                foo = $$.Foo.fetchOne(
                     a: 1
                 ,
                     fields:
                         _: false
                         a: true
                 )
+                foo?.a()
                 null
+
         selectA_projectC:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(
+                foo = $$.Foo.fetchOne(
                     a: 1
                 ,
                     fields:
                         _: false
                         c: true
                 )
+                foo?.c()
                 null
+
         selectA_projectNothing:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(
+                foo = $$.Foo.fetchOne(
                     a: 1
-                ,
-                    fields:
-                        _: false
                 )
                 null
 
         selectB:
             denorm: true
             val: ->
-                $$.Foo.fetchOne b: $in: [100, 101]
+                foo = $$.Foo.fetchOne(
+                    b: $in: [100, 101]
+                )
                 null
         selectB_projectB:
             denorm: true
             val: ->
-                $$.Foo.fetchOne(
+                foo = $$.Foo.fetchOne(
                     b: $in: [100, 101]
                 ,
                     fields:
                         _: false
                         b: true
                 )
+                foo?.b()
                 null
 
         selectC:
             denorm: true
             val: ->
-                $$.Foo.fetchOne c: $in: [100, 101]
+                foo = $$.Foo.fetchOne(
+                    c: $in: [100, 101]
+                )
                 null
 
 
@@ -165,11 +176,14 @@ J.dm 'ModelC', 'cs',
     fields:
         bId:
             type: $$.str
+        d:
+            type: $$.dict
 
     reactives:
         cr1:
             denorm: true
             val: ->
+                return null if @bId() is null
                 $$.ModelB.fetchOne(
                     @bId()
                 ,

@@ -57,7 +57,19 @@ class J.Model
     #     # "func://www*DOT*example*DOT*.com/func"
     # - - -
     @escapeDot: (key) ->
-        key.replace(/\./g, '*DOT*').replace(/\$/g, '*DOLLAR*')
+        key.replace(
+            /(\*+)DOT\1/g
+            (x) -> "*#{x}*"
+        ).replace(
+            /\./g
+            '*DOT*'
+        ).replace(
+            /(\*+)DOLLAR\1/g
+            (x) -> "*#{x}*"
+        ).replace(
+            /\$/g
+            '*DOLLAR*'
+        )
 
 
     # ## @fromJSONValue
@@ -69,11 +81,11 @@ class J.Model
     @fromJSONValue: (jsonValue) ->
 
         unless J.util.isPlainObject jsonValue
-            throw new Meteor.Error 'Must override J.Model.fromJSONValue to decode non-object values'
+            throw new Error 'Must override J.Model.fromJSONValue to decode non-object values'
 
         for fieldName, value of jsonValue
             if fieldName[0] is '$'
-                throw new Meteor.Error "Bad jsonValue for #{@name}: #{jsonValue}"
+                throw new Error "Bad jsonValue for #{@name}: #{jsonValue}"
 
         @fromDoc jsonValue
 
@@ -111,7 +123,7 @@ class J.Model
                 helper value.getFields()
             else if value instanceof J.List
                 helper value.getValues()
-            if _.isArray(value)
+            else if _.isArray(value)
                 (helper v for v in value)
             else if J.util.isPlainObject(value)
                 ret = {}
@@ -127,7 +139,7 @@ class J.Model
             )
                 value
             else
-                throw new Meteor.Error "Unsupported value type: #{value}"
+                throw new Error "Unsupported value type: #{value}"
 
         helper x
 
@@ -142,19 +154,33 @@ class J.Model
     #     # "func://www.example.com/func"
     # - - -
     @unescapeDot: (key) =>
-        key.replace(/\*DOT\*/g, '.').replace(/\*DOLLAR\*/g, '$')
+        key.replace(
+            /(\*+)DOT\1/g
+            (x, stars) ->
+                if stars.length is 1
+                    '.'
+                else
+                    x.substring(1, x.length - 1)
+        ).replace(
+            /(\*+)DOLLAR\1/g
+            (x, stars) ->
+                if stars.length is 1
+                    '$'
+                else
+                    x.substring(1, x.length - 1)
+        )
 
 
     _save: (upsert, options, callback) ->
         collection = options.collection ? @collection
         unless collection instanceof Mongo.Collection
-            throw new Meteor.Error "Invalid collection to #{@modelClass.name}.save"
+            throw new Error "Invalid collection to #{@modelClass.name}.save"
 
         if @attached and @collection is collection
-            throw new Meteor.Error "Can't save #{@modelClass.name} instance into its own attached collection"
+            throw new Error "Can't save #{@modelClass.name} instance into its own attached collection"
 
         unless @alive
-            throw new Meteor.Error "Can't save dead #{@modelClass.name} instance"
+            throw new Error "Can't save dead #{@modelClass.name} instance"
 
         doc = Tracker.nonreactive => @toDoc()
 
@@ -225,10 +251,13 @@ class J.Model
     # - - -
     # Get the value of a field or reactive of a model instance.
     # - - -
-    get: (fieldOrReactiveName) ->
+    get: (fieldOrReactiveSpec) ->
         if not @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection._name} is dead"
 
+        specParts = fieldOrReactiveSpec.split('.').map (specPart) => J.Model.unescapeDot specPart
+
+        fieldOrReactiveName = specParts[0]
         isReactive = fieldOrReactiveName of @modelClass.reactiveSpecs
 
         if isReactive
@@ -242,8 +271,8 @@ class J.Model
                     if J._watchedQuerySpecSet.get()?
                         if reactiveSpec.watchable ? @modelClass.watchable
                             projection = _: false
-                            projection[reactiveName] = true
-                            dummyQuerySpec =
+                            projection[fieldOrReactiveSpec] = true
+                            dummyQuerySpec = J.fetching.makeCanonicalQs
                                 modelName: @modelClass.name
                                 selector: @_id
                                 fields: projection
@@ -262,22 +291,29 @@ class J.Model
                     # or if the fetch query that brought up this instance happened to
                     # exclude reactiveName.
                     if reactiveValue is undefined
-                        priority = 10 * (reactiveSpec.priority ? 0.5)
-                        reactiveCalcObj = J._enqueueReactiveCalc @modelClass.name, @_id, reactiveName, priority
-                        Meteor.defer => J._dequeueReactiveCalc()
+                        reactiveCalcObj = J.denorm._enqueueReactiveCalc @modelClass.name, @_id, reactiveName
+                        Future.task(
+                            => J.denorm._dequeueReactiveCalc()
+                        ).detach()
                         reactiveValue = reactiveCalcObj.future.wait()
 
-                    reactiveValue
+                    ret = reactiveValue
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
                 else
-                    J.Var(reactiveSpec.val.call @).get()
+                    ret = J.Var(reactiveSpec.val.call @).get()
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
             else
                 if reactiveSpec.denorm and @attached
                     # Record that the current computation uses this denormed reactive
 
                     projection = _: false
-                    projection[reactiveName] = true
+                    projection[fieldOrReactiveSpec] = true
                     if Tracker.active
                         # We might be temporarily bumming this field off some other cursor owned
                         # by some other computation, so we need to run fetchOne to update
@@ -287,20 +323,31 @@ class J.Model
                         # invalidates, we might *not* need to invalidate the current computation when
                         # the new field data arrives. The reactivity is handled by the @reactives dict.
                         # Therefore a child J.AutoVar is the perfect place to do the bookkeeping.
+                        # FIXME:
+                        # This is a bad solution. For one thing, we don't even stop a new AutoVar
+                        # from being created every time a field/reactive is accessed.
+                        # Also, we clearly need better tracking of which _ids (and fields) are
+                        # coming from which cursor.
                         J.AutoVar(
-                            "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveName}"
+                            "<#{@modelClass.name} #{@_id}>.reactiveFetcher.#{fieldOrReactiveSpec}"
                             =>
                                 @modelClass.fetchOne @_id,
                                     fields: projection
                             true
                         )
 
-                    @reactives.get reactiveName
+                    ret = @reactives.get reactiveName
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
                 else
                     # On unattached instances, denormed reactives behave like
                     # non-denormed reactives.
-                    J.Var(reactiveSpec.val.call @).get()
+                    ret = J.Var(reactiveSpec.val.call @).get()
+                    for reactiveSpecPart in specParts[1...]
+                        ret = ret?.get reactiveSpecPart
+                    ret
 
         else
             fieldName = fieldOrReactiveName
@@ -309,11 +356,10 @@ class J.Model
             if Meteor.isServer and J._watchedQuerySpecSet.get()?
                 J.assert @_id?
 
-                # Treat an own-field access the same as any query
                 if fieldSpec.watchable ? @modelClass.watchable
                     projection = _: false
-                    projection[fieldName] = true
-                    dummyQuerySpec =
+                    projection[fieldOrReactiveSpec] = true
+                    dummyQuerySpec = J.fetching.makeCanonicalQs
                         modelName: @modelClass.name
                         selector: @_id
                         fields: projection
@@ -323,19 +369,18 @@ class J.Model
 
                 if @_fields.tryGet(fieldName) is undefined
                     console.warn "Field <#{@modelClass.name} #{JSON.stringify @_id}>.#{fieldName}
-                        missing from projection"
+                        missing from projection for fieldSpec #{JSON.stringify fieldOrReactiveSpec}"
 
-                    mongoFieldsArg = {}
-                    mongoFieldsArg[fieldName] = 1
-                    doc = @modelClass.collection.findOne(
+                    projection = _: false
+                    projection[fieldOrReactiveSpec] = true
+                    instance = @modelClass.fetchOne(
                         @_id
-                    ,
-                        fields: mongoFieldsArg
-                        transform: false
+                        fields: projection
                     )
-                    value = undefined
-                    if doc? then value = doc[fieldName]
-                    if value isnt undefined then @_fields.set fieldName, value
+                    if instance? then value = instance.get fieldOrReactiveSpec
+
+                    if value isnt undefined
+                        @_fields.set fieldName, value
 
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
@@ -347,19 +392,22 @@ class J.Model
                 if @attached
                     # Record that the current computation uses the current field
                     projection = _: false
-                    projection[fieldName] = true
+                    projection[fieldOrReactiveSpec] = true
                     if Tracker.active
                         # See the comment for the J.AutoVar in the above if-branch. In this case,
                         # the reactivity for the caller computation is handled by the @_fields dict.
                         J.AutoVar(
-                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveName}"
+                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveSpec}"
                             =>
                                 @modelClass.fetchOne @_id,
                                     fields: projection
                             true
                         )
 
-            @_fields.forceGet fieldName
+            ret = @_fields.forceGet fieldName
+            for fieldSpecPart in specParts[1...]
+                ret = ret?.get? fieldSpecPart
+            ret
 
 
     # ## insert
@@ -380,7 +428,7 @@ class J.Model
     # - - -
     remove: (callback) ->
         unless @alive
-            throw new Meteor.Error "Can't remove dead #{@modelClass.name} instance."
+            throw new Error "Can't remove dead #{@modelClass.name} instance."
 
         Meteor.call '_jRemove', @modelClass.name, @_id, callback
 
@@ -423,13 +471,13 @@ class J.Model
     # - - -
     set: (fields) ->
         unless J.util.isPlainObject fields
-            throw new Meteor.Error "Invalid fields setter: #{fields}"
+            throw new Error "Invalid fields setter: #{fields}"
 
         unless @alive
-            throw new Meteor.Error "#{@modelClass.name} ##{@_id} from collection #{@collection.name} is dead"
+            throw new Error "#{@modelClass.name} ##{@_id} from collection #{@collection._name} is dead"
 
         if @attached
-            throw new Meteor.Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
+            throw new Error "Can't set #{@modelClass.name} ##{@_id} because it is attached
                 to collection #{J.util.stringify @collection._name}"
 
         for fieldName, value of fields
@@ -448,11 +496,19 @@ class J.Model
     # types in the form of J.Model instances.)
     # - - -
     toDoc: ->
-
         unless @alive
-            throw new Meteor.Error "Can't call toDoc on dead #{@modelClass.name} instance"
+            throw new Error "Can't call toDoc on dead #{@modelClass.name} instance"
 
-        doc = J.Model.toSubdoc @_fields.tryToObj()
+        fields = {}
+        for fieldName, fieldSpec of @modelClass.fieldSpecs
+            if Meteor.isServer
+                # Denorm reactivity bookkeeping and extra fetching
+                fields[fieldName] = @tryGet fieldName
+            else
+                # We still want Dict-style reactivity but don't want
+                # to trigger fetching extra fields
+                fields[fieldName] = @_fields.tryGet fieldName
+        doc = @modelClass.toSubdoc fields
         doc._id = @_id
         doc
 
@@ -510,10 +566,10 @@ class J.Model
     # - - -
     update: (args...) ->
         unless @alive
-            throw new Meteor.Error "Can't call update on dead #{@modelClass.name} instance"
+            throw new Error "Can't call update on dead #{@modelClass.name} instance"
 
         unless J.util.isPlainObject(args[0]) and _.all(key[0] is '$' for key of args[0])
-            throw new Meteor.Error "Must use a $ operation for #{@modelClass.name}.update"
+            throw new Error "Must use a $ operation for #{@modelClass.name}.update"
 
         @collection.update.bind(@collection, @_id).apply null, args
 
@@ -599,7 +655,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
 
         for fieldName, value of nonIdInitFields
             if fieldName not of @modelClass.fieldSpecs
-                throw new Meteor.Error "Invalid field #{JSON.stringify fieldName} passed
+                throw new Error "Invalid field #{JSON.stringify fieldName} passed
                     to #{modelClass.name} constructor"
 
         @_fields = J.Dict()
@@ -682,12 +738,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
     _.extend modelClass.prototype, memberSpecs
     modelClass.prototype.modelClass = modelClass
 
-    throw new Meteor.Error "#{modelName} missing _id spec" unless modelClass.idSpec?
+    throw new Error "#{modelName} missing _id spec" unless modelClass.idSpec?
 
     fieldAndReactiveSet = {} # fieldOrReactiveName: true
     for fieldName of modelClass.fieldSpecs
         if fieldName is '_id'
-            throw new Meteor.Error "_id is not a valid field name for #{modelName}"
+            throw new Error "_id is not a valid field name for #{modelName}"
 
         fieldAndReactiveSet[fieldName] = true
 
@@ -696,7 +752,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             throw new Error "Can't have same name for #{modelName} field and reactive:
                 #{JSON.stringify reactiveName}"
         if not reactiveSpec.val?
-            throw new Meteor.Error "#{modelClass}.reactives.#{reactiveName} missing val function"
+            throw new Error "#{modelClass}.reactives.#{reactiveName} missing val function"
 
         fieldAndReactiveSet[reactiveName] = true
 
@@ -832,7 +888,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     selector = J.Dict(selector).toObj()
                 options = J.Dict(options).toObj()
 
-                querySpec =
+                querySpec = J.fetching.makeCanonicalQs
                     modelName: modelName
                     selector: selector
                     fields: options.fields
@@ -844,8 +900,6 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                     J.fetching.requestQuery querySpec
 
                 else
-                    qsString = J.fetching.stringifyQs querySpec
-
                     if J._watchedQuerySpecSet.get()?
                         for selectorKey, value of selector
                             if J.util.isPlainObject(value) and not _.any(k[0] is '$' for k of value)
@@ -853,7 +907,12 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
                                     Use a combination of individual dot-paths instead."
                                 console.warn "    #{JSON.stringify querySpec, null, 4}"
 
-                        J._watchedQuerySpecSet.get()[qsString] = true
+                        # Track that we're doing a query for a set of _ids. We'll let the actual
+                        # field accessors build up the tracked projection.
+                        idOnlyQuerySpec = _.clone querySpec
+                        idOnlyQuerySpec.fields = _: false
+
+                        J._watchedQuerySpecSet.get()[J.fetching.stringifyQs idOnlyQuerySpec] = true
 
                     mongoFieldsArg = J.fetching.projectionToMongoFieldsArg @, options.fields ? {}
 
@@ -914,7 +973,7 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
             findOne: collection.findOne.bind collection
             insert: (instance, callback) ->
                 unless instance instanceof modelClass
-                    throw new Meteor.Error "#{@name}.insert requires #{@name} instance."
+                    throw new Error "#{@name}.insert requires #{@name} instance."
                 instance.insert collection, callback
 
             update: collection.update.bind collection
@@ -985,20 +1044,21 @@ Meteor.methods
         for fieldName, newValue of fields
             if newValue isnt undefined
                 newDoc[fieldName] = newValue
+        newDoc._reactives = _.clone oldDoc._reactives ? {}
 
         instance = modelClass.fromDoc doc
 
         if not _reserved
-            Future.task(
-                ->
-                    J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
-            ).detach()
-
             if isNew
-                # Initialize all the selectable reactives
+                # Initialize all the reactives
                 for reactiveName, reactiveSpec of modelClass.reactiveSpecs
-                    if reactiveSpec.selectable
-                        J._enqueueReactiveCalc modelName, instance._id, reactiveName
+                    if reactiveSpec.denorm
+                        reactiveCalcObj = J.denorm._enqueueReactiveCalc modelName, instance._id, reactiveName, null, false
+                        reactiveValue = reactiveCalcObj.future.wait()
+                        newDoc._reactives[reactiveName] =
+                            val: J.Model._getEscapedSubdoc J.Var.deepUnwrap reactiveValue
+
+            J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
 
         instance.onSave?()
 

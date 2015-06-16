@@ -82,7 +82,7 @@ Meteor.methods
         for querySpec in addedQuerySpecs
             unless querySpec.modelName of J.models
                 throw new Meteor.Error "Invalid modelName in querySpec:
-                    #{J.util.toString querySpec}"
+                    #{J.util.stringify querySpec}"
 
         # Apply the diff to session.querySpecSet()
         actualAdded = []
@@ -278,7 +278,8 @@ updateObservers = (dataSessionId) ->
                         # Else keep publishing the previous value of reactivesObj[reactiveName]
                         # until the recalc task gets popped off the queue asynchronously.
 
-                        J._enqueueReactiveCalc modelName, id, reactiveName
+                        console.log "Publisher enqueuing <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
+                        J.denorm._enqueueReactiveCalc modelName, id, reactiveName
 
                     else
                         reactivesObj[reactiveName] =
@@ -301,6 +302,7 @@ updateObservers = (dataSessionId) ->
         mongoSelector = J.fetching.selectorToMongoSelector modelClass, querySpec.selector
         mongoOptions = J.fetching._qsToMongoOptions querySpec
 
+        # log 'mongoSelector: ', JSON.stringify mongoSelector
         # log 'mongoOptions.fields: ', JSON.stringify mongoOptions.fields
 
         cursor = modelClass.collection.find mongoSelector, mongoOptions

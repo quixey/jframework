@@ -56,10 +56,19 @@ if Meteor.isClient then _.extend J.fetching,
 
     _requestInProgress: false
 
-    # Latest client-side state and whether it's changed since we
-    # last called the server's update method
+    ###
+        Latest client-side state and whether it's changed since we
+        last called the server's update method
+
+    ###
+
+    # Each computation maintains its own constantly-merged set of querySpecs
+    # which union into the global _unmergedQsSet, and that gets merged into the
+    # global _mergedQsSet.
+    _qsByRequester: {} # computationId: querySpecString: true
     _requestersByQs: {} # querySpecString: {computationId: computation}
     _requestsChanged: false
+    _changesByModelQs: {} # modelName: querySpecString: netNumComputationsAdded
 
     # Snapshot of what the cursors will be after the next _updateDataQueries returns
     _nextUnmergedQsSet: {} # querySpecString: true
@@ -69,47 +78,224 @@ if Meteor.isClient then _.extend J.fetching,
     _unmergedQsSet: {} # mergedQuerySpecString: true
     _mergedQsSet: {} # mergedQuerySpecString: true
 
+
 _.extend J.fetching,
-    _deleteComputationQsRequests: (computation) ->
-        return if not computation._requestingData
-        for qsString in _.keys @_requestersByQs
-            delete @_requestersByQs[qsString][computation._id]
-        computation._requestingData = false
-        @_requestsChanged = true
-        Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
-
-
-    _getCanonical: (x) ->
-        # Like EJSON.stringify but reorders object keys and
-        # array elements to make "the same objects" yield
-        # the same strings.
-
-        if _.isArray x
-            J.util.sortByKey(
-                @_getCanonical y for y in x
-                (y) => EJSON.stringify @_getCanonical y
-            )
-        else if J.util.isPlainObject x
-            sortedKeys = J.util.sortByKey _.keys x
-            ret = {}
-            for k in sortedKeys
-                ret[k] = @_getCanonical x[k]
-            ret
+    _incChanges: (modelName, qss, inc) ->
+        @_changesByModelQs[modelName] ?= {}
+        newValue = (@_changesByModelQs[modelName][qss] ? 0) + inc
+        if newValue is 0
+            delete @_changesByModelQs[modelName][qss]
         else
-            x
+            @_changesByModelQs[modelName][qss] = newValue
+
+    _addComputationQsRequest: (computation, qs) ->
+        qsString = @stringifyQs qs
+
+        @_qsByRequester[computation._id] ?= {}
+        if qsString of @_qsByRequester[computation._id]
+            # Special case of _qsByRequester[computation._id]
+            # being unchanged after remerging
+            return
+
+        oldQsStrings = _.keys @_qsByRequester[computation._id]
+        @_qsByRequester[computation._id][qsString] = true
+        @_qsByRequester[computation._id] = J.util.makeSet(
+            @getMerged (@parseQs qss for qss of @_qsByRequester[computation._id])
+            (qs) => @stringifyQs qs
+        )
+        newQsStrings = _.keys @_qsByRequester[computation._id]
+        qsStringsDiff = J.util.diffStrings oldQsStrings, newQsStrings
+        unless qsStringsDiff.added.length or qsStringsDiff.deleted.length
+            # General case of _qsByRequester[computation._id]
+            # being unchanged after remerging
+            return
+
+        requestsChanged = false
+
+        for addedQss in qsStringsDiff.added
+            if addedQss not of @_requestersByQs
+                @_requestersByQs[addedQss] = {}
+                @_incChanges @parseQs(addedQss).modelName, addedQss, 1
+                requestsChanged = true
+            @_requestersByQs[addedQss][computation._id] = computation
+
+        for deletedQss in qsStringsDiff.deleted
+            delete @_requestersByQs[deletedQss][computation._id]
+            if _.isEmpty @_requestersByQs[deletedQss]
+                delete @_requestersByQs[deletedQss]
+                @_incChanges @parseQs(deletedQss).modelName, deletedQss, -1
+                requestsChanged = true
+
+        if requestsChanged and not @_requestsChanged
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+
+    _deleteComputationQsRequests: (computation) ->
+        # Note:
+        # AutoVar handles logic to call @_deleteComputationQsRequests
+        # because it involves complicated sequencing with React component
+        # rendering.
+
+        return if computation._id not of @_qsByRequester
+
+        requestsChanged = false
+
+        for deletedQss of @_qsByRequester[computation._id]
+            delete @_requestersByQs[deletedQss][computation._id]
+            if _.isEmpty @_requestersByQs[deletedQss]
+                delete @_requestersByQs[deletedQss]
+                @_incChanges @parseQs(deletedQss).modelName, deletedQss, -1
+                requestsChanged = true
+
+        delete @_qsByRequester[computation._id]
+
+        if requestsChanged and not @_requestsChanged
+            @_requestsChanged = true
+            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+
+
+    _getCanonicalSelector: (selector) ->
+        # 1. selector:"x" turns into selector:_id:"x"
+        # 2. f:$in:["singleton"] becomes f:"singleton"
+        # 3. Order keys in parts like $in
+
+        if _.isString selector
+            return _id: selector
+        else if selector is undefined or _.isEmpty selector
+            return undefined
+
+        getTransformed = (subSel, levelIsSpecial) =>
+            # levelIsSpecial:
+            #   E.g. the top-level and a level after $in are special
+            #   and can be reordered, but values to match which happen
+            #   to be objects or arrays are non-special
+            # 1. Sort objects and arrays if levelIsSpecial
+            # 2. Transform singleton $in, $and and $or expressions into non-arrays
+
+            if _.isArray subSel
+                ret = []
+                for v in subSel
+                    ret.push getTransformed(
+                        v
+                        J.util.isPlainObject(v) and _.any(
+                            subSelKey[0] is '$' for subSelKey of v
+                        )
+                    )
+                if levelIsSpecial
+                    J.util.sortByKey(
+                        ret
+                        if _.any(_.isArray(x) or J.util.isPlainObject(x) for x in ret)
+                            EJSON.stringify
+                        else
+                            _.identity
+                        transform: false
+                    )
+                ret
+
+            else if J.util.isPlainObject subSel
+                keys = _.keys subSel
+                if levelIsSpecial then keys.sort()
+                ret = {}
+                for k in keys
+                    ret[k] = getTransformed(
+                        subSel[k]
+                        _.any [
+                            k[0] is '$' and k not in ['$eq', '$gt', '$gte', '$lt', '$lte']
+                        ,
+                            J.util.isPlainObject(subSel[k]) and _.any(
+                                subSelKey[0] is '$' for subSelKey of subSel[k]
+                            )
+                        ]
+                    )
+                    if J.util.isPlainObject(ret[k])
+                        for operator in ['$in', '$and', '$or']
+                            if ret[k][operator]?.length is 1
+                                ret[k] = ret[k][operator][0]
+                                break
+                ret
+
+            else
+                subSel
+
+        getTransformed selector, true
+
+
+    _getCanonicalProjection: (modelClass, projection) ->
+        return undefined if projection is undefined or _.isEmpty projection
+
+        inclusionSet = @_projectionToInclusionSet modelClass, projection
+
+        # Handle cases like {'a.x':true, 'a.x.y.z':true} -> {'a.x': true}
+        if not _.isEmpty(inclusionSet) then while true
+            mergedSomething = false
+            includeSpecs = _.keys inclusionSet
+            for i in [0...includeSpecs.length - 1]
+                iSpec = includeSpecs[i]
+                iSpecParts = iSpec.split('.')
+                for j in [i + 1...includeSpecs.length]
+                    jSpec = includeSpecs[j]
+                    jSpecParts = jSpec.split('.')
+
+                    shortSpecParts = null
+                    longSpec = null
+                    longSpecParts = null
+                    if iSpecParts.length < jSpecParts.length
+                        shortSpecParts = iSpecParts
+                        longSpec = jSpec
+                        longSpecParts = jSpecParts
+                    else if jSpecParts.length < iSpecParts.length
+                        shortSpecParts = jSpecParts
+                        longSpec = iSpec
+                        longSpecParts = iSpecParts
+                    continue if not longSpec?
+
+                    if EJSON.equals shortSpecParts, longSpecParts[0...shortSpecParts.length]
+                        delete inclusionSet[longSpec]
+                        mergedSomething = true
+                        break
+
+                break if mergedSomething
+            break if not mergedSomething
+
+        defaultIncludeSpecSet = {}
+        for fieldName, fieldSpec of modelClass.fieldSpecs
+            if (fieldSpec.include ? true)
+                defaultIncludeSpecSet[fieldName] = true
+        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+            if (reactiveSpec.include ? false)
+                defaultIncludeSpecSet[reactiveName] = true
+
+        includesAllDefaults = _.all (
+            inclusionSet[includeSpec] for includeSpec of defaultIncludeSpecSet
+        )
+
+        canonicalProjection = {}
+        if not includesAllDefaults
+            canonicalProjection._ = false
+        for includeSpec of inclusionSet
+            unless includesAllDefaults and includeSpec of defaultIncludeSpecSet
+                canonicalProjection[includeSpec] = true
+
+        return undefined if _.isEmpty canonicalProjection
+
+        sortedCanonicalProjection = {}
+        for projectionKey in _.keys(canonicalProjection).sort()
+            sortedCanonicalProjection[projectionKey] = canonicalProjection[projectionKey]
+        sortedCanonicalProjection
 
 
     _projectionToInclusionSet: (modelClass, projection) ->
         # See the projection semantics documentation at the top of this file.
+        # Returns {includeSpec: true}
 
-        # Returns {includedFieldOrReactiveName: true}
-
+        if projection is undefined then projection = {}
         inclusionSet = {}
 
         if projection._ is false
-            for fieldOrReactiveName, include of projection
-                continue if fieldOrReactiveName is '_'
-                if include then inclusionSet[fieldOrReactiveName] = true
+            for includeSpec, include of projection
+                continue if includeSpec is '_'
+                if include then inclusionSet[includeSpec] = true
 
         else
             for fieldName, fieldSpec of modelClass.fieldSpecs
@@ -120,12 +306,12 @@ _.extend J.fetching,
                 if reactiveSpec.include ? false
                     inclusionSet[reactiveName] = true
 
-            for fieldOrReactiveName, include of projection
-                continue if fieldOrReactiveName is '_'
+            for includeSpec, include of projection
+                continue if includeSpec is '_'
                 if include
-                    inclusionSet[fieldOrReactiveName] = true
+                    inclusionSet[includeSpec] = true
                 else
-                    delete inclusionSet[fieldOrReactiveName]
+                    delete inclusionSet[includeSpec]
 
         inclusionSet
 
@@ -176,91 +362,19 @@ _.extend J.fetching,
 
 
     getMerged: (querySpecs) ->
-        # 1.
-        #     Merge all the querySpecs that select on _id using
-        #     inclusionSetByModelInstance.
-        # 2.
-        #     Attempt to pairwise merge all the querySpecs that
-        #     don't select on _id.
+        # Attempt to pairwise merge all the querySpecs.
 
-        inclusionSetByModelInstance = {} # modelName: id: fieldOrReactiveSpec: true
-        nonIdQuerySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
+        querySpecsByModel = {} # modelName: [querySpecs] (will be pairwise merged)
         mergedQuerySpecs = []
 
-        _getSelectorIds = (qs) =>
-            qs = J.util.deepClone qs
-            if _.isString(qs.selector)
-                qs.selector = _id: qs.selector
-
-            if qs.selector._id?
-                # Note that if the selector has keys other than "_id" that may drop
-                # the result count from 1 to 0, we'll just ignore that and send a
-                # dumber merged query to the server.
-
-                if _.isString qs.selector._id
-                    [qs.selector._id]
-                else if (
-                    _.isObject(qs.selector._id) and _.size(qs.selector._id) is 1 and
-                    qs.selector._id.$in? and not qs.limit? and not qs.skip
-                )
-                    qs.selector._id.$in
-
-
         for qs in querySpecs
-            modelClass = J.models[qs.modelName]
-            selectorIds = _getSelectorIds qs
-            if selectorIds?.length
-                # (1) Merge this QS into inclusionSetByModelInstance
+            querySpecsByModel[qs.modelName] ?= []
+            querySpecsByModel[qs.modelName].push qs
 
-                for selectorId in selectorIds
-                    existingIncludes = J.util.getField(
-                        inclusionSetByModelInstance
-                        [qs.modelName, '?.', selectorId]
-                    ) ? J.util.setField(
-                        inclusionSetByModelInstance
-                        [qs.modelName, selectorId]
-                        {}
-                        true
-                    )
-
-                    inclusionSet = @_projectionToInclusionSet modelClass, qs.fields ? {}
-                    for fieldSpec, include of inclusionSet
-                        existingIncludes[fieldSpec] = Boolean(
-                            existingIncludes[fieldSpec] or include
-                        )
-
-            else
-                # (2) Add this to the list of non-ID-selecting querySpecs
-                # to be pairwise merged.
-
-                nonIdQuerySpecsByModel[qs.modelName] ?= []
-                nonIdQuerySpecsByModel[qs.modelName].push qs
-
-
-        # (1) Dump inclusionSetByModelInstance into mergedQuerySpecs
-        for modelName, inclusionSetById of inclusionSetByModelInstance
-            idsByInclusionSetString = {} # inclusionSetString: [instanceIds]
-            for instanceId, inclusionSet of inclusionSetById
-                inclusionSetString = EJSON.stringify @_getCanonical inclusionSet
-                idsByInclusionSetString[inclusionSetString] ?= []
-                idsByInclusionSetString[inclusionSetString].push instanceId
-
-            for inclusionSetString, instanceIds of idsByInclusionSetString
-                mergedProjection = _.extend(
-                    _: false
-                    EJSON.parse inclusionSetString
-                )
-                mergedQuerySpecs.push
-                    modelName: modelName
-                    selector: _id: $in: instanceIds
-                    fields: mergedProjection
-
-
-        # (2) Pairwise merge the nonIdQuerySpecs
-        for modelName, nonIdQuerySpecs of nonIdQuerySpecsByModel
+        for modelName, querySpecs of querySpecsByModel
             qsStringSet = {} # qsString: true
-            for qs in nonIdQuerySpecs
-                qsStringSet[J.fetching.stringifyQs qs] = true
+            for qs in querySpecs
+                qsStringSet[@stringifyQs qs] = true
 
             # Iterate until no pair of qsStrings in qsStringSet
             # can be pairwise merged.
@@ -268,10 +382,13 @@ _.extend J.fetching,
                 mergedSomething = false
 
                 qsStrings = _.keys qsStringSet
-                for qsString, i in qsStrings[qsStrings.length - 1]
+                for qsString, i in qsStrings[...qsStrings.length - 1]
+                    querySpec = @parseQs qsString
                     for qss in qsStrings[i + 1...]
-                        pairwiseMergedQsString = @tryQsPairwiseMerge qsString, qss
-                        if pairwiseMergedQsString?
+                        qs = @parseQs qss
+                        pairwiseMergedQs = @tryQsPairwiseMerge querySpec, qs
+                        if pairwiseMergedQs?
+                            pairwiseMergedQsString = @stringifyQs pairwiseMergedQs
                             delete qsStringSet[qsString]
                             delete qsStringSet[qss]
                             qsStringSet[pairwiseMergedQsString] = true
@@ -284,13 +401,12 @@ _.extend J.fetching,
 
             # Dump qsStringSet into mergedQuerySpecs
             for qsString of qsStringSet
-                mergedQuerySpecs.push J.fetching.parseQs qsString
-
+                mergedQuerySpecs.push @parseQs qsString
 
         mergedQuerySpecs
 
 
-    isQueryReady: (qs) ->
+    isQueryReady: (querySpec) ->
         # A query is considered ready if:
         # (1) It was bundled into the set of merged queries that the server
         #     has come back and said are ready.
@@ -299,55 +415,184 @@ _.extend J.fetching,
         #     (Note that we can't infer anything about first-level objects
         #     in the doc, because they may or may not be partial subdocs.)
 
-        qsString = J.fetching.stringifyQs qs
-        modelClass = J.models[qs.modelName]
+        qsString = @stringifyQs querySpec
+        modelClass = J.models[querySpec.modelName]
 
-        qs = J.util.deepClone qs
-        if not J.util.isPlainObject qs.selector
-            # Note that this makes qs inconsistent with qsString
-            qs.selector = _id: qs.selector
+        testId = (instanceId) =>
+            return false if instanceId not of modelClass.collection._attachedInstances
+
+            options = @_qsToMongoOptions(querySpec)
+            options.transform = false
+            options.reactive = false
+            doc = modelClass.findOne(instanceId, options)
+            return false if not doc?
+
+            for fieldSpec of options.fields ? {}
+                fieldSpecParts = fieldSpec.split('.')
+                if fieldSpecParts[0] is '_id'
+                    continue
+                else if fieldSpecParts[0] is '_reactives'
+                    reactiveName = fieldSpecParts[1]?
+                    value = doc._reactives?[reactiveName]?.val
+                else
+                    fieldName = fieldSpecParts[0]
+                    value = doc[fieldName]
+
+                return false if value is undefined
+
+                # This value might be ready, but there's a risk that
+                # it's actually a partial subdoc, so we can only
+                # trust it after qsString appears in @_unmergedQsSet.
+                # FIXME:
+                # It's possible to do smarter bookkeeping to return true
+                # when the full (sub)object being requested is already
+                # on the client.
+                return false if J.util.isPlainObject value
+
+            true
 
         helper = =>
             return true if qsString of @_unmergedQsSet and qsString of @_nextUnmergedQsSet
 
-            if _.isString(qs.selector._id) and qs.selector._id of modelClass.collection._attachedInstances
-                # For queries with an _id filter, say it's ready as long as minimongo
-                # has an attached entry with that _id and no other parts of the selector
-                # rule out the one possible match.
-                options = @_qsToMongoOptions(qs)
-                options.transform = false
-                options.reactive = false
-                doc = modelClass.findOne(qs.selector, options)
-                if doc?
-                    for fieldSpec of options.fields
-                        fieldSpecParts = fieldSpec.split('.')
-                        if fieldSpecParts[0] is '_id'
-                            continue
-                        else if fieldSpecParts[0] is '_reactives'
-                            reactiveName = fieldSpecParts[1]?
-                            value = doc._reactives?[reactiveName]?.val
-                        else
-                            fieldName = fieldSpecParts[0]
-                            value = doc[fieldName]
+            # For queries with an _id filter, say it's ready as long as minimongo
+            # has an attached entry with that _id and no other parts of the selector
+            # rule out that one doc.
+            if _.isString(querySpec.selector?._id) and testId(querySpec.selector._id)
+                return true
+            else if _.isArray(querySpec.selector?._id?.$in) and _.all(testId(id) for id in querySpec.selector._id.$in)
+                return true
 
-                        return false if value is undefined
-
-                        # This value might be ready, but there's a risk that
-                        # it's actually a partial subdoc, so we can only
-                        # trust it after qsString appears in @_unmergedQsSet.
-                        # FIXME:
-                        # It's possible to do smarter bookkeeping to return true
-                        # when the full (sub)object being requested is already
-                        # on the client.
-                        return false if J.util.isPlainObject value
-
-                    return true
-
+            for qss of @_mergedQsSet
+                return if qss not of @_nextMergedQsSet
+                qs = @parseQs qss
+                return true if @isQsCovered querySpec, qs
+                
             false
 
         ret = helper()
         # console.debug 'isQueryReady', ret, qsString
         ret
+
+
+    isQsCovered: (qs, superQs) ->
+        # Returns whether the results from the querySpecs in superQsArr
+        # are sufficient to provide accurate results to qs
+
+        return false if qs.modelName isnt superQs.modelName
+        modelClass = J.models[qs.modelName]
+
+        # Make sure the selector is covered
+        return false if not @isSelectorCovered qs, superQs
+
+        # And make sure the projection is covered
+        inclusionSet = @_projectionToInclusionSet modelClass, qs.fields
+        superInclusionSet = @_projectionToInclusionSet modelClass, superQs.fields
+        inclusionDiff = J.util.diffStrings _.keys(inclusionSet), _.keys(superInclusionSet)
+        for missingInclusionSpec in inclusionDiff.deleted
+            # Check for a situation like "w.x.y.z" being covered by "w.x"
+            ok = false
+            missingInclusionSpecParts = missingInclusionSpec.split('.')
+            for i in [0...missingInclusionSpecParts.length - 1]
+                if missingInclusionSpecParts[0..i].join('.') of superInclusionSet
+                    ok = true
+                    break
+            return false if not ok
+
+        true
+
+
+    isSelectorCovered: (qs, superQs) ->
+        # Returns true if (modelName, selector, sort, limit, skip)
+        # cause superQs to have a superset of the returned _ids
+        # that qs has, ignoring qs.fields and superQs.fields
+
+        qs = _.clone qs
+        delete qs.fields
+        superQs = _.clone superQs
+        delete superQs.fields
+
+        return true if EJSON.equals qs, superQs
+        return false if qs.modelName isnt superQs.modelName
+
+        isValueSpecCovered = (valueSpec, superValueSpec) ->
+            possibleValues = [valueSpec]
+            if J.util.isPlainObject(valueSpec) and _.keys(valueSpec).length is 1 and valueSpec.$in?
+                possibleValues = valueSpec.$in
+            superPossibleValues = [superValueSpec]
+            if J.util.isPlainObject(superValueSpec) and _.keys(superValueSpec).length is 1 and superValueSpec.$in?
+                superPossibleValues = superValueSpec.$in
+
+            for possibleValue in possibleValues
+                return false if not _.any(
+                    EJSON.equals possibleValue, v for v in superPossibleValues
+                )
+            true
+
+        # Return false if superQs.selector might filter too much
+        for superSelectorKey, superSelectorValue of superQs.selector ? {}
+            return false unless qs.selector? and superSelectorKey of qs.selector and isValueSpecCovered(
+                qs.selector[superSelectorKey], superSelectorValue
+            )
+
+        if qs.skip? or superQs.skip?
+            # Can't handle skip yet
+            return false
+
+        if superQs.limit?
+            # If superQs has a limit, then qs has to be identical
+            # except with a possibly smaller limit
+            if qs.limit? and qs.limit <= superQs.limit
+                dummyQs = _.clone qs
+                dummyQs.limit = superQs.limit
+                return EJSON.equals dummyQs, superQs
+            else
+                return false
+
+        true
+
+
+    makeCanonicalQs: (qs) ->
+        # Returns an equivalent querySpec but in "canonical form"
+        # so two querySpecs written with minor differences can
+        # be fingerprinted by their @stringifyQs value
+
+        qs = _.clone qs
+
+        qs.selector = @_getCanonicalSelector qs.selector
+
+        qs.fields = @_getCanonicalProjection J.models[qs.modelName], qs.fields
+
+        if qs.sort is undefined or _.isEmpty qs.sort
+            qs.sort = undefined
+
+        if qs.limit is 0 or not qs.limit?
+            qs.limit = undefined
+        else if _.isString qs.selector?._id
+            # Optimization: If _id is a singleton then limit is irrelevant
+            qs.limit = undefined
+
+        if qs.skip is 0 or not qs.skip?
+            qs.skip = undefined
+
+        # This establishes the canonical order of the QS fields
+        J.util.withoutUndefined
+            modelName: qs.modelName
+            selector: qs.selector
+            fields: qs.fields
+            sort: qs.sort
+            limit: qs.limit
+            skip: qs.skip
+
+
+    makeFullProjection: (modelClass) ->
+        projection = {}
+        for fieldName, fieldSpec of modelClass.fieldSpecs
+            if not (fieldSpec.include ? true)
+                projection[fieldName] = true
+        for reactiveName, reactiveSpec of modelClass.reactiveSpecs
+            if not (reactiveSpec.include ? false)
+                projection[reactiveName] = true
+        projection
 
 
     parseQs: (qsString) ->
@@ -374,7 +619,7 @@ _.extend J.fetching,
                 fieldOrReactiveName of modelClass.fieldSpecs or
                 fieldOrReactiveName of modelClass.reactiveSpecs
             )
-                throw new Meteor.Error "Invalid fieldOrReactiveName in
+                throw new Error "Invalid fieldOrReactiveName in
                     #{modelClass.name} inclusion set: #{includeSpec}"
 
             if fieldOrReactiveName of modelClass.reactiveSpecs
@@ -399,27 +644,30 @@ _.extend J.fetching,
         return if @_requestInProgress or not @_requestsChanged
         @_requestsChanged = false
 
-        # Clean the empty objects out of @_requestersByQs.
-        # It would have been nice to do this in @_deleteComputationQsRequests, but that
-        # turns out to be a significant performance hit compared to doing it here.
-        for qsString in _.keys @_requestersByQs
-            if _.isEmpty @_requestersByQs[qsString]
-                delete @_requestersByQs[qsString]
-
         newUnmergedQsStrings = _.keys @_requestersByQs
-        newUnmergedQuerySpecs = (J.fetching.parseQs qsString for qsString in newUnmergedQsStrings)
+        newUnmergedQuerySpecs = (@parseQs qsString for qsString in newUnmergedQsStrings)
         @_nextUnmergedQsSet = {}
         @_nextUnmergedQsSet[qsString] = true for qsString in newUnmergedQsStrings
         unmergedQsStringsDiff = J.util.diffStrings _.keys(@_unmergedQsSet), _.keys(@_nextUnmergedQsSet)
 
-        newMergedQuerySpecs = @getMerged newUnmergedQuerySpecs
-        newMergedQsStrings = (J.fetching.stringifyQs querySpec for querySpec in newMergedQuerySpecs)
+        newUnmergedQuerySpecsByModelName = J.util.groupByKey newUnmergedQuerySpecs, 'modelName'
+        newMergedQuerySpecs = []
+        for modelName, newUnmergedModelQuerySpecs of newUnmergedQuerySpecsByModelName
+            if _.isEmpty(@_changesByModelQs[modelName] ? {})
+                # console.log "Skipping #{modelName} which has #{newUnmergedModelQuerySpecs.length} querySpecs"
+                newMergedQuerySpecs.push.apply newMergedQuerySpecs, newUnmergedModelQuerySpecs
+            else
+                # console.log "Merging #{modelName} which has #{newUnmergedModelQuerySpecs.length} querySpecs"
+                newMergedQuerySpecs.push.apply newMergedQuerySpecs, @getMerged newUnmergedModelQuerySpecs
+        @_changesByModelQs = {}
+
+        newMergedQsStrings = (@stringifyQs querySpec for querySpec in newMergedQuerySpecs)
         @_nextMergedQsSet = {}
         @_nextMergedQsSet[qsString] = true for qsString in newMergedQsStrings
         mergedQsStringsDiff = J.util.diffStrings _.keys(@_mergedQsSet), _.keys(@_nextMergedQsSet)
 
-        addedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.added)
-        deletedQuerySpecs = (J.fetching.parseQs qsString for qsString in mergedQsStringsDiff.deleted)
+        addedQuerySpecs = (@parseQs qsString for qsString in mergedQsStringsDiff.added)
+        deletedQuerySpecs = (@parseQs qsString for qsString in mergedQsStringsDiff.deleted)
 
         doAfterUpdatingUnmergedQsSet = =>
             for addedUnmergedQsString in unmergedQsStringsDiff.added
@@ -440,7 +688,7 @@ _.extend J.fetching,
 
         debug = true
         if debug
-            consolify = (querySpec) ->
+            consolify = (querySpec) =>
                 obj = _.clone querySpec
                 for x in ['selector', 'fields', 'sort']
                     if x of obj then obj[x] = J.util.stringify obj[x]
@@ -477,21 +725,10 @@ _.extend J.fetching,
 
     requestQuery: (querySpec) ->
         J.assert Tracker.active
-
         @checkQuerySpec querySpec
 
-        qsString = J.fetching.stringifyQs querySpec
         computation = Tracker.currentComputation
-
-        @_requestersByQs[qsString] ?= {}
-        if computation._id not of @_requestersByQs[qsString]
-            @_requestersByQs[qsString][computation._id] = computation
-            computation._requestingData = true
-            # Note: AutoVar handles logic to remove from @_requestersByQueue
-            # because it involves complicated sequencing with React component
-            # rendering.
-            @_requestsChanged = true
-            Tracker.afterFlush (=> @remergeQueries()), Number.POSITIVE_INFINITY
+        @_addComputationQsRequest computation, querySpec
 
         if @isQueryReady querySpec
             modelClass = J.models[querySpec.modelName]
@@ -534,8 +771,10 @@ _.extend J.fetching,
         #     The corresponding Mongo-style selector that we can pass to
         #     MongoCollection.find
 
-        if not _.isObject selector
-            return selector
+        if selector is undefined
+            return {}
+        else if _.isString selector
+            return _id: selector
 
         mongoSelector = {}
         for selectorKey, selectorValue of selector
@@ -595,26 +834,99 @@ _.extend J.fetching,
 
 
     stringifyQs: (qs) ->
-        qs = _.clone qs
-        if qs.fields is undefined or _.isEmpty qs.fields
-            delete qs.fields
-        if qs.sort is undefined or _.isEmpty qs.sort
-            delete qs.sort
-        if not qs.limit
-            delete qs.limit
-        if not qs.skip
-            delete qs.skip
-
-        EJSON.stringify
-            modelName: qs.modelName
-            selector: @_getCanonical qs.selector
-            fields: @_getCanonical qs.fields
-            sort: @_getCanonical qs.sort
-            limit: qs.limit
-            skip: qs.skip
+        EJSON.stringify qs
 
 
     tryQsPairwiseMerge: (a, b) ->
+        # Return a new querySpec that covers both a and b, or null
+        # if pairwise merging failed.
+        #
+        # Strategy:
+        # 1. If one qs covers the other, return the superQs.
+        # 2. If everything is identical except the value of a single
+        #    selectorKey, return a new qs with a merged selectorKey.
+        # 3. If everything is identical except the projection,
+        #    return a new qs with a merged projection.
+
         return null if a.modelName isnt b.modelName
+        modelClass = J.models[a.modelName]
+
+        # 1.
+        return b if @isQsCovered a, b
+        return a if @isQsCovered b, a
+
+        # 2.
+        #    a and b must have the exact same selectorKeys except
+        #    the value differs at one point
+        tryMergingSelectors = =>
+            return null unless a.selector? and b.selector?
+            aSelectorKeys = _.keys a.selector
+            bSelectorKeys = _.keys b.selector
+            return null if not EJSON.equals aSelectorKeys, bSelectorKeys
+
+            diffKeys = []
+            for selectorKey of a.selector
+                if not EJSON.equals a.selector[selectorKey], b.selector[selectorKey]
+                    diffKeys.push selectorKey
+            return null unless diffKeys.length is 1
+            diffKey = diffKeys[0]
+
+            getPossibleValues = (selectorValue) =>
+                if J.util.isPlainObject selectorValue
+                    if _.size(selectorValue) is 1 and selectorValue.$in?
+                        selectorValue.$in
+                    else if _.any(k[0] is '$' for k of selectorValue)
+                        null
+                    else
+                        [selectorValue]
+                else
+                    [selectorValue]
+
+            aSelectorValues = getPossibleValues a.selector[diffKey]
+            bSelectorValues = getPossibleValues b.selector[diffKey]
+            return null unless aSelectorValues? and bSelectorValues?
+
+            selectorValuesSet = {} # stringifiedValue: true
+            for aValue in aSelectorValues
+                selectorValuesSet[EJSON.stringify aValue] = true
+            for bValue in bSelectorValues
+                selectorValuesSet[EJSON.stringify bValue] = true
+            mergedSelectorValues = (EJSON.parse x for x of selectorValuesSet)
+
+            mergedSelector = _.clone a.selector
+            mergedSelector[diffKey] = $in: mergedSelectorValues
+            mergedQs = _.clone a
+            mergedQs.selector = @_getCanonicalSelector mergedSelector
+            mergedQs
+
+        selectorMergedQs = tryMergingSelectors()
+        if selectorMergedQs? and @isQsCovered(a, selectorMergedQs) and @isQsCovered(b, selectorMergedQs)
+            return selectorMergedQs
+
+        # 3.
+        tryMergingProjections = =>
+            aDummy = _.clone a
+            delete aDummy.fields
+            bDummy = _.clone b
+            delete bDummy.fields
+            return null unless EJSON.equals aDummy, bDummy
+
+            aInclusionSet = @_projectionToInclusionSet modelClass, a.fields
+            bInclusionSet = @_projectionToInclusionSet modelClass, b.fields
+            mergedInclusionSet = _.extend(
+                _.clone aInclusionSet
+                bInclusionSet
+            )
+
+            mergedQs = _.clone a
+            mergedQs.fields = @_getCanonicalProjection modelClass, _.extend(
+                _: false
+                mergedInclusionSet
+            )
+            mergedQs
+
+        projectionMergedQs = tryMergingProjections()
+        if projectionMergedQs?
+            return projectionMergedQs
 
         null
