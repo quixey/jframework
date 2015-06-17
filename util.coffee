@@ -311,7 +311,7 @@ J.util =
         for value in arr
             key = keyFunc value
             if key of dictSet
-                throw new Error 'Duplicate key'
+                throw new Error "Duplicate key: #{key}"
             dictSet[key] = value
         dictSet
 

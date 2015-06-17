@@ -64,7 +64,7 @@ class J.AutoDict extends J.Dict
 
 
         unless _.isFunction(keysFunc) and _.isFunction(valueFunc)
-            throw new Meteor.Error "AutoDict must be constructed with
+            throw new Error "AutoDict must be constructed with
                 keysFunc and valueFunc"
 
         super {},
@@ -93,16 +93,16 @@ class J.AutoDict extends J.Dict
                 keys = @keysFunc.apply null
 
                 unless _.isArray(keys) or keys instanceof J.List
-                    throw new Meteor.Error "AutoDict.keysFunc must return a List
+                    throw new Error "AutoDict.keysFunc must return a List
                         or array. Got #{J.util.stringify keys}"
 
                 keysArr = J.List.unwrap(keys)
 
                 unless _.all (_.isString(key) for key in keysArr)
-                    throw new Meteor.Error "AutoDict keys must all be type string.
+                    throw new Error "AutoDict keys must all be type string.
                         Got #{J.util.stringify keys}"
                 if _.size(J.util.makeSet keysArr) < keys.length
-                    throw new Meteor.Error "AutoDict keys must be unique."
+                    throw new Error "AutoDict keys must be unique."
 
                 # Side effects during AutoVar recompute functions are usually not okay.
                 # We just need the framework to do it in this one place.
@@ -161,7 +161,7 @@ class J.AutoDict extends J.Dict
             @_fields[key].get()
         else
             if force
-                throw new Meteor.Error "#{@constructor.name} missing key #{J.util.stringify key}"
+                throw new Error "#{@constructor.name} missing key #{J.util.stringify key}"
             else
                 undefined
 
@@ -206,16 +206,16 @@ class J.AutoDict extends J.Dict
 
 
     clear: ->
-        throw new Meteor.Error "There is no AutoDict.clear"
+        throw new Error "There is no AutoDict.clear"
 
 
     clone: ->
-        throw new Meteor.Error "There is no AutoDict.clone.
+        throw new Error "There is no AutoDict.clone.
             You should be able to either use the same AutoDict
             or else call snapshot()."
 
     delete: ->
-        throw new Meteor.Error "There is no AutoDict.delete"
+        throw new Error "There is no AutoDict.delete"
 
 
     getFields: (keys = @getKeys()) ->
@@ -265,18 +265,18 @@ class J.AutoDict extends J.Dict
 
 
     replaceKeys: ->
-        throw new Meteor.Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
+        throw new Error "There is no AutoDict.replaceKeys; use AutoDict.replaceKeysFunc"
 
 
     set: ->
-        throw new Meteor.Error "There is no AutoDict.set; use AutoDict.valueFunc"
+        throw new Error "There is no AutoDict.set; use AutoDict.valueFunc"
 
 
     setDebug: (@debug) ->
 
 
     setOrAdd: ->
-        throw new Meteor.Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"
+        throw new Error "There is no AutoDict.setOrAdd; use AutoDict.keysFunc and AutoDict.valueFunc"
 
 
     snapshot: ->

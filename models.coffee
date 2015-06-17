@@ -310,11 +310,17 @@ class J.Model
 
             else
                 if reactiveSpec.denorm and @attached
+                    if @reactives.hasKey(reactiveName) and @reactives.tryGet(reactiveName) is undefined
+                        console.warn "<#{@modelClass.name} #{@_id}>.#{reactiveName}() is undefined"
+                        console.groupCollapsed console.trace()
+                        console.groupEnd()
+
                     # Record that the current computation uses this denormed reactive
 
                     projection = _: false
                     projection[fieldOrReactiveSpec] = true
-                    if Tracker.active
+                    if false and Tracker.active
+                        # FIXME: Currently not suppoorting just-in-time reactive fetches
                         # We might be temporarily bumming this field off some other cursor owned
                         # by some other computation, so we need to run fetchOne to update
                         # J.fetching._requestersByQs and make sure the field data doesn't get
@@ -388,24 +394,23 @@ class J.Model
             if Tracker.active
                 if @_fields.hasKey(fieldName) and @_fields.tryGet(fieldName) is undefined
                     console.warn "<#{@modelClass.name} #{@_id}>.#{fieldName}() is undefined"
-                    console.groupCollapsed()
-                    console.trace()
+                    console.groupCollapsed console.trace()
                     console.groupEnd()
 
-                if @attached
+                if false and @attached
+                    # FIXME: Currently not suppoorting just-in-time field fetches
                     # Record that the current computation uses the current field
                     projection = _: false
                     projection[fieldOrReactiveSpec] = true
-                    if Tracker.active
-                        # See the comment for the J.AutoVar in the above if-branch. In this case,
-                        # the reactivity for the caller computation is handled by the @_fields dict.
-                        J.AutoVar(
-                            "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveSpec}"
-                            =>
-                                @modelClass.fetchOne @_id,
-                                    fields: projection
-                            true
-                        )
+                    # See the comment for the J.AutoVar in the above if-branch. In this case,
+                    # the reactivity for the caller computation is handled by the @_fields dict.
+                    J.AutoVar(
+                        "<#{@modelClass.name} #{@_id}>.fieldFetcher.#{fieldOrReactiveSpec}"
+                        =>
+                            @modelClass.fetchOne @_id,
+                                fields: projection
+                        true
+                    )
 
             ret = @_fields.forceGet fieldName
             for fieldSpecPart in specParts[1...]
