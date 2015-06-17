@@ -732,7 +732,14 @@ J.lazy = (childrenFunc) ->
             $$ ('Loader')
 
         render: ->
-            childrenFunc() ? null
+            ret = childrenFunc()
+            if ret is undefined
+                null
+            else if _.isArray(ret) or ret instanceof J.List
+                createElementArgs = ['div', {}].concat ret
+                $$.apply null, createElementArgs
+            else
+                ret
 
     $$ (componentName)
 
