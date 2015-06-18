@@ -39,7 +39,7 @@ class J.Dict
             else if J.util.isPlainObject fieldsOrKeys
                 fields = fieldsOrKeys
             else
-                throw new Meteor.Error "Invalid fieldsOrKeys: #{fieldsOrKeys}"
+                throw new Error "Invalid fieldsOrKeys: #{fieldsOrKeys}"
         else
             fields = {}
 
@@ -113,7 +113,7 @@ class J.Dict
         if @fineGrained
             for key, value of fields
                 if key not of @_fields
-                    throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+                    throw new Error "Field #{JSON.stringify key} does not exist"
 
                 if @_fields[key] not instanceof J.Var
                     # We need a Var to set this object up to invalidate getters
@@ -134,7 +134,7 @@ class J.Dict
             newFields = _.clone Tracker.nonreactive => @_fieldsVar.get()
             for key, value of fields
                 if key not of newFields
-                    throw new Meteor.Error "Field #{JSON.stringify key} does not exist"
+                    throw new Error "Field #{JSON.stringify key} does not exist"
                 newFields[key] = J.Var.wrap value, @withFieldFuncs
             @_fieldsVar.set newFields
 
@@ -142,8 +142,11 @@ class J.Dict
 
 
     _get: (key, force) ->
+        unless _.isString key
+            throw new Error "Can't get non-string key: #{key}"
+
         if not @isActive()
-            throw new Meteor.Error "Computation[#{Tracker.currentComputation?._id}]
+            throw new Error "Computation[#{Tracker.currentComputation?._id}]
                 can't get key #{JSON.stringify key} of inactive #{@constructor.name}: #{@}"
 
         if @fineGrained
@@ -157,7 +160,7 @@ class J.Dict
                     @_initFieldVar key
                 @_fields[key].get()
             else if force
-                throw new Meteor.Error "#{@constructor.name} missing key: #{J.util.stringify key}"
+                throw new Error "#{@constructor.name} missing key: #{J.util.stringify key}"
             else
                 undefined
         else
@@ -296,7 +299,7 @@ class J.Dict
 
     forEach: (f) ->
         # Returns an array
-        i = 0
+        i = -1
         for key, value of @getFields()
             i += 1
             f key, value, i
@@ -331,6 +334,9 @@ class J.Dict
 
 
     hasKey: (key) ->
+        unless _.isString key
+            throw new Error "Can't call hasKey on non-string key: #{key}"
+
         if @fineGrained
             @_keysDep.depend()
             key of @_fields
@@ -356,7 +362,7 @@ class J.Dict
     set: (fields) ->
         setter = Tracker.currentComputation
         if not @isActive()
-            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+            throw new Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
@@ -367,9 +373,9 @@ class J.Dict
             fields[fieldName] = value
             ret = value # This type of setter returns the value
         unless J.util.isPlainObject fields
-            throw new Meteor.Error "Invalid setter: #{fields}"
+            throw new Error "Invalid setter: #{fields}"
         if @readOnly
-            throw new Meteor.Error "#{@constructor.name} is read-only"
+            throw new Error "#{@constructor.name} is read-only"
 
         @_forceSet fields
         ret
@@ -378,7 +384,7 @@ class J.Dict
     setOrAdd: (fields) ->
         setter = Tracker.currentComputation
         if not @isActive()
-            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+            throw new Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         ret = undefined
         if not J.util.isPlainObject(fields) and arguments.length > 1
@@ -389,9 +395,9 @@ class J.Dict
             fields[fieldName] = value
             ret = value # This type of setter returns the value
         unless J.util.isPlainObject fields
-            throw new Meteor.Error "Invalid setter: #{fields}"
+            throw new Error "Invalid setter: #{fields}"
         if @readOnly
-            throw new Meteor.Error "#{@constructor.name} instance is read-only"
+            throw new Error "#{@constructor.name} instance is read-only"
 
         setters = {}
         for key, value of fields
@@ -412,7 +418,7 @@ class J.Dict
     size: ->
         # TODO: Finer-grained reactivity
         if not @isActive()
-            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
+            throw new Error "Can't get size of inactive #{@constructor.name}: #{@}"
 
         keys = @getKeys()
         if keys is undefined then undefined else keys.length
@@ -491,7 +497,7 @@ class J.Dict
         else if J.util.isPlainObject dictOrObj
             dictOrObj
         else
-            throw new Meteor.Error "#{@constructor.name} can't unwrap #{dictOrObj}"
+            throw new Error "#{@constructor.name} can't unwrap #{dictOrObj}"
 
 
     @wrap: (dictOrObj) ->
@@ -500,4 +506,4 @@ class J.Dict
         else if J.util.isPlainObject dictOrObj
             @ dictOrObj
         else
-            throw new Meteor.Error "#{@constructor.name} can't wrap #{dictOrObj}"
+            throw new Error "#{@constructor.name} can't wrap #{dictOrObj}"

@@ -238,7 +238,8 @@ updateObservers = (dataSessionId) ->
                 if included
                     reactiveValue = value[reactiveName]?.val
                     reactiveTs = value[reactiveName]?.ts
-                    reactiveDirty = value[reactiveName]?.dirty ? true
+                    reactiveExpire = value[reactiveName]?.expire
+                    reactiveDirty = not reactiveExpire? or (reactiveExpire instanceof Date and reactiveExpire < new Date())
 
                     needsRecalc = false
                     if reactiveDirty
@@ -247,7 +248,8 @@ updateObservers = (dataSessionId) ->
                             continue if reactiveName not of qssReactivesObj
                             qssVal = qssReactivesObj[reactiveName].val
                             qssTs = qssReactivesObj[reactiveName].ts
-                            qssDirty = qssReactivesObj[reactiveName].dirty ? true
+                            qssExpire = qssReactivesObj[reactiveName].expire
+                            qssDirty = not qssExpire? or (qssExpire instanceof Date and qssExpire < new Date())
 
                             if not qssDirty and (not reactiveTs? or qssTs > reactiveTs)
                                 # A querySpec still thinks it knows what the reactive
@@ -273,7 +275,7 @@ updateObservers = (dataSessionId) ->
                             reactivesObj[reactiveName] =
                                 val: reactiveValue
                                 ts: reactiveTs
-                                dirty: reactiveDirty
+                                expire: reactiveExpire
 
                         # Else keep publishing the previous value of reactivesObj[reactiveName]
                         # until the recalc task gets popped off the queue asynchronously.
@@ -285,7 +287,7 @@ updateObservers = (dataSessionId) ->
                         reactivesObj[reactiveName] =
                             val: reactiveValue
                             ts: reactiveTs
-                            dirty: reactiveDirty
+                            expire: reactiveExpire
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}

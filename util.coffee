@@ -176,6 +176,16 @@ J.util =
     filter: (list, predicate = _.identity, context) ->
         _.filter list, predicate, context
 
+    flatten: (arr) ->
+        arr = J.List.unwrap arr
+        ret = []
+        for x in arr
+            if x instanceof J.List or _.isArray x
+                ret.push.apply ret, J.util.flatten x
+            else
+                ret.push x
+        ret
+
     flattenId: (objOrId) ->
         if objOrId instanceof J.Model
             objOrId._id
@@ -251,18 +261,15 @@ J.util =
 
     getNextHour: ->
         nextHour = new Date()
-        nextHour.set
-            hour:
-                if (
-                    nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
-                        nextHour.getMilliseconds() is 0
-                )
-                    nextHour.getHours()
-                else
-                    (nextHour.getHours() + 1) % 24
-            minute: 0
-            second: 0
-            millisecond: 0
+        unless (
+            nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
+            nextHour.getMilliseconds() is 0
+        )
+            nextHour.set
+                minute: 0
+                second: 0
+                millisecond: 0
+            nextHour.addHours 1
         nextHour
 
     getUrlWithExtraParams: (url, extraParams) ->
@@ -314,7 +321,7 @@ J.util =
         for value in arr
             key = keyFunc value
             if key of dictSet
-                throw new Error 'Duplicate key'
+                throw new Error "Duplicate key: #{key}"
             dictSet[key] = value
         dictSet
 

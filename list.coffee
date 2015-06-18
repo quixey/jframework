@@ -36,7 +36,7 @@ class J.List
         else if not values?
             arr = []
         else
-            throw new Meteor.Error "#{@constructor} values argument must be a List or
+            throw new Error "#{@constructor} values argument must be a List or
                 array. Got: #{values}"
 
         # Check for undefined
@@ -167,7 +167,7 @@ class J.List
             @_setCompact false
 
         if not @isActive()
-            throw new Meteor.Error "Can't set value of inactive #{@constructor.name}: #{@}"
+            throw new Error "Can't set value of inactive #{@constructor.name}: #{@}"
 
         size = Tracker.nonreactive => @size()
         if index < 0
@@ -371,11 +371,11 @@ class J.List
 
     get: (index) ->
         if not @isActive()
-            throw new Meteor.Error "Computation #{Tracker.currentComputation?._id}
+            throw new Error "Computation #{Tracker.currentComputation?._id}
                 can't get index #{index} of inactive #{@constructor.name}: #{@}"
 
         unless _.isNumber(index) and parseInt(index) is index
-            throw new Meteor.Error "Index must be an int"
+            throw new Error "Index must be an int"
 
         size = Tracker.nonreactive => @size()
 
@@ -383,7 +383,7 @@ class J.List
             index = size + index
 
         unless 0 <= index < size
-            throw new Meteor.Error "List index out of range"
+            throw new Error "List index out of range"
 
         @_get index
 
@@ -490,7 +490,7 @@ class J.List
 
     set: (index, value) ->
         if @readOnly
-            throw new Meteor.Error "#{@constructor.name} instance is read-only"
+            throw new Error "#{@constructor.name} instance is read-only"
 
         @_set index, value
 
@@ -531,7 +531,7 @@ class J.List
 
     size: ->
         if not @isActive()
-            throw new Meteor.Error "Can't get size of inactive #{@constructor.name}: #{@}"
+            throw new Error "Can't get size of inactive #{@constructor.name}: #{@}"
 
         if @_valuesVar?
             @_valuesVar.get().length
@@ -593,7 +593,7 @@ class J.List
         else if _.isArray listOrArr
             listOrArr
         else
-            throw new Meteor.Error "#{@constructor.name} can't unwrap #{listOrArr}"
+            throw new Error "#{@constructor.name} can't unwrap #{listOrArr}"
 
 
     @wrap: (listOrArr) ->
@@ -602,4 +602,4 @@ class J.List
         else if _.isArray listOrArr
             @ listOrArr
         else
-            throw new Meteor.Error "#{@constructor.name} can't wrap #{listOrArr}"
+            throw new Error "#{@constructor.name} can't wrap #{listOrArr}"
