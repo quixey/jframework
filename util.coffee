@@ -176,6 +176,16 @@ J.util =
     filter: (list, predicate = _.identity, context) ->
         _.filter list, predicate, context
 
+    flatten: (arr) ->
+        arr = J.List.unwrap arr
+        ret = []
+        for x in arr
+            if x instanceof J.List or _.isArray x
+                ret.push.apply ret, J.util.flatten x
+            else
+                ret.push x
+        ret
+
     flattenId: (objOrId) ->
         if objOrId instanceof J.Model
             objOrId._id

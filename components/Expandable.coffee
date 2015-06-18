@@ -19,6 +19,9 @@ J.dc 'Expandable',
             default: false
         iconSize:
             default: 14
+        iconStyle:
+            type: $$.style
+            default: {}
         onChange:
             type: $$.func
         style:
@@ -59,10 +62,13 @@ J.dc 'Expandable',
 
                 $$ ('td'),
                     style:
-                        verticalAlign: 'top'
-                        width: 18
-                        paddingRight: 4
-                        cursor: 'pointer'
+                        _.extend(
+                            verticalAlign: 'top'
+                            width: 18
+                            paddingRight: 4
+                            cursor: 'pointer'
+                            @prop.iconStyle()
+                        )
                     onClick:
                         if @expanded()
                             (e) => handleChangeEvent false
