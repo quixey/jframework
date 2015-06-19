@@ -1,3 +1,98 @@
+addNewQuerySpecMergingTest = (input, expectedOutput, description='New QuerySpec merging test') ->
+    Tinytest.add description, (test) ->
+        test.equal EJSON.stringify(J.fetching.getMerged(input)), EJSON.stringify(expectedOutput)
+
+addNewQuerySpecMergingTest(
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+    ,
+        modelName: 'Foo'
+        selector:
+            b: 1
+    ]
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+    ,
+        modelName: 'Foo'
+        selector:
+            b: 1
+    ]
+    'No merging of non-overlapping selectors'
+)
+
+addNewQuerySpecMergingTest(
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+    ,
+        modelName: 'Bar'
+        selector:
+            a: 1
+    ]
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+    ,
+        modelName: 'Bar'
+        selector:
+            a: 1
+    ]
+    'No merging of different modelNames'
+)
+
+addNewQuerySpecMergingTest(
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+    ,
+        modelName: 'Foo'
+        selector:
+            a: 2
+    ,
+        modelName: 'Foo'
+        selector:
+            a: 3
+    ]
+    [
+        modelName: 'Foo'
+        selector:
+            a: $in: [1, 2, 3]
+    ]
+    'Merging of overlapping selectors, transforming to $in'
+)
+
+addNewQuerySpecMergingTest(
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+        fields:
+            _: false
+    ,
+        modelName: 'Foo'
+        selector:
+            a: 1
+        fields:
+            _: true
+    ]
+    [
+        modelName: 'Foo'
+        selector:
+            a: 1
+        fields:
+            _: true
+    ]
+    'Merging of projections, default fields being true'
+)
+
+
 Tinytest.add 'QuerySpec merging', (test) ->
     testEqual = (a, b) ->
         test.equal EJSON.stringify(a), EJSON.stringify(b)
