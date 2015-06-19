@@ -210,17 +210,18 @@ class J.Model
         #     filtered down to only the denormed reactives
         #     we cared to fetch.
 
-        @_reactives = reactivesObj
-
         reactivesSetter = {}
 
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
             if reactiveSpec.denorm and reactiveName of reactivesObj
-                reactiveValue = @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
-                reactivesSetter[reactiveName] = reactiveValue
-                if reactivesSetter[reactiveName] is undefined
-                    reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
+                oldRawValue = @_reactives?[reactiveName]?.val
+                if not EJSON.equals oldRawValue, reactivesObj[reactiveName].val
+                    reactiveValue = @modelClass._getUnescapedSubdoc reactivesObj[reactiveName].val
+                    reactivesSetter[reactiveName] = reactiveValue
+                    if reactivesSetter[reactiveName] is undefined
+                        reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
 
+        @_reactives = reactivesObj
         @reactives._forceSet reactivesSetter
 
 

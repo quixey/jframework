@@ -210,8 +210,14 @@ updateObservers = (dataSessionId) ->
 
     getField = (modelName, id, fieldName) ->
         fieldValueByQsString = fieldsByModelIdQuery[modelName][id][fieldName] ? {}
-        _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
-
+        value = _.values(fieldValueByQsString).reduce getMergedSubfields, undefined
+        if fieldName is '_reactives'
+            for reactiveName, reactiveObj of value
+                # Don't send the client other fields (ts and expire)
+                # so that we can save a bunch of unnecessary @change calls
+                value[reactiveName] =
+                    val: reactiveObj.val
+        value
 
     setField = (modelName, id, fieldName, querySpec, value) ->
         modelClass = J.models[modelName]

@@ -142,8 +142,6 @@ J.denorm =
 
         escapedSubdoc = J.Model._getEscapedSubdoc unwrappedValue
 
-        console.log "...done with meat of recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
-
         # denormCallback=false means the caller will worry about doing resetWatchers later
         # Otherwise denormCallback=null or denormCallback=<function>
         if denormCallback isnt false
