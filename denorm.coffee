@@ -164,7 +164,10 @@ J.denorm =
             J.fetching.parseQs qsString for qsString in watchedQsStrings
         )
 
-        mergedWatchedQuerySpecs = watchedQuerySpecs # J.fetching.getMerged watchedQuerySpecs too slow
+        time = new Date()
+        mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
+        # mergedWatchedQuerySpecs = watchedQuerySpecs
+
         # FIXME: Merging optimizations
         # console.log '...got merged', mergedWatchedQuerySpecs.length
 
