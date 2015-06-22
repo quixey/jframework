@@ -408,8 +408,13 @@ _.extend J.fetching,
                     for s, val of qs.selector
                         if selector[s].$in is undefined
                             selector[s] = { $in: [selector[s]] }
-                        unless val in selector[s].$in
-                            selector[s].$in.push val
+                        if val.$in is undefined
+                            unless val in selector[s].$in
+                                selector[s].$in.push val
+                        else
+                            for v in val.$in
+                                unless v in selector[s].$in
+                                    selector[s].$in.push v
                     merged = true
                     break
             if not merged
