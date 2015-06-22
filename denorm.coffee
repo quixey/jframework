@@ -164,7 +164,6 @@ J.denorm =
             J.fetching.parseQs qsString for qsString in watchedQsStrings
         )
 
-        time = new Date()
         mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
         # mergedWatchedQuerySpecs = watchedQuerySpecs
 
