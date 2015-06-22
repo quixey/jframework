@@ -390,6 +390,29 @@ _.extend J.fetching,
                     result.push spec
             result
 
+        mergeSelectorExpressions = (expr1, expr2) ->
+            # TODO: More sophisticated merging of selector expressions.
+            #       Currently, we just ignore everything except $in.
+            #       This method is completely separate from the rest of
+            #       the logic, so there should not be any complications.
+            #       We should try to merge $eq, $ne, $lt, $gt.
+            if not _.isObject(expr1) and not _.isObject(expr2)
+                $in: [exp1, expr2]
+            else if _.isObject expr1
+                if expr1.$in is undefined
+                    return { $ne: null }
+                result = { $in: expr1.$in }
+                if _.isObject expr2
+                    if expr2.$in is undefined
+                        return { $ne: null }
+                    else
+                        result.$in = result.$in.concat expr2.$in
+                else
+                    result.$in.push expr2
+                result
+            else
+                mergeSelectorExpressions expr2, expr1
+
         getMergedSelectors = (querySpecs) ->
             selectorAndFieldsByModel = {}
             result = []
@@ -400,36 +423,37 @@ _.extend J.fetching,
                 selectorAndFields = selectorAndFieldsByModel[qs.modelName] ?= []
                 merged = false
                 for [selector, fields] in selectorAndFields
-                    if _.isEqual(qs.fields, fields) and
-                            (qs.selector is selector or                                            # same selectors or
-                                (_.isObject(qs.selector) and _.isObject(selector) and
-                                _.size(_.difference(_.keys(qs.selector), _.keys(selector))) is 0)) # same selected fields
-                        if qs.selector isnt selector
-                            # merging qs.selector into selector (both are objects)
-                            for s, val of qs.selector
-                                if _.isObject val
-                                    if val.$in and _.keys(val).length is 1
-                                        # val is just { $in: ... }
-                                        if _.isObject selector[s]
-                                            if selector[s].$in and _.keys(selector[s]).length is 1
-                                                # selector[s] is also just { $in: ... }
-                                                selector[s].$in = selector[s].$in.concat val.$in
-                                            else
-                                                selector[s] = $or: [selector[s], val]
-                                        else # selector[s] is not an object
-                                            val.$in.push selector[s]
-                                            selector[s] = val
-                                    else
-                                        selector[s] = $or: [selector[s], val]
-                                else # val is not an object
+                    if not _.isEqual(qs.fields, fields)
+                        continue
+                    if _.isEqual(qs.selector, selector)
+                        merged = true
+                        break
+                    if _.isObject(qs.selector) and _.isObject(selector) and
+                            _.size(_.difference(_.keys(qs.selector), _.keys(selector))) is 0 # same selected fields
+                        for s, val of qs.selector
+                            if _.isObject val
+                                if val.$in isnt undefined and _.keys(val).length is 1
+                                    # val is just { $in: ... }
                                     if _.isObject selector[s]
-                                        if selector[s].$in and _.keys(selector[s]).length is 1
-                                            # selector[s] is just { $in: ... }
-                                            selector[s].$in.push val
+                                        if selector[s].$in isnt undefined and _.keys(selector[s]).length is 1
+                                            # selector[s] is also just { $in: ... }
+                                            selector[s].$in = selector[s].$in.concat val.$in
                                         else
-                                            selector[s] = $or: [selector[s], val]
-                                    else # selector[s] is also not an object
-                                        selector[s] = $in: [selector[s], val]
+                                            selector[s] = mergeSelectorExpressions selector[s], val
+                                    else # selector[s] is not an object
+                                        val.$in.push selector[s]
+                                        selector[s] = val
+                                else
+                                    selector[s] = mergeSelectorExpressions selector[s], val
+                            else # val is not an object
+                                if _.isObject selector[s]
+                                    if selector[s].$in isnt undefined and _.keys(selector[s]).length is 1
+                                        # selector[s] is just { $in: ... }
+                                        selector[s].$in.push val
+                                    else
+                                        selector[s] = mergeSelectorExpressions selector[s], val
+                                else # selector[s] is also not an object
+                                    selector[s] = $in: [selector[s], val]
                         merged = true
                         break
                 if not merged
