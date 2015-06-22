@@ -397,7 +397,7 @@ _.extend J.fetching,
             #       the logic, so there should not be any complications.
             #       We should try to merge $eq, $ne, $lt, $gt.
             if not _.isObject(expr1) and not _.isObject(expr2)
-                $in: [exp1, expr2]
+                $in: [expr1, expr2]
             else if _.isObject expr1
                 if expr1.$in is undefined
                     return { $ne: null }
@@ -431,29 +431,7 @@ _.extend J.fetching,
                     if _.isObject(qs.selector) and _.isObject(selector) and
                             _.size(_.difference(_.keys(qs.selector), _.keys(selector))) is 0 # same selected fields
                         for s, val of qs.selector
-                            if _.isObject val
-                                if val.$in isnt undefined and _.keys(val).length is 1
-                                    # val is just { $in: ... }
-                                    if _.isObject selector[s]
-                                        if selector[s].$in isnt undefined and _.keys(selector[s]).length is 1
-                                            # selector[s] is also just { $in: ... }
-                                            selector[s].$in = selector[s].$in.concat val.$in
-                                        else
-                                            selector[s] = mergeSelectorExpressions selector[s], val
-                                    else # selector[s] is not an object
-                                        val.$in.push selector[s]
-                                        selector[s] = val
-                                else
-                                    selector[s] = mergeSelectorExpressions selector[s], val
-                            else # val is not an object
-                                if _.isObject selector[s]
-                                    if selector[s].$in isnt undefined and _.keys(selector[s]).length is 1
-                                        # selector[s] is just { $in: ... }
-                                        selector[s].$in.push val
-                                    else
-                                        selector[s] = mergeSelectorExpressions selector[s], val
-                                else # selector[s] is also not an object
-                                    selector[s] = $in: [selector[s], val]
+                            selector[s] = mergeSelectorExpressions selector[s], val
                         merged = true
                         break
                 if not merged
