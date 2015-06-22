@@ -157,7 +157,7 @@ J.denorm =
                     val: escapedSubdoc
                 J.denorm.resetWatchers instance.modelClass.name, instance._id, oldDoc, newDoc, timestamp, denormCallback
 
-        # console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
+        console.log "...done recalc <#{instance.modelClass.name} #{JSON.stringify instance._id}>.#{reactiveName}"
 
         watchedQsStrings = J.util.sortByKey _.keys watchedQuerySpecSet
         watchedQuerySpecs = (
@@ -165,10 +165,8 @@ J.denorm =
         )
 
         mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
-        # mergedWatchedQuerySpecs = watchedQuerySpecs
 
-        # FIXME: Merging optimizations
-        # console.log '...got merged', mergedWatchedQuerySpecs.length
+        console.log "...merged #{watchedQuerySpecs.length} down to #{mergedWatchedQuerySpecs.length}"
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
