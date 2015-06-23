@@ -361,6 +361,7 @@ _.extend J.fetching,
                         so that the fetch also works as expected on the client."
 
     getMerged: (querySpecs) ->
+        querySpecs = J.util.deepClone querySpecs
         getMergedFields = (querySpecs) ->
             selectorAndFieldsByModel = {}
             result = []
