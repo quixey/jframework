@@ -102,7 +102,10 @@ Meteor.methods
 
         session.updateObserversFiber = Fiber.current
         updateObservers.call dataSessionPublisherContexts[dataSessionId], dataSessionId
-        session.updateObserversFiber = null
+        ### TODO: What exactly is going on here? Seems to be forcing GC
+            which is causing a zombie Fiber.
+        ###
+        # session.updateObserversFiber = null
 
         jDataSession = new $$.JDataSession
             _id: dataSessionId
