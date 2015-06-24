@@ -276,6 +276,12 @@ if Meteor.isClient then Tinytest.addAsync "Client-side denormalization - A -> B"
                     bar.remove()
                     _.defer onComplete
         )
+    setTimeout(
+        ->
+            test.fail()
+            onComplete()
+        1
+    )
 
 if Meteor.isServer then Tinytest.add "ResetWatchers - be smart about projections", (test) ->
     # Accesses each reactive of a `fooWatcher`

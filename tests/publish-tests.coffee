@@ -350,7 +350,10 @@ addTest "Fetching - throw out of AutoVar valueFunc when missing fetch data", (te
     a = J.AutoVar(
         ->
             count1 += 1
-            if count1 is 5 then crash
+            if count1 >= 5
+                test.fail()
+                onComplete()
+                return null
             smallFoos = $$.Foo.fetch(
                 b: $lte: 3
             ,

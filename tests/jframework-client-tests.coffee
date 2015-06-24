@@ -135,7 +135,7 @@ Tinytest.add "Component with map", (test) ->
 
 
 
-Tinytest.addAsync "_lastTest", (test, onComplete) ->
+Tinytest.addAsync "_lastTest", (test, onComplete) -> onComplete()
 
 
 
