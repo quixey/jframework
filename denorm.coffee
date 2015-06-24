@@ -167,8 +167,6 @@ J.denorm =
         mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
 
         console.log "...merged #{watchedQuerySpecs.length} down to #{mergedWatchedQuerySpecs.length}"
-        if watchedQuerySpecs.length > 1
-            console.log JSON.stringify mergedWatchedQuerySpecs, null, 4
 
         setter = {}
         setter["_reactives.#{reactiveName}"] =
