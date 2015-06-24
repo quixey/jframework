@@ -67,7 +67,7 @@ J.dc 'Expandable',
                             width: 18
                             paddingRight: 4
                             cursor: 'pointer'
-                            @prop.iconStyle()
+                            @prop.iconStyle().toObj()
                         )
                     onClick:
                         if @expanded()

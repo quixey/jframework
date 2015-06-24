@@ -325,14 +325,16 @@ J.util =
             dictSet[key] = value
         dictSet
 
-    makeSet: (arr, keySpec = _.identity) ->
+    makeSet: (arr, keySpec = _.identity, allowDups = false) ->
         keyFunc = J.util._makeKeyFunc keySpec
         dictSet = {}
         for value in arr
             key = keyFunc value
             if key of dictSet
-                throw new Error 'Duplicate key'
-            dictSet[key] = true
+                if not allowDups
+                    throw new Error "Duplicate key: #{key}"
+            else
+                dictSet[key] = true
         dictSet
 
     makeParamString: (params) ->
