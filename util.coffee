@@ -293,8 +293,11 @@ J.util =
         ret = {}
         for x in arr
             key = keyFunc x
-            ret[key] ?= []
-            ret[key].push x
+            if key is undefined
+                throw new Error "groupByKey got undefined value for #{key}"
+            else if key isnt null
+                ret[key] ?= []
+                ret[key].push x
         ret
 
     invalidateAtTime: (ms) ->
@@ -315,14 +318,16 @@ J.util =
         return false if obj._isReactElement
         true
 
-    makeObj: (arr, keySpec = 'key') ->
+    makeObj: (arr, keySpec = 'key', dropDups = false) ->
         keyFunc = J.util._makeKeyFunc keySpec
         dictSet = {}
         for value in arr
             key = keyFunc value
             if key of dictSet
-                throw new Error "Duplicate key: #{key}"
-            dictSet[key] = value
+                if not dropDups
+                    throw new Error "Duplicate key: #{key}"
+            else
+                dictSet[key] = value
         dictSet
 
     makeSet: (arr, keySpec = _.identity, allowDups = false) ->
