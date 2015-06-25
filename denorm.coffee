@@ -528,7 +528,12 @@ Meteor.startup ->
     J.methods
         recalc: (modelName, instanceId, reactiveName) ->
             modelClass = J.models[modelName]
-            instance = modelClass.fetchOne instanceId
+            instance = modelClass.fetchOne(
+                instanceId
+            ,
+                fields:
+                    J.fetching.makeFullProjection modelClass
+            )
             if not instance
                 throw new Meteor.Error "#{modelName} instance ##{instanceId} not found"
 
@@ -536,8 +541,10 @@ Meteor.startup ->
 
         fixMissingReactives: (modelName, reactiveName) ->
             modelClass = J.models[modelName]
-            selector = {}
-            selector["_reactives.#{reactiveName}.expire"] =
+            selector = $or: [{}, {}]
+            selector.$or[0]["_reactives.#{reactiveName}.expire"] =
+                $exists: false
+            selector.$or[1]["_reactives.#{reactiveName}.expire"] =
                 $exists: true
                 $lt: new Date()
 
@@ -545,8 +552,6 @@ Meteor.startup ->
                 instances = modelClass.find(
                     selector
                 ,
-                    fields:
-                        J.fetching.makeFullProjection modelClass
                     limit: 100
                 ).fetch()
                 break if instances.length is 0
