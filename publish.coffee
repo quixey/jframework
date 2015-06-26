@@ -102,10 +102,7 @@ Meteor.methods
 
         session.updateObserversFiber = Fiber.current
         updateObservers.call dataSessionPublisherContexts[dataSessionId], dataSessionId
-        ### TODO: What exactly is going on here? Seems to be forcing GC
-            which is causing a zombie Fiber.
-        ###
-        # session.updateObserversFiber = null
+        session.updateObserversFiber = null
 
         jDataSession = new $$.JDataSession
             _id: dataSessionId
@@ -145,18 +142,33 @@ Meteor.publish '_jdata', (dataSessionId) ->
 
     @onStop =>
         console.log "[#{dataSessionId}] PUBLISHER STOPPED"
-        session.observerByQsString().forEach (qsString, observer) =>
-            observer.stop()
-        session.stop()
 
-        if session.updateObserversFiber?
-            console.warn "Uh oh, we were in the middle of updating observers."
-            session.updateObserversFiber.reset()
+        removeSession = ->
+            session.stop()
+            delete J._dataSessionFieldsByModelIdQuery[dataSessionId]
+            delete dataSessionPublisherContexts[dataSessionId]
+            delete J._dataSessions[dataSessionId]
+            $$.JDataSession.remove dataSessionId
 
-        delete J._dataSessionFieldsByModelIdQuery[dataSessionId]
-        delete dataSessionPublisherContexts[dataSessionId]
-        delete J._dataSessions[dataSessionId]
-        $$.JDataSession.remove dataSessionId
+        stopObservers = ->
+            session.observerByQsString().forEach (qsString, observer) =>
+                observer.stop()
+
+        if not session.updateObserversFiber? or not session.updateObserversFiber.started
+            console.log "Resetting everything."
+            ###
+            Current Fiber was either never set, or is stopped and ready to be reset.
+            We can stop observers, delete our session, and attempt to restart the Fiber if it exists.
+            ###
+            stopObservers()
+            if session.updateObserversFiber? and not session.updateObserversFiber.started
+                console.warn "Uh oh, we were in the middle of updating observers."
+                session.updateObserversFiber?.reset()
+            removeSession()
+        else if session.updateObserversFiber?.started
+            # Current Fiber is still running. Stop the observers, but keep our session.
+            console.log "Session is still intact."
+            stopObservers()
 
     @ready()
 
@@ -188,7 +200,7 @@ updateObservers = (dataSessionId) ->
 
     fieldsByModelIdQuery = J._dataSessionFieldsByModelIdQuery[dataSessionId]
 
-    
+
     getMergedSubfields = (a, b) ->
         return a if b is undefined
         return b if a is undefined
