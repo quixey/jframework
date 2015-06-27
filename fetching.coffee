@@ -885,6 +885,10 @@ _.extend J.fetching,
                 ).join('.')
                 mongoSelector[reactiveSelectorKey] = selectorValue
 
+            else if fieldOrReactiveName[0] is '$'
+                console.warn "$ expressions aren't fully supported in selectorToMongoSelector"
+                mongoSelector[reactiveSelectorKey] = selectorValue
+
             else
                 throw new Error "#{modelClass} fetch selector contains invalid
                     selectorKey: #{selectorKey}"
