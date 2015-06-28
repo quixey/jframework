@@ -221,6 +221,16 @@ class J.Model
                     if reactivesSetter[reactiveName] is undefined
                         reactivesSetter[reactiveName] = J.makeValueNotReadyObject()
 
+                if reactivesObj[reactiveName].ts is undefined
+                    @reactivesTs.set reactiveName, J.makeValueNotReadyObject()
+                else
+                    @reactivesTs.set reactiveName, reactivesObj[reactiveName].ts
+
+                if reactivesObj[reactiveName].expire is undefined
+                    @reactivesExpire.set reactiveName, J.makeValueNotReadyObject()
+                else
+                    @reactivesExpire.set reactiveName, reactivesObj[reactiveName].expire
+
         @_reactives = reactivesObj
         @reactives._forceSet reactivesSetter
 
@@ -708,9 +718,13 @@ J._defineModel = (modelName, collectionName, members = {}, staticMembers = {}) -
         # The @reactives dict stores the published values of reactives
         # with denorm:true (i.e. server handles all their reactivity).
         @reactives = J.Dict() # denormedReactiveName: value
+        @reactivesTs = J.Dict() # denormedReactiveName: ts
+        @reactivesExpire = J.Dict() # denormedReactiveName: expire
         for reactiveName, reactiveSpec of @modelClass.reactiveSpecs
             if reactiveSpec.denorm
                 @reactives.setOrAdd reactiveName, J.makeValueNotReadyObject()
+                @reactivesTs.setOrAdd reactiveName, J.makeValueNotReadyObject()
+                @reactivesExpire.setOrAdd reactiveName, J.makeValueNotReadyObject()
 
         # @_reactives is a faithful copy of (a subset of keys of) the Mongo doc field
         @_reactives = undefined
