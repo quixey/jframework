@@ -429,7 +429,7 @@ J.denorm =
             if watcherMatcherLength > 10000
                 console.warn "***watcherMatcher for <#{modelName} #{JSON.stringify instanceId}>
                     #{JSON.stringify _.keys mutableOldValues} is #{watcherMatcherLength} chars long"
-                console.log JSON.stringify watcherMatcher
+                console.log J.util.stringifyBrief watcherMatcher
 
             resetCountByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": resetCount
             resetDebugsByModelReactive = {} # "#{watcherModelName}.#{reactiveName}": [debugStrings]

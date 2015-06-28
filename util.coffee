@@ -476,6 +476,29 @@ J.util =
         else
             obj.toString()
 
+    stringifyBrief: (obj, maxFieldChars = 100, depth = 100) ->
+        transform = (x, depth) ->
+            if _.isArray(x) and depth > 0
+                ret = []
+                for y, i in x
+                    ret.push transform y, depth - 1
+                    if J.util.stringify(ret).length > maxFieldChars
+                        ret.pop()
+                        ret.push("...#{x.length - i} more")
+                        break
+                ret
+            else if J.util.isPlainObject(x) and depth > 0
+                ret = {}
+                for k, v of x
+                    ret[k] = transform v, depth - 1
+                ret
+            else if _.isString x
+                "#{x.substring(0, maxFieldChars)}#{if x.length > maxFieldChars then '...' else ''}"
+            else
+                x
+
+        J.util.stringify transform obj, depth
+
     stringifyTag: (tag) ->
         if _.isObject(tag) and "tag" of tag
             @stringifyTag tag.tag

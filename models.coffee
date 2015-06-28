@@ -1016,7 +1016,7 @@ Meteor.methods
         _reserved = modelName in ['JDataSession']
 
         if not _reserved
-            console.log 'jSave', modelName, doc, @isSimulation
+            console.log 'jSave', modelName, J.util.stringifyBrief(doc), @isSimulation
 
         # TODO: Validation
 
