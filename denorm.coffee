@@ -528,16 +528,12 @@ Meteor.startup ->
     J.methods
         recalc: (modelName, instanceId, reactiveName) ->
             modelClass = J.models[modelName]
-            instance = modelClass.fetchOne(
-                instanceId
-            ,
-                fields:
-                    J.fetching.makeFullProjection modelClass
-            )
-            if not instance
+            instance = modelClass.fetchOne instanceId
+            if not instance?
                 throw new Meteor.Error "#{modelName} instance ##{instanceId} not found"
 
-            J.denorm.recalc instance, reactiveName
+            reactiveCalcObj = J.denorm._enqueueReactiveCalc modelName, instanceId, reactiveName
+            reactiveCalcObj.future.wait()
 
         fixMissingReactives: (modelName, reactiveName) ->
             modelClass = J.models[modelName]
