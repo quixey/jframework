@@ -136,7 +136,7 @@ J.denorm =
                 expiryTime = rawValue.expiryTime
             else
                 unwrappedValue = J.Var.deepUnwrap rawValue
-                expiryTime = false # never
+                expiryTime = new Date('2020-01-01')
 
             watchedQuerySpecSet = J._watchedQuerySpecSet.get()
 
@@ -442,9 +442,7 @@ J.denorm =
                     #{JSON.stringify instanceId}>"
 
                 selector = {}
-                selector.$or = [{}, {}]
-                selector.$or[0]["_reactives.#{watcherReactiveName}.expire"] = false
-                selector.$or[1]["_reactives.#{watcherReactiveName}.expire"] = $gt: timestamp
+                selector["_reactives.#{watcherReactiveName}.expire"] = $gt: timestamp
                 selector["_reactives.#{watcherReactiveName}.ts"] = $lt: timestamp
                 selector["_reactives.#{watcherReactiveName}.watching"] = $elemMatch: watcherMatcher
 

@@ -254,7 +254,7 @@ updateObservers = (dataSessionId) ->
                     reactiveValue = value[reactiveName]?.val
                     reactiveTs = value[reactiveName]?.ts
                     reactiveExpire = value[reactiveName]?.expire
-                    reactiveDirty = not reactiveExpire? or (reactiveExpire instanceof Date and reactiveExpire < new Date())
+                    reactiveDirty = not reactiveExpire? or (reactiveExpire < new Date())
 
                     needsRecalc = false
                     if reactiveDirty
@@ -264,7 +264,7 @@ updateObservers = (dataSessionId) ->
                             qssVal = qssReactivesObj[reactiveName].val
                             qssTs = qssReactivesObj[reactiveName].ts
                             qssExpire = qssReactivesObj[reactiveName].expire
-                            qssDirty = not qssExpire? or (qssExpire instanceof Date and qssExpire < new Date())
+                            qssDirty = not qssExpire? or qssExpire < new Date()
 
                             if not qssDirty and (not reactiveTs? or qssTs > reactiveTs)
                                 # A querySpec still thinks it knows what the reactive

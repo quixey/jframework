@@ -293,7 +293,7 @@ class J.Model
 
                     reactiveValue = @reactives.tryGet reactiveName
                     if reactiveValue isnt undefined and J._watchedQuerySpecSet.get()?
-                        if @_reactives[reactiveName].expire isnt false and @_reactives[reactiveName].expire <= new Date()
+                        if @_reactives[reactiveName].expire <= new Date()
                             # Normally we can use dirty values of reactives, but not when
                             # we're in the process of recalculating a different reactive.
                             reactiveValue = undefined
