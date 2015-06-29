@@ -258,7 +258,7 @@ J.denorm =
 
             changedFieldSpecs = []
 
-            makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues) ->
+            makeWatcherMatcher = (instanceId, mutableOldValues, mutableNewValues, isInsertOrDelete) ->
                 # Makes sure every fieldSpec in the watching-selector is consistent
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
@@ -396,11 +396,13 @@ J.denorm =
                 if changeConditions.length is 0
                     return null
 
-                watcherMatcher.$and.push
-                    $or: changeConditions
+                if not isInsertOrDelete
+                    watcherMatcher.$and.push
+                        $or: changeConditions
 
                 watcherMatcher
 
+            isInsertOrDelete = oldDoc._id? isnt newDoc._id?
 
             mutableOldValues = {}
             mutableNewValues = {}
@@ -417,7 +419,7 @@ J.denorm =
                 if not EJSON.equals mutableOldValues[fieldOrReactiveName], mutableNewValues[fieldOrReactiveName]
                     changedFieldSpecs.push fieldOrReactiveName
 
-            watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues
+            watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues, isInsertOrDelete
             console.log "ResetWatchersHelper: <#{modelName} #{JSON.stringify instanceId}> with changes to
                 #{JSON.stringify changedFieldSpecs}"
 
@@ -507,12 +509,13 @@ J.denorm =
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
-                    if watcherReactiveSpec.denorm and watcherReactiveSpec.autoDirty? and _.any(
-                        for fieldOrReactiveName in changedFieldSpecs
-                            (
-                                "#{modelName}.#{fieldOrReactiveName}" in watcherReactiveSpec.autoDirty or
-                                modelName in watcherReactiveSpec.autoDirty
-                            )
+                    if watcherReactiveSpec.denorm and watcherReactiveSpec.autoDirty? and (
+                        (modelName in watcherReactiveSpec.autoDirty) or
+                        (isInsertOrDelete and "#{modelName}._id" in watcherReactiveSpec.autoDirty) or
+                        _.any(
+                            for fieldOrReactiveName in changedFieldSpecs
+                                "#{modelName}.#{fieldOrReactiveName}" in watcherReactiveSpec.autoDirty
+                        )
                     )
                         resetWatcherDocs watcherModelName, watcherReactiveName
 

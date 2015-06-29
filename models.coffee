@@ -1062,10 +1062,11 @@ Meteor.methods
 
         else
             isNew = true
-            oldDoc = {_id: doc._id}
+            oldDoc = {}
             modelClass.collection.insert doc
 
         newDoc = J.util.deepClone oldDoc
+        newDoc._id = doc._id
         for fieldName, newValue of fields
             if newValue isnt undefined
                 newDoc[fieldName] = newValue
@@ -1075,13 +1076,20 @@ Meteor.methods
 
         if not _reserved
             if isNew
+                futureByReactiveName = {}
+
                 # Initialize all the reactives
                 for reactiveName, reactiveSpec of modelClass.reactiveSpecs
                     if reactiveSpec.denorm
                         reactiveCalcObj = J.denorm._enqueueReactiveCalc modelName, instance._id, reactiveName, null, false
-                        reactiveValue = reactiveCalcObj.future.wait()
-                        newDoc._reactives[reactiveName] =
-                            val: J.Model._getEscapedSubdoc J.Var.deepUnwrap reactiveValue
+                        futureByReactiveName[reactiveName] = reactiveCalcObj.future
+
+                Future.wait _.values futureByReactiveName
+
+                for reactiveName, future of futureByReactiveName
+                    reactiveValue = future.get()
+                    newDoc._reactives[reactiveName] =
+                        val: J.Model._getEscapedSubdoc J.Var.deepUnwrap reactiveValue
 
             J.denorm.resetWatchers modelName, doc._id, oldDoc, newDoc, new Date(), options.denormCallback
 
@@ -1116,9 +1124,7 @@ Meteor.methods
         ret = modelClass.collection.remove instanceId
 
         if not _reserved
-            oldFields = _.clone doc
-            delete oldFields._reactives
-            J.denorm.resetWatchers modelName, instanceId, oldFields, {}
+            J.denorm.resetWatchers modelName, instanceId, doc, {}
 
         instance = modelClass.fromDoc doc
         instance.onRemove?()
