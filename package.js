@@ -9,7 +9,7 @@
 Package.describe({
     summary: "JFramework for Meteor + React",
     name: "quixey:jframework",
-    version: "1.4.7",
+    version: "1.4.8",
     git: "https://github.com/quixey/jframework.git"
 });
 

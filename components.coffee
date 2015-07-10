@@ -674,7 +674,9 @@ J._defineComponent = (componentName, componentSpec) ->
         "<#{componentName}-#{@_componentId}>"
 
 
-    J.components[componentName] = React.createClass reactSpec
+    componentClass = React.createClass reactSpec
+    componentClass.propSpecs = propSpecs
+    J.components[componentName] = componentClass
 
 
 componentDebugTaggingFlag = true
