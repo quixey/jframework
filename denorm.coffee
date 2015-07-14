@@ -102,6 +102,7 @@ J.denorm =
                 indexFieldsSpec["_reactives.#{reactiveName}.expire"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.ts"] = -1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.*DOLLAR*in"] = 1
 
                 reactiveModelClass.collection._ensureIndex(
                     indexFieldsSpec
@@ -165,6 +166,12 @@ J.denorm =
         )
 
         mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
+
+        # Change {_id: X} to {_id: $in: [X]} to be able to query on just
+        # _reactives.#{reactiveName}.watching._id.*DOLLAR*in.
+        for qs in mergedWatchedQuerySpecs
+            if _.isString qs.selector?._id
+                qs.selector._id = $in: [qs.selector._id]
 
         console.log "...merged #{watchedQuerySpecs.length} down to #{mergedWatchedQuerySpecs.length}"
 
@@ -264,8 +271,6 @@ J.denorm =
                 subfieldSelectorMatcher = [
                     $or: [
                         'selector._id': $exists: false
-                    ,
-                        'selector._id': instanceId
                     ,
                         'selector._id.*DOLLAR*in': instanceId
                     ]
