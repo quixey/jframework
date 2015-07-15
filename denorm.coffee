@@ -99,14 +99,14 @@ J.denorm =
                 continue if not reactiveSpec.denorm
 
                 indexFieldsSpec = {}
-                indexFieldsSpec["_reactives.#{reactiveName}.expire"] = 1
-                indexFieldsSpec["_reactives.#{reactiveName}.ts"] = -1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.*DOLLAR*in"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.expire"] = 1
+                indexFieldsSpec["_reactives.#{reactiveName}.ts"] = -1
 
                 reactiveModelClass.collection._ensureIndex(
                     indexFieldsSpec
-                    name: "_jReactiveWatcher_#{reactiveName}"
+                    name: "_jReactiveWatcher_#{reactiveName}_improved"
                     sparse: true
                 )
 
@@ -270,7 +270,7 @@ J.denorm =
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
                     $or: [
-                        'selector._id': $exists: false
+                        'selector._id.*DOLLAR*in': $exists: false
                     ,
                         'selector._id.*DOLLAR*in': instanceId
                     ]

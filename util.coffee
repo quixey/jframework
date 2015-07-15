@@ -259,8 +259,8 @@ J.util =
 
         value
 
-    getNextHour: ->
-        nextHour = new Date()
+    getNextHour: (date = new Date()) ->
+        nextHour = date.clone()
         unless (
             nextHour.getMinutes() is 0 and nextHour.getSeconds() is 0 and
             nextHour.getMilliseconds() is 0
