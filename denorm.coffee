@@ -426,7 +426,7 @@ J.denorm =
 
             watcherMatcher = makeWatcherMatcher instanceId, mutableOldValues, mutableNewValues, isInsertOrDelete
             console.log "ResetWatchersHelper: <#{modelName} #{JSON.stringify instanceId}> with changes to
-                #{JSON.stringify changedFieldSpecs}"
+                #{JSON.stringify changedFieldSpecs}#{if isInsertOrDelete then ' (insert/delete)' else ''}"
 
             if not watcherMatcher?
                 semaRelease()

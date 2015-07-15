@@ -1050,7 +1050,7 @@ Meteor.methods
                 isNew = false
             else
                 isNew = true
-                oldDoc = {_id: doc._id}
+                oldDoc = {}
 
             setter = {}
             for fieldName, newValue of fields
