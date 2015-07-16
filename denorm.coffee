@@ -110,6 +110,19 @@ J.denorm =
                     sparse: true
                 )
 
+                expireIndex = {}
+                expireIndex["_reactives.#{reactiveName}.expire"] = 1
+                reactiveModelClass.collection._ensureIndex(
+                    expireIndex
+                    name: "_jReactiveWatcher_#{reactiveName}_expire_1"
+                )
+                tsIndex = {}
+                tsIndex["_reactives.#{reactiveName}.ts"] = -1
+                reactiveModelClass.collection._ensureIndex(
+                    tsIndex
+                    name: "_jReactiveWatcher_#{reactiveName}_ts_-1"
+                )
+
 
     recalc: (instance, reactiveName, timestamp = new Date(), denormCallback) ->
         # Sets _reactives.#{reactiveName}.val and .watchers
