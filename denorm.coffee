@@ -101,12 +101,10 @@ J.denorm =
                 indexFieldsSpec = {}
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.modelName"] = 1
                 indexFieldsSpec["_reactives.#{reactiveName}.watching.selector._id.*DOLLAR*in"] = 1
-                indexFieldsSpec["_reactives.#{reactiveName}.expire"] = 1
-                indexFieldsSpec["_reactives.#{reactiveName}.ts"] = -1
 
                 reactiveModelClass.collection._ensureIndex(
                     indexFieldsSpec
-                    name: "_jReactiveWatcher_#{reactiveName}_improved"
+                    name: "_jReactiveWatcher_#{reactiveName}__id"
                     sparse: true
                 )
 
@@ -167,11 +165,13 @@ J.denorm =
 
         mergedWatchedQuerySpecs = J.fetching.getMerged watchedQuerySpecs
 
-        # Change {_id: X} to {_id: $in: [X]} to be able to query on just
-        # _reactives.#{reactiveName}.watching._id.*DOLLAR*in.
+        # Change {selector: X} to {selector: $in: [X]} to be able to query on just
+        # _reactives.#{reactiveName}.watching.#{selector}.*DOLLAR*in.
         for qs in mergedWatchedQuerySpecs
-            if _.isString qs.selector?._id
-                qs.selector._id = $in: [qs.selector._id]
+            if qs.selector?
+                for fieldSpec, fieldMatcher of qs.selector
+                    if not J.util.isPlainObject fieldMatcher
+                        qs.selector[fieldSpec] = $in: [fieldMatcher]
 
         console.log "...merged #{watchedQuerySpecs.length} down to #{mergedWatchedQuerySpecs.length}"
 
@@ -212,53 +212,27 @@ J.denorm =
             modelClass = J.models[modelName]
 
             makeTermMatcher = (selectorKey, mustExist, possibleValues) ->
-                equalityClause = {}
-                equalityClause[selectorKey] =
-                    $exists: true
-                    $in: []
-
-                inClause = {}
-                inClause["#{selectorKey}.*DOLLAR*in"] =
-                    $elemMatch: $in: []
+                usablePossibleValues = []
 
                 for value in possibleValues
                     # NOTE: We don't support equality matching on objects
                     continue if J.util.isPlainObject value
 
-                    allOk = true
-
                     if _.isArray value
-                        for elem in value
-                            # NOTE: We don't support equality matching on nested arrays
-                            # or objects in arrays
+                        # Let's not support equality matching on entire arrays;
+                        # only the elements within them.
+                    else
+                        usablePossibleValues.push value
 
-                            if _.isArray(elem) or J.util.isPlainObject(elem)
-                                allOk = false
-                            else
-                                equalityClause[selectorKey].$in.push elem
-                                inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push elem
+                return null if usablePossibleValues.length is 0
 
-                    if allOk
-                        if _.isArray value
-                            # Actually let's not support equality matching on entire arrays;
-                            # only the elements within them.
-                        else
-                            equalityClause[selectorKey].$in.push value
-                            inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.push value
-
-                termMatcher = $or: []
-                if equalityClause[selectorKey].$in.length
-                    termMatcher.$or.push equalityClause
-                if inClause["#{selectorKey}.*DOLLAR*in"].$elemMatch.$in.length
-                    termMatcher.$or.push inClause
-
-                # Selector is meaningless for unmatchable values
-                return null if not termMatcher.$or.length
-
-                if not mustExist
-                    doesntExistClause = {}
-                    doesntExistClause[selectorKey] = $exists: false
-                    termMatcher.$or.push doesntExistClause
+                if mustExist
+                    termMatcher = {}
+                    termMatcher["#{selectorKey}.*DOLLAR*in"] = $elemMatch: $in: usablePossibleValues
+                else
+                    termMatcher = $or: [{}, {}]
+                    termMatcher.$or[0]["#{selectorKey}.*DOLLAR*in"] = null
+                    termMatcher.$or[1]["#{selectorKey}.*DOLLAR*in"] = $elemMatch: $in: usablePossibleValues
 
                 termMatcher
 
@@ -269,11 +243,7 @@ J.denorm =
                 # Makes sure every fieldSpec in the watching-selector is consistent
                 # with either oldValues or newValues
                 subfieldSelectorMatcher = [
-                    $or: [
-                        'selector._id.*DOLLAR*in': $exists: false
-                    ,
-                        'selector._id.*DOLLAR*in': instanceId
-                    ]
+                    'selector._id.*DOLLAR*in': $in: [null, instanceId]
                 ]
 
                 changedSubfieldSelectorMatcher = []
@@ -388,15 +358,10 @@ J.denorm =
 
                 watcherMatcher =
                     modelName: modelName
-                    $and: [
-                        # The watcher's selector has a shot at ever matching
-                        # the old or new document
-                        $or: [
-                            selector: $exists: false
-                        ,
-                            $and: subfieldSelectorMatcher
-                        ]
-                    ]
+
+                    # The watcher's selector has a shot at ever matching
+                    # the old or new document
+                    $and: subfieldSelectorMatcher
 
                 if changeConditions.length is 0
                     return null
@@ -508,7 +473,7 @@ J.denorm =
                 if numWatchersReset
                     console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                         #{numWatchersReset} watchers reset by saving <#{modelName} #{JSON.stringify instanceId}>: #{JSON.stringify resetDebugs}"
-                    # console.log "selector: #{JSON.stringify selector, null, 4}"
+                console.log "selector: #{JSON.stringify selector, null, 4}"
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs

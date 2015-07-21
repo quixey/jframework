@@ -60,9 +60,12 @@ if Meteor.isClient then Meteor.startup ->
             if J._routeGenerator?
                 rootRoute = J._routeGenerator()
 
-                pageContainer = document.createElement 'div'
-                pageContainer.id = 'jframework-page-container'
-                document.body.appendChild pageContainer
+                pageContainer = document.getElementById 'jframework-page-container'
+                if not pageContainer?
+                    pageContainer = document.createElement 'div'
+                    pageContainer.id = 'jframework-page-container'
+                    document.body.appendChild pageContainer
+
                 ReactRouter?.run rootRoute, ReactRouter.HistoryLocation, (Handler, state) ->
                     J._urlVar.set document.location.href
                     React.render $$(Handler), pageContainer
