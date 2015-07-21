@@ -473,7 +473,7 @@ J.denorm =
                 if numWatchersReset
                     console.log "    <#{watcherModelName}>.#{watcherReactiveName}:
                         #{numWatchersReset} watchers reset by saving <#{modelName} #{JSON.stringify instanceId}>: #{JSON.stringify resetDebugs}"
-                console.log "selector: #{JSON.stringify selector, null, 4}"
+                    # console.log "selector: #{JSON.stringify selector, null, 4}"
 
             for watcherModelName, watcherModelClass of J.models
                 for watcherReactiveName, watcherReactiveSpec of watcherModelClass.reactiveSpecs
