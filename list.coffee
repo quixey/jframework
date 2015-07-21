@@ -4,6 +4,9 @@
 # Licensed under the Modified BSD License found in the
 # LICENSE file in the root directory of this source tree.
 
+if Meteor.isServer
+    Future = Npm.require 'fibers/future'
+
 
 # TODO: Add a @observe() and @observeChanges() just like
 # Meteor's collection API. Good for List and AutoList.
@@ -343,6 +346,7 @@ class J.List
         #     Note: This is currently true of maps
         #     just because making them coarse-grained
         #     is saving memory.
+        # - No server-side parallelism
         f = J.util._makeKeyFunc f
         ready = true
         firstNotReadyError = null
@@ -432,6 +436,11 @@ class J.List
 
     map: (f = _.identity, tag) ->
         # Enables parallel fetching
+        # - on client using fetching framework
+        # - on server using futures
+        #   (when not in a reactive context because
+        #    those aren't fiber-safe)
+
         f = J.util._makeKeyFunc f
         tag ?= (
             tag: "mapped(#{@toString()})"
@@ -439,32 +448,48 @@ class J.List
             mapFunc: f
         )
         if @size() is undefined then return undefined
-        J.List(
-            for i in [0...@size()]
-                try
-                    value = @get i
-                    if value is undefined
-                        undefined
-                    else
-                        mappedValue = f value, i
-                        if mappedValue is undefined
-                            msg = "Map function must not return undefined.
+
+        if Meteor.isServer and not Tracker.active
+            arr = [0...@size()].map (i) =>
+                Future.task =>
+                    mappedValue = f @get(i), i
+                    if mappedValue is undefined
+                        msg = "Map function must not return undefined.
                                 Return null or J.makeValueNotReadyObject()
                                 or use List.forEach() instead."
-                            console.error msg
-                            throw msg
-                        mappedValue
-                catch e
-                    if e instanceof J.VALUE_NOT_READY
-                        # This is how AutoLists are parallelized. We keep
-                        # looping because we want to synchronously register
-                        # all the not-ready computations with the data
-                        # fetcher that runs during afterFlush.
-                        e
-                    else
-                        throw e
-            tag: tag
-        )
+                        console.error msg
+                        throw new Error msg
+                    arr[i] = mappedValue
+            Future.wait arr
+            J.List arr
+
+        else
+            J.List(
+                for i in [0...@size()]
+                    try
+                        value = @get i
+                        if value is undefined
+                            undefined
+                        else
+                            mappedValue = f value, i
+                            if mappedValue is undefined
+                                msg = "Map function must not return undefined.
+                                    Return null or J.makeValueNotReadyObject()
+                                    or use List.forEach() instead."
+                                console.error msg
+                                throw new Error msg
+                            mappedValue
+                    catch e
+                        if e instanceof J.VALUE_NOT_READY
+                            # This is how AutoLists are parallelized. We keep
+                            # looping because we want to synchronously register
+                            # all the not-ready computations with the data
+                            # fetcher that runs during afterFlush.
+                            e
+                        else
+                            throw e
+                tag: tag
+            )
 
 
     push: (value) ->
