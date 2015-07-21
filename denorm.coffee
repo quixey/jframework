@@ -356,12 +356,13 @@ J.denorm =
                         'fields._': $in: [null, true]
                         $or: changedSubfieldOverrideProjectionMatcher
 
-                watcherMatcher =
+                watcherMatcher = $and: [
                     modelName: modelName
+                ]
 
-                    # The watcher's selector has a shot at ever matching
-                    # the old or new document
-                    $and: subfieldSelectorMatcher
+                # The watcher's selector has a shot at ever matching
+                # the old or new document
+                watcherMatcher.$and.push.apply watcherMatcher.$and, subfieldSelectorMatcher
 
                 if changeConditions.length is 0
                     return null
