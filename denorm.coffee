@@ -113,7 +113,7 @@ J.denorm =
         # TODO (maybe): some way to pass it
         Job.push new RecalcJob
             instanceId: instance._id
-            modelName: instance.typeName()
+            modelName: instance.collection._name
             reactiveName: reactiveName
             timestamp: timestamp
 
