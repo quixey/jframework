@@ -108,8 +108,16 @@ J.denorm =
                     sparse: true
                 )
 
-
     recalc: (instance, reactiveName, timestamp = new Date(), denormCallback) ->
+        # Ignoring denormCallback for now,
+        # TODO (maybe): some way to pass it
+        Job.push new RecalcJob
+            instanceId: instance._id
+            modelName: instance.typeName()
+            reactiveName: reactiveName
+            timestamp: timestamp
+
+    _recalc: (instance, reactiveName, timestamp = new Date(), denormCallback) ->
         # Sets _reactives.#{reactiveName}.val and .watchers
         # Returns the recalculated value
 
@@ -532,3 +540,8 @@ Meteor.startup ->
 
         resetWatchers: (modelName, instanceId, oldValues, newValues) ->
             J.denorm.resetWatchers modelName, instanceId, oldValues, newValues
+
+class @RecalcJob extends Job
+    handleJob: =>
+        instance = J.models[@params.modelName].fetchOne @params.instanceId
+        J.denorm._recalc instance, @params.reactiveName, @params.timestamp, null

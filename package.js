@@ -47,7 +47,8 @@ Package.onUse(function(api) {
         "coffeescript",
         "reload",
         "autoupdate",
-        "quixey:react@0.12.2"
+        "quixey:react@0.12.2",
+        "differential:workers"
     ]);
 
     api.imply([
@@ -64,7 +65,8 @@ Package.onUse(function(api) {
         "templating",
         "spacebars",
         "blaze",
-        "quixey:react@0.12.2"
+        "quixey:react@0.12.2",
+        "differential:workers"
     ]);
 
     api.addFiles([
