@@ -105,7 +105,6 @@ J.denorm =
                 reactiveModelClass.collection._ensureIndex(
                     indexFieldsSpec
                     name: "_jReactiveWatcher_#{reactiveName}__id"
-                    sparse: true
                 )
 
 
