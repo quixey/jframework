@@ -105,7 +105,8 @@ Package.onUse(function(api) {
 
     api.addFiles([
         "publish.coffee",
-        "denorm.coffee"
+        "denorm.coffee",
+        "reactives.coffee"
     ], "server");
 
     api.addFiles([

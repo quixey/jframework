@@ -432,6 +432,14 @@ J.denorm =
                         []
                         $set: setter
                     )
+                    watcherModelClass.collection.find(selector).forEach (inst) ->
+                        J.ReactivesQueue.insert
+                            mName: inst.collection._name
+                            mId: inst._id
+                            rName: watcherReactiveName
+                            priority: 1 # TODO: varying priorities
+                            status: "new"
+
                     break if not oldWatcherDoc?
 
                     resetCountByModelReactive["#{watcherModelName}.#{watcherReactiveName}"] += 1
