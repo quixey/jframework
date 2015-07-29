@@ -5,8 +5,7 @@ unless Meteor.settings.public.isMainMeteor
     Meteor.startup ->
         J.ReactivesQueue.find({ status: "new" }, { sort: { priority: -1 } }).observe
             added: (recalcItem) ->
-                modelClass = J.models[recalcItem.mName]
-                modelClass.update recalcItem.mId, $set: status: "inProgress"
-                instance = modelClass.fetchOne recalcItem.mId
+                J.ReactivesQueue.update recalcItem._id, $set: status: "inProgress"
+                instance = J.models[recalcItem.mName].fetchOne recalcItem.mId
                 J.denorm.recalc instance, recalcItem.rName, new Date(), ->
-                    modelClass.update recalcItem.mId, $set: status: "done"
+                    J.ReactivesQueue.update recalcItem._id, $set: status: "done"
