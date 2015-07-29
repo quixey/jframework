@@ -284,29 +284,25 @@ updateObservers = (dataSessionId) ->
 
                                 break
 
-                    # if needsRecalc
-                    #     if reactivesObj[reactiveName] is undefined
-                    #         # We know this value is dirty, but publish it anyway.
-                    #         reactivesObj[reactiveName] =
-                    #             val: reactiveValue
-                    #             ts: reactiveTs
-                    #             expire: reactiveExpire
+                    if needsRecalc
+                        if reactivesObj[reactiveName] is undefined
+                            # We know this value is dirty, but publish it anyway.
+                            reactivesObj[reactiveName] =
+                                val: reactiveValue
+                                ts: reactiveTs
+                                expire: reactiveExpire
 
-                    #     # Else keep publishing the previous value of reactivesObj[reactiveName]
-                    #     # until the recalc task gets popped off the queue asynchronously.
+                        # Else keep publishing the previous value of reactivesObj[reactiveName]
+                        # until the recalc task gets popped off the queue asynchronously.
 
-                    #     console.log "Publisher enqueuing <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
-                    #     J.denorm._enqueueReactiveCalc modelName, id, reactiveName
+                        console.log "Publisher enqueuing <#{modelName} #{JSON.stringify id}>.#{reactiveName}"
+                        J.denorm._enqueueReactiveCalc modelName, id, reactiveName
 
-                    # else
-                    #     reactivesObj[reactiveName] =
-                    #         val: reactiveValue
-                    #         ts: reactiveTs
-                    #         expire: reactiveExpire
-                    reactivesObj[reactiveName] =
-                        val: reactiveValue
-                        ts: reactiveTs
-                        expire: reactiveExpire
+                    else
+                        reactivesObj[reactiveName] =
+                            val: reactiveValue
+                            ts: reactiveTs
+                            expire: reactiveExpire
 
         else
             fieldsByModelIdQuery[modelName][id][fieldName] ?= {}
