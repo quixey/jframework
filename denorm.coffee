@@ -426,19 +426,20 @@ J.denorm =
                 rawCollection = watcherModelClass.collection.rawCollection()
                 syncFindAndModify = Meteor.wrapAsync rawCollection.findAndModify, rawCollection
 
+                watcherModelClass.collection.find(selector).forEach (inst) ->
+                    J.ReactivesQueue.insert
+                        mName: watcherModelName
+                        mId: inst._id
+                        rName: watcherReactiveName
+                        priority: 1 # TODO: varying priorities
+                        status: "new"
+
                 while true
                     oldWatcherDoc = syncFindAndModify(
                         selector
                         []
                         $set: setter
                     )
-                    watcherModelClass.collection.find(selector).forEach (inst) ->
-                        J.ReactivesQueue.insert
-                            mName: inst.collection._name
-                            mId: inst._id
-                            rName: watcherReactiveName
-                            priority: 1 # TODO: varying priorities
-                            status: "new"
 
                     break if not oldWatcherDoc?
 

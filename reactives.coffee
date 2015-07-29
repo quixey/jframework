@@ -3,7 +3,7 @@ J.ReactivesQueue._ensureIndex priority: -1
 
 J.ReactivesQueue.find({ status: "new" }, { sort: { priority: -1 } }).observe
     added: (recalcItem) ->
-        J.models[recalcItem.mName].rawCollection.findAndModify recalcItem.mId, [], $set: { status: "inProgress" }
+        J.models[recalcItem.mName].rawCollection.update recalcItem.mId, $set: { status: "inProgress" }
         instance = J.models[recalcItem.mName].find recalcItem.mId
         J.denorm.recalc instance, recalcItem.rName, new Date(), ->
-            J.models[recalcItem.mName].update recalcItem.mId, [], $set: { status: "done" }
+            J.models[recalcItem.mName].update recalcItem.mId, $set: { status: "done" }
